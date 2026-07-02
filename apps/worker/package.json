@@ -9,6 +9,7 @@
     "demo": "node dist/demo.js"
   },
   "dependencies": {
-    "@kelp/core": "*"
+    "@kelp/core": "*",
+    "@octokit/app": "^16.1.2"
   }
 }

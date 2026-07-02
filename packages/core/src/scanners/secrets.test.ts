@@ -69,6 +69,29 @@ test("ignores placeholder values", () => {
   assert.equal(findings.length, 0);
 });
 
+test("Supabase anon publishable key produces NO finding (public by design)", () => {
+  // The real-world Lovable/Bolt pattern: anon key assigned in a client file.
+  const findings = detectSecrets([
+    {
+      path: "src/integrations/supabase/client.ts",
+      content: `const SUPABASE_PUBLISHABLE_KEY = "${jwt("anon")}"`,
+    },
+  ]);
+  assert.equal(findings.length, 0, "anon key must not be flagged, not even via entropy");
+});
+
+test("service_role key is flagged once (critical), not duplicated by entropy", () => {
+  const findings = detectSecrets([
+    {
+      path: "src/integrations/supabase/client.ts",
+      content: `const SUPABASE_KEY = "${jwt("service_role")}"`,
+    },
+  ]);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.severity, "critical");
+  assert.equal(findings[0]!.ruleId, "supabase-service-role");
+});
+
 test("detects a private key block", () => {
   const findings = detectSecrets([
     {

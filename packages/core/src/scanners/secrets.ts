@@ -173,6 +173,14 @@ function bump(severity: Severity, clientSide: boolean): Severity {
   return order[Math.min(i + 1, order.length - 1)]!;
 }
 
+/** Does a value already match one of the high-precision provider rules? */
+function matchesKnownRule(value: string): boolean {
+  return RULES.some((r) => {
+    r.regex.lastIndex = 0;
+    return r.regex.test(value);
+  });
+}
+
 function lineOf(content: string, index: number): number {
   let line = 1;
   for (let i = 0; i < index && i < content.length; i++) {
@@ -252,6 +260,12 @@ export function detectSecrets(files: readonly SourceFile[]): SecretFinding[] {
     while ((am = ASSIGN_RE.exec(file.content)) !== null) {
       const value = am[1]!;
       if (PLACEHOLDER_RE.test(value)) continue;
+      // JWTs are owned by the JWT layer above — which deliberately SKIPS the
+      // Supabase anon key (public by design). Don't second-guess it here, or we
+      // re-flag public keys as suspicious. Same for known provider secrets: the
+      // dedicated rule already reported them with high confidence.
+      if (value.startsWith("eyJ")) continue;
+      if (matchesKnownRule(value)) continue;
       if (shannonEntropy(value) < ENTROPY_MIN) continue;
       push({
         fingerprint: fingerprint(["entropy", file.path, mask(value)]),
