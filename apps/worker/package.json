@@ -1,0 +1,14 @@
+{
+  "name": "@kelp/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kelp scan worker — long-running jobs (RLS/secret/BOLA). Deploys to Railway/Fly.",
+  "scripts": {
+    "build": "tsc -b",
+    "demo": "node dist/demo.js"
+  },
+  "dependencies": {
+    "@kelp/core": "*"
+  }
+}
