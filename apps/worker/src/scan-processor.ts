@@ -1,12 +1,14 @@
-// Scan processor: claims a queued scan, loads the project + decrypted credentials,
-// runs the real scanners through the orchestrator, and persists findings. This is
-// the engine the worker runs in a loop (locally: run once or poll).
+// Scan execution: build the real connectors for a project and run the scanners
+// through the orchestrator, persisting findings. Two entry points share the core
+// executeScan(): the queue poller (processOneScan) and a direct run used by the
+// connect flow (runScanForProject).
 
-import { runScan, type ConsentStore, type ScanDeps } from "@kelp/core";
+import { runScan, type ConsentStore, type ScanDeps, type VulnClass } from "@kelp/core";
 import {
   claimQueuedScan,
   finishScan,
   getCredential,
+  getPool,
   loadProject,
   upsertFindings,
   writeAudit,
@@ -22,18 +24,19 @@ function requireEnv(name: string): string {
   return v;
 }
 
-export interface ProcessResult {
-  processed: boolean;
-  scanId?: string;
-  found?: number;
-  errors?: number;
+export interface ScanOutcome {
+  scanId: string;
+  found: number;
+  errors: number;
 }
 
-/** Process one queued scan (if any). Returns processed:false when the queue is empty. */
-export async function processOneScan(): Promise<ProcessResult> {
-  const scan = await claimQueuedScan();
-  if (!scan) return { processed: false };
-
+/** Core scan execution against an already-created (running) scan row. */
+async function executeScan(scan: {
+  scanId: string;
+  orgId: string;
+  projectId: string;
+  classes: VulnClass[];
+}): Promise<ScanOutcome> {
   try {
     const project = await loadProject(scan.projectId);
     if (!project) throw new Error(`project ${scan.projectId} not found`);
@@ -66,14 +69,42 @@ export async function processOneScan(): Promise<ProcessResult> {
 
     const found = await upsertFindings(scan.orgId, scan.projectId, scan.scanId, findings);
     await finishScan(scan.scanId, "succeeded", errors.length ? JSON.stringify(errors) : undefined);
-    return { processed: true, scanId: scan.scanId, found, errors: errors.length };
+    return { scanId: scan.scanId, found, errors: errors.length };
   } catch (e) {
     await finishScan(scan.scanId, "failed", e instanceof Error ? e.message : String(e));
     throw e;
   }
 }
 
-/** Drain all currently-queued scans (local dev). */
+/** Run a scan directly for a project (creates the scan row, runs it inline). */
+export async function runScanForProject(input: {
+  orgId: string;
+  projectId: string;
+  classes: VulnClass[];
+  trigger?: "initial" | "manual";
+}): Promise<ScanOutcome> {
+  const { rows } = await getPool().query(
+    `insert into scans (org_id, project_id, status, trigger, classes, started_at)
+     values ($1, $2, 'running', $3, $4::vuln_class[], now()) returning id`,
+    [input.orgId, input.projectId, input.trigger ?? "manual", input.classes],
+  );
+  return executeScan({
+    scanId: rows[0].id,
+    orgId: input.orgId,
+    projectId: input.projectId,
+    classes: input.classes,
+  });
+}
+
+/** Process one queued scan (if any). Used by the worker poll loop. */
+export async function processOneScan(): Promise<{ processed: boolean } & Partial<ScanOutcome>> {
+  const scan = await claimQueuedScan();
+  if (!scan) return { processed: false };
+  const outcome = await executeScan(scan);
+  return { processed: true, ...outcome };
+}
+
+/** Drain all currently-queued scans (local dev / poll loop tick). */
 export async function drainScans(): Promise<void> {
   for (;;) {
     const r = await processOneScan();

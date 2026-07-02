@@ -1,22 +1,28 @@
-// Worker entrypoint. In production this runs as a persistent process on
-// Railway/Fly: it consumes scan jobs from the Redis-backed queue, builds the
-// real GitHub/Supabase/BOLA connectors from the project's (decrypted)
-// credentials, runs processScanJob, and upserts findings.
+// Worker package entry. Exports the scan engine API consumed by the web app's
+// server actions (connect flow, run-scan), plus the queue types.
 //
-// The real connectors and the DB-backed queue/consent store require API
-// credentials and infrastructure (GITHUB_APP_*, Supabase, REDIS_URL), so this
-// entrypoint is intentionally a documented stub until those exist. The scan
-// pipeline itself is fully implemented and exercised in demo.ts with mocks.
+// A production deployment also runs this as a persistent process polling the
+// queue; locally the web app drives scans inline via the exported functions.
 
-export { processScanJob } from "./runner.js";
+export { processOneScan, drainScans, runScanForProject } from "./scan-processor.js";
+export { listInstallationRepos, listSupabaseProjects, createProjectAndScan } from "./api.js";
+export type { SupabaseProjectInfo, ConnectInput } from "./api.js";
 export { InMemoryQueue } from "./queue.js";
 export type { ScanJob, ScanQueue } from "./queue.js";
 
-async function main() {
-  console.log("Kelp worker: real queue loop not wired yet — needs REDIS_URL and");
-  console.log("connector credentials. Run the demo instead: npm run demo");
+async function pollLoop() {
+  const { processOneScan } = await import("./scan-processor.js");
+  console.log("Kelp worker: polling for queued scans (Ctrl+C to stop)…");
+  for (;;) {
+    try {
+      const r = await processOneScan();
+      if (!r.processed) await new Promise((res) => setTimeout(res, 3000));
+    } catch (e) {
+      console.error("scan error:", e instanceof Error ? e.message : e);
+    }
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  void main();
+  void pollLoop();
 }

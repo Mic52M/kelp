@@ -4,8 +4,17 @@
   "private": true,
   "type": "module",
   "description": "Kelp scan worker — long-running jobs (RLS/secret/BOLA). Deploys to Railway/Fly.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -b",
+    "start": "node dist/index.js",
     "demo": "node dist/demo.js"
   },
   "dependencies": {

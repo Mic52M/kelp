@@ -24,6 +24,24 @@ export interface RealGitHubConnector extends GitHubConnector {
   listRepos(): Promise<string[]>;
 }
 
+// Retry transient GitHub errors (5xx and secondary/abuse rate limits, which can
+// surface as 403/429 or a 5xx HTML page) with exponential backoff.
+async function withRetry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const status = (e as { status?: number }).status ?? 0;
+      const retryable = status === 0 || status >= 500 || status === 403 || status === 429;
+      if (!retryable || attempt === tries - 1) throw e;
+      await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
+    }
+  }
+  throw lastErr;
+}
+
 export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubConnector {
   const app = new App({ appId: cfg.appId, privateKey: cfg.privateKey });
 
@@ -53,13 +71,19 @@ export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubCon
       const [owner, repo] = repoFullName.split("/");
       if (!owner || !repo) throw new Error(`invalid repo "${repoFullName}"`);
 
-      const { data: repoInfo } = await kit.request("GET /repos/{owner}/{repo}", { owner, repo });
+      const { data: repoInfo } = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}", { owner, repo }),
+      );
       const branch = repoInfo.default_branch;
 
       // One recursive tree call gives every path + blob sha + size.
-      const { data: tree } = await kit.request(
-        "GET /repos/{owner}/{repo}/git/trees/{tree_sha}",
-        { owner, repo, tree_sha: branch, recursive: "1" },
+      const { data: tree } = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}/git/trees/{tree_sha}", {
+          owner,
+          repo,
+          tree_sha: branch,
+          recursive: "1",
+        }),
       );
 
       const blobs = (tree.tree ?? [])
@@ -76,9 +100,12 @@ export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubCon
       const files: SourceFile[] = [];
       // Fetch blob contents. Sequential keeps us well under rate limits for MVP.
       for (const b of blobs) {
-        const { data: blob } = await kit.request(
-          "GET /repos/{owner}/{repo}/git/blobs/{file_sha}",
-          { owner, repo, file_sha: b.sha },
+        const { data: blob } = await withRetry(() =>
+          kit.request("GET /repos/{owner}/{repo}/git/blobs/{file_sha}", {
+            owner,
+            repo,
+            file_sha: b.sha,
+          }),
         );
         if (blob.encoding !== "base64") continue;
         const content = Buffer.from(blob.content, "base64");

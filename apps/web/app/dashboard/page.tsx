@@ -6,6 +6,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { loadDashboard } from "@/lib/data";
 import { signOut } from "@/app/login/actions";
+import { rescanAction } from "./actions";
 
 const nav = [
   { label: "Overview", active: true },
@@ -71,9 +72,24 @@ export default async function Dashboard() {
           </div>
           {project && <span className="text-xs text-fog-500">Last scan {project.lastScan}</span>}
           <div className="ml-auto flex items-center gap-3">
-            <button className="rounded-lg border border-line bg-ink-800 px-3.5 py-2 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700">
-              Re-scan
-            </button>
+            {project ? (
+              <form action={rescanAction}>
+                <input type="hidden" name="projectId" value={project.id} />
+                <button
+                  type="submit"
+                  className="rounded-lg border border-line bg-ink-800 px-3.5 py-2 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700"
+                >
+                  Re-scan
+                </button>
+              </form>
+            ) : (
+              <Link
+                href="/onboarding"
+                className="rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-3.5 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90"
+              >
+                Connect a project
+              </Link>
+            )}
             {user?.email && (
               <span className="hidden text-xs text-fog-400 sm:inline">{user.email}</span>
             )}

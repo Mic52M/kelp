@@ -3,34 +3,73 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
+import {
+  getGithubReposAction,
+  getSupabaseProjectsAction,
+  connectAndScanAction,
+} from "./actions";
+import type { SupabaseProjectInfo } from "@kelp/worker";
 
-const STEPS = ["Connect GitHub", "Connect Supabase", "Authorize testing", "Scan"] as const;
-
-// The exact consent copy the user must actively agree to. Unchecked by default;
-// the BOLA (active) test cannot start unless this is true. Versioned so we can
-// store which wording was agreed to.
-const CONSENT_VERSION = "v1";
-const CONSENT_TEXT =
-  "I authorize Kelp to run active security tests — including simulated " +
-  "unauthorized-access attempts — against the connected project, which I own or " +
-  "am authorized to test.";
+const STEPS = ["Connect GitHub", "Connect Supabase", "Scan"] as const;
 
 export default function Onboarding() {
   const [step, setStep] = useState(0);
-  const [githubConnected, setGithubConnected] = useState(false);
-  const [supabaseToken, setSupabaseToken] = useState("");
-  const [accountA, setAccountA] = useState("");
-  const [accountB, setAccountB] = useState("");
-  const [consent, setConsent] = useState(false); // never pre-checked
 
-  const canNext =
-    (step === 0 && githubConnected) ||
-    (step === 1 && supabaseToken.trim().length > 0) ||
-    step === 2 || // active testing is optional; consent gates it, not progress
-    step === 3;
+  // GitHub
+  const [repos, setRepos] = useState<string[] | null>(null);
+  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
+  const [repoFilter, setRepoFilter] = useState("");
 
-  // BOLA runs only if the user gave both test accounts AND consent.
-  const bolaEnabled = consent && accountA.trim() !== "" && accountB.trim() !== "";
+  // Supabase
+  const [token, setToken] = useState("");
+  const [projects, setProjects] = useState<SupabaseProjectInfo[] | null>(null);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [sbError, setSbError] = useState<string | null>(null);
+  const [selectedRef, setSelectedRef] = useState<string | null>(null);
+
+  // Submit
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  async function loadRepos() {
+    setLoadingRepos(true);
+    setRepoError(null);
+    const res = await getGithubReposAction();
+    setLoadingRepos(false);
+    if (res.ok) setRepos(res.repos);
+    else setRepoError(res.error);
+  }
+
+  async function loadProjects() {
+    if (!token.trim()) return;
+    setLoadingProjects(true);
+    setSbError(null);
+    const res = await getSupabaseProjectsAction(token);
+    setLoadingProjects(false);
+    if (res.ok) setProjects(res.projects);
+    else setSbError(res.error);
+  }
+
+  async function runScan() {
+    setSubmitting(true);
+    setSubmitError(null);
+    const res = await connectAndScanAction({
+      projectName: selectedRepo?.split("/")[1] ?? projects?.find((p) => p.ref === selectedRef)?.name ?? "Project",
+      repoFullName: selectedRepo,
+      supabaseRef: selectedRef,
+      supabaseToken: selectedRef ? token : null,
+    });
+    // On success the action redirects; only errors return here.
+    setSubmitting(false);
+    setSubmitError(res.error);
+  }
+
+  const canScan = Boolean(selectedRepo || selectedRef);
+  const filteredRepos = (repos ?? []).filter((r) =>
+    r.toLowerCase().includes(repoFilter.toLowerCase()),
+  );
 
   return (
     <div className="relative min-h-screen">
@@ -39,11 +78,12 @@ export default function Onboarding() {
         <Link href="/">
           <Logo />
         </Link>
-        <span className="text-sm text-fog-400">Step {step + 1} of {STEPS.length}</span>
+        <span className="text-sm text-fog-400">
+          Step {step + 1} of {STEPS.length}
+        </span>
       </header>
 
       <main className="relative z-10 mx-auto max-w-3xl px-6 pb-24">
-        {/* Progress rail */}
         <div className="mb-10 flex items-center gap-2">
           {STEPS.map((label, i) => (
             <div key={label} className="flex flex-1 items-center gap-2">
@@ -69,20 +109,48 @@ export default function Onboarding() {
         <div className="glass rounded-2xl p-7">
           {step === 0 && (
             <Panel
-              title="Connect your GitHub repository"
-              subtitle="Kelp reads your code to find leaked secrets and opens fix PRs. Minimal scopes: read repository contents and write pull requests. Never admin."
+              title="Connect a GitHub repository"
+              subtitle="Kelp reads your code to find exposed secrets. Choose one repository the Kelp GitHub App can access. (Optional — you can scan Supabase alone.)"
             >
-              {githubConnected ? (
-                <div className="flex items-center gap-2 rounded-lg border border-aqua-600/40 bg-aqua-500/10 px-4 py-3 text-sm text-aqua-400">
-                  ✓ Connected · acme/roamly-app
-                </div>
-              ) : (
+              {!repos && (
                 <button
-                  onClick={() => setGithubConnected(true)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-fog-50 px-4 py-2.5 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90"
+                  onClick={loadRepos}
+                  disabled={loadingRepos}
+                  className="inline-flex items-center gap-2 rounded-lg bg-fog-50 px-4 py-2.5 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
-                  Authorize with GitHub
+                  {loadingRepos ? "Loading repositories…" : "Load my repositories"}
                 </button>
+              )}
+              {repoError && <ErrorNote>{repoError}</ErrorNote>}
+
+              {repos && (
+                <>
+                  <input
+                    value={repoFilter}
+                    onChange={(e) => setRepoFilter(e.target.value)}
+                    placeholder={`Filter ${repos.length} repositories…`}
+                    className="mb-2 w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2 text-sm outline-none focus:border-aqua-600/60"
+                  />
+                  <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                    {filteredRepos.map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setSelectedRepo(selectedRepo === r ? null : r)}
+                        className={`flex w-full items-center justify-between rounded-lg border px-3.5 py-2.5 text-left text-sm transition-colors ${
+                          selectedRepo === r
+                            ? "border-aqua-600/50 bg-aqua-500/10 text-fog-50"
+                            : "border-line bg-ink-900/50 text-fog-300 hover:border-line hover:bg-white/[0.02]"
+                        }`}
+                      >
+                        <span className="truncate font-mono">{r}</span>
+                        {selectedRepo === r && <span className="text-aqua-400">✓</span>}
+                      </button>
+                    ))}
+                    {filteredRepos.length === 0 && (
+                      <p className="px-1 py-4 text-sm text-fog-500">No repositories match.</p>
+                    )}
+                  </div>
+                </>
               )}
             </Panel>
           )}
@@ -90,118 +158,132 @@ export default function Onboarding() {
           {step === 1 && (
             <Panel
               title="Connect your Supabase project"
-              subtitle="Kelp reads your schema and RLS policies through the Management API. Create a read-scoped access token — you do not need to share your service_role key."
+              subtitle="Kelp reads your schema and RLS policies to find data anyone can access. Paste a Management API token, then pick the project to scan."
             >
               <label className="mb-1.5 block text-xs font-medium text-fog-400">
                 Supabase Management API token
               </label>
-              <input
-                value={supabaseToken}
-                onChange={(e) => setSupabaseToken(e.target.value)}
-                type="password"
-                placeholder="sbp_..."
-                className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-aqua-600/60"
-              />
-              <p className="mt-2 text-xs text-fog-500">
-                Stored encrypted at rest. We request the narrowest scope that lets us read your
-                schema.
-              </p>
+              <div className="flex gap-2">
+                <input
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  type="password"
+                  placeholder="sbp_…"
+                  className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm outline-none focus:border-aqua-600/60"
+                />
+                <button
+                  onClick={loadProjects}
+                  disabled={loadingProjects || !token.trim()}
+                  className="shrink-0 rounded-lg border border-line bg-ink-800 px-3.5 py-2.5 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700 disabled:opacity-40"
+                >
+                  {loadingProjects ? "Loading…" : "Load projects"}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-fog-500">Stored encrypted. Read-only schema access.</p>
+              {sbError && <ErrorNote>{sbError}</ErrorNote>}
+
+              {projects && (
+                <div className="mt-4 max-h-64 space-y-1 overflow-y-auto pr-1">
+                  {projects.map((p) => (
+                    <button
+                      key={p.ref}
+                      onClick={() => setSelectedRef(selectedRef === p.ref ? null : p.ref)}
+                      className={`flex w-full items-center justify-between rounded-lg border px-3.5 py-2.5 text-left text-sm transition-colors ${
+                        selectedRef === p.ref
+                          ? "border-aqua-600/50 bg-aqua-500/10 text-fog-50"
+                          : "border-line bg-ink-900/50 text-fog-300 hover:bg-white/[0.02]"
+                      }`}
+                    >
+                      <span>
+                        <span className="font-medium">{p.name}</span>
+                        <span className="ml-2 font-mono text-xs text-fog-500">{p.ref}</span>
+                        <span className="ml-2 text-xs text-fog-500">· {p.region}</span>
+                      </span>
+                      {selectedRef === p.ref ? (
+                        <span className="text-aqua-400">✓</span>
+                      ) : (
+                        <span className="text-xs text-fog-500">{p.status}</span>
+                      )}
+                    </button>
+                  ))}
+                  {projects.length === 0 && (
+                    <p className="px-1 py-4 text-sm text-fog-500">
+                      This token has no projects.
+                    </p>
+                  )}
+                </div>
+              )}
             </Panel>
           )}
 
           {step === 2 && (
             <Panel
-              title="Authorize active testing (optional)"
-              subtitle="To test for broken object-level authorization (BOLA) — the flaw behind the Lovable and Moltbook breaches — Kelp signs in as two of your own test users and checks whether one can reach the other's data. This is optional."
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-fog-400">Test account A</label>
-                  <input
-                    value={accountA}
-                    onChange={(e) => setAccountA(e.target.value)}
-                    placeholder="a@test.dev"
-                    className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm outline-none focus:border-aqua-600/60"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-fog-400">Test account B</label>
-                  <input
-                    value={accountB}
-                    onChange={(e) => setAccountB(e.target.value)}
-                    placeholder="b@test.dev"
-                    className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm outline-none focus:border-aqua-600/60"
-                  />
-                </div>
-              </div>
-
-              <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-line bg-ink-900/60 p-4">
-                <input
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-[color:var(--color-aqua-500)]"
-                />
-                <span className="text-sm leading-relaxed text-fog-300">{CONSENT_TEXT}</span>
-              </label>
-
-              <div
-                className={`mt-3 flex items-center gap-2 text-xs ${
-                  bolaEnabled ? "text-aqua-400" : "text-fog-500"
-                }`}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${bolaEnabled ? "bg-aqua-400" : "bg-fog-600"}`} />
-                {bolaEnabled
-                  ? "Active BOLA testing will run on this scan."
-                  : "Active BOLA testing is off. Add both test accounts and check the box to enable it — the rest of the scan runs regardless."}
-              </div>
-            </Panel>
-          )}
-
-          {step === 3 && (
-            <Panel
               title="Ready to scan"
-              subtitle="Kelp will check Row Level Security and exposed secrets on your project now."
+              subtitle="Kelp will scan what you connected now. This runs immediately."
             >
-              <ul className="space-y-2 text-sm text-fog-300">
-                <li className="flex items-center gap-2"><span className="text-aqua-400">✓</span> Row Level Security analysis</li>
-                <li className="flex items-center gap-2"><span className="text-aqua-400">✓</span> Secret & credential scan</li>
+              <ul className="space-y-2 text-sm">
                 <li className="flex items-center gap-2">
-                  <span className={bolaEnabled ? "text-aqua-400" : "text-fog-600"}>
-                    {bolaEnabled ? "✓" : "—"}
+                  <span className={selectedRepo ? "text-aqua-400" : "text-fog-600"}>
+                    {selectedRepo ? "✓" : "—"}
                   </span>
-                  Active BOLA testing {bolaEnabled ? "(authorized)" : "(not authorized — skipped)"}
+                  <span className="text-fog-300">
+                    Secret scan{" "}
+                    {selectedRepo ? (
+                      <span className="font-mono text-fog-50">{selectedRepo}</span>
+                    ) : (
+                      "(no repository selected)"
+                    )}
+                  </span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className={selectedRef ? "text-aqua-400" : "text-fog-600"}>
+                    {selectedRef ? "✓" : "—"}
+                  </span>
+                  <span className="text-fog-300">
+                    RLS scan{" "}
+                    {selectedRef ? (
+                      <span className="font-mono text-fog-50">
+                        {projects?.find((p) => p.ref === selectedRef)?.name ?? selectedRef}
+                      </span>
+                    ) : (
+                      "(no Supabase project selected)"
+                    )}
+                  </span>
                 </li>
               </ul>
-              <Link
-                href="/dashboard"
-                className="mt-6 inline-block rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-5 py-2.5 text-sm font-semibold text-ink-950 transition-opacity hover:opacity-90"
+
+              {!canScan && (
+                <ErrorNote>Go back and connect a repository or a Supabase project first.</ErrorNote>
+              )}
+              {submitError && <ErrorNote>{submitError}</ErrorNote>}
+
+              <button
+                onClick={runScan}
+                disabled={!canScan || submitting}
+                className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-5 py-2.5 text-sm font-semibold text-ink-950 transition-opacity hover:opacity-90 disabled:opacity-50"
               >
-                Start scan
-              </Link>
-              <input type="hidden" name="consentVersion" value={CONSENT_VERSION} />
+                {submitting ? "Scanning… this can take a moment" : "Connect & run scan"}
+              </button>
             </Panel>
           )}
 
-          {/* Nav */}
-          {step < 3 && (
-            <div className="mt-7 flex items-center justify-between border-t border-line/70 pt-5">
-              <button
-                onClick={() => setStep((s) => Math.max(0, s - 1))}
-                disabled={step === 0}
-                className="text-sm text-fog-400 transition-colors hover:text-fog-50 disabled:opacity-30"
-              >
-                Back
-              </button>
+          <div className="mt-7 flex items-center justify-between border-t border-line/70 pt-5">
+            <button
+              onClick={() => setStep((s) => Math.max(0, s - 1))}
+              disabled={step === 0 || submitting}
+              className="text-sm text-fog-400 transition-colors hover:text-fog-50 disabled:opacity-30"
+            >
+              Back
+            </button>
+            {step < STEPS.length - 1 && (
               <button
                 onClick={() => setStep((s) => s + 1)}
-                disabled={!canNext}
-                className="rounded-lg bg-fog-50 px-4 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded-lg bg-fog-50 px-4 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90"
               >
                 Continue
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </main>
     </div>
@@ -223,5 +305,13 @@ function Panel({
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-fog-300">{subtitle}</p>
       <div className="mt-6">{children}</div>
     </div>
+  );
+}
+
+function ErrorNote({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-3 rounded-lg border border-[color:var(--color-crit)]/30 bg-[color:var(--color-crit)]/10 px-3 py-2 text-xs text-[color:var(--color-crit)]">
+      {children}
+    </p>
   );
 }
