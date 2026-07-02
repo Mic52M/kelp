@@ -6,4 +6,5 @@ export * from "./scanners/secrets.js";
 export * from "./scanners/rls.js";
 export * from "./remediation/secret-pr.js";
 export * from "./remediation/bola-report.js";
+export * from "./remediation/fix-prompt.js";
 export * from "./orchestrator.js";

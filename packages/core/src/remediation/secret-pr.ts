@@ -27,6 +27,11 @@ const ENV_NAMES: Record<string, string> = {
   "supabase-service-role": "SUPABASE_SERVICE_ROLE_KEY",
 };
 
+/** Suggested environment-variable name for a detected secret's rule. */
+export function suggestedEnvVar(ruleId: string): string {
+  return ENV_NAMES[ruleId] ?? "SECRET_VALUE";
+}
+
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
 }
