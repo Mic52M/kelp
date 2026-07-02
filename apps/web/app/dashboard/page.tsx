@@ -2,9 +2,9 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { FindingCard } from "@/components/FindingCard";
 import { ScoreRing } from "@/components/ScoreRing";
-import { findings, project, summary } from "@/lib/mock";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
+import { loadDashboard } from "@/lib/data";
 import { signOut } from "@/app/login/actions";
 
 const nav = [
@@ -23,6 +23,7 @@ export default async function Dashboard() {
     await ensureTenant({ id: user.id, email: user.email });
   }
 
+  const { project, findings, summary } = await loadDashboard();
   const active = findings.filter((f) => f.status !== "resolved");
   const resolved = findings.filter((f) => f.status === "resolved");
 
@@ -64,11 +65,11 @@ export default async function Dashboard() {
         {/* Topbar */}
         <header className="flex items-center gap-4 border-b border-line/70 px-6 py-3.5">
           <div className="flex items-center gap-2 rounded-lg border border-line bg-ink-800/60 px-3 py-1.5 text-sm">
-            <span className="h-2 w-2 rounded-full bg-aqua-400" />
-            <span className="font-medium">{project.name}</span>
-            <span className="font-mono text-xs text-fog-500">{project.repo}</span>
+            <span className={`h-2 w-2 rounded-full ${project ? "bg-aqua-400" : "bg-fog-600"}`} />
+            <span className="font-medium">{project?.name ?? "No project yet"}</span>
+            {project && <span className="font-mono text-xs text-fog-500">{project.repo}</span>}
           </div>
-          <span className="text-xs text-fog-500">Last scan {project.lastScan}</span>
+          {project && <span className="text-xs text-fog-500">Last scan {project.lastScan}</span>}
           <div className="ml-auto flex items-center gap-3">
             <button className="rounded-lg border border-line bg-ink-800 px-3.5 py-2 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700">
               Re-scan
@@ -95,10 +96,13 @@ export default async function Dashboard() {
             <div className="flex-1">
               <h1 className="text-xl font-semibold">Security posture</h1>
               <p className="mt-1 text-sm text-fog-300">
-                {summary.critical > 0
-                  ? `${summary.critical} critical ${summary.critical === 1 ? "issue" : "issues"} need your attention right now.`
-                  : "No critical issues — nice work."}{" "}
-                Fixing the two criticals below would raise your score to 78.
+                {!project
+                  ? "Connect a project to run your first scan."
+                  : summary.critical > 0
+                    ? `${summary.critical} critical ${summary.critical === 1 ? "issue" : "issues"} need your attention right now.`
+                    : findings.length > 0
+                      ? "No critical issues — nice work. Review the items below."
+                      : "No issues found in the last scan."}
               </p>
               <div className="mt-4 grid grid-cols-4 gap-3">
                 <Stat label="Critical" value={summary.critical} color="var(--color-crit)" />
