@@ -16,3 +16,7 @@ build/
 # Logs
 *.log
 npm-debug.log*
+
+# Next.js
+apps/web/.next/
+apps/web/next-env.d.ts
