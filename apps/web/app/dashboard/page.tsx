@@ -3,6 +3,9 @@ import { Logo } from "@/components/Logo";
 import { FindingCard } from "@/components/FindingCard";
 import { ScoreRing } from "@/components/ScoreRing";
 import { findings, project, summary } from "@/lib/mock";
+import { getServerSupabase } from "@/lib/supabase/server";
+import { ensureTenant } from "@/lib/tenant";
+import { signOut } from "@/app/login/actions";
 
 const nav = [
   { label: "Overview", active: true },
@@ -11,7 +14,15 @@ const nav = [
   { label: "Settings", active: false },
 ];
 
-export default function Dashboard() {
+export default async function Dashboard() {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.email) {
+    await ensureTenant({ id: user.id, email: user.email });
+  }
+
   const active = findings.filter((f) => f.status !== "resolved");
   const resolved = findings.filter((f) => f.status === "resolved");
 
@@ -62,6 +73,17 @@ export default function Dashboard() {
             <button className="rounded-lg border border-line bg-ink-800 px-3.5 py-2 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700">
               Re-scan
             </button>
+            {user?.email && (
+              <span className="hidden text-xs text-fog-400 sm:inline">{user.email}</span>
+            )}
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="rounded-lg border border-line bg-ink-800 px-3 py-2 text-xs text-fog-300 transition-colors hover:text-fog-50"
+              >
+                Sign out
+              </button>
+            </form>
             <div className="h-8 w-8 rounded-full bg-gradient-to-br from-aqua-500 to-violet-500" />
           </div>
         </header>
