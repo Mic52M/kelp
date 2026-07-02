@@ -9,6 +9,7 @@
     "demo": "node dist/demo.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.109.1",
     "@kelp/core": "*",
     "@octokit/app": "^16.1.2"
   }
