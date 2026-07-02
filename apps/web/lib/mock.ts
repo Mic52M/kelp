@@ -35,6 +35,7 @@ create policy "bookings_insert_own" on "public"."bookings"
       { category: "email", count: 1840 },
       { category: "phone", count: 1203 },
     ],
+    fixPrompt: `The Supabase table \`public.bookings\` is not secured: Row Level Security is turned off. Apply a migration so each user can only access their own rows (via \`auth.uid() = user_id\`) for select, insert, update and delete, then confirm the app still works for a logged-in user.`,
     detectedAt: "2m ago",
   },
   {
@@ -50,6 +51,7 @@ create policy "bookings_insert_own" on "public"."bookings"
       "Move the key to a server-only environment variable and rotate it in the Supabase dashboard. Kelp opened a pull request that does the first step.",
     fixPreview: `#12  - const key = "eyJhbGciOi…service_role…"
 #12  + const key = process.env.SUPABASE_SERVICE_ROLE_KEY!  // server only`,
+    fixPrompt: `There is a hard-coded Supabase service_role secret in \`src/lib/supabaseClient.ts\` on line 12. Move it out of the code: read it from an environment variable named \`SUPABASE_SERVICE_ROLE_KEY\` instead, update every place that uses it, and make sure it is never sent to the browser. Then remind me to rotate the key in Supabase, since it was exposed.`,
     detectedAt: "2m ago",
   },
   {

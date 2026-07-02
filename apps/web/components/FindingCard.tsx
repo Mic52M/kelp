@@ -27,6 +27,18 @@ function actionFor(f: Finding): { label: string; primary: boolean } | null {
 
 export function FindingCard({ finding }: { finding: Finding }) {
   const [open, setOpen] = useState(finding.severity === "critical" && finding.status === "open");
+  const [copied, setCopied] = useState(false);
+
+  const copyPrompt = async () => {
+    if (!finding.fixPrompt) return;
+    try {
+      await navigator.clipboard.writeText(finding.fixPrompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
   const status = STATUS[finding.status];
   const action = actionFor(finding);
 
@@ -79,6 +91,26 @@ export function FindingCard({ finding }: { finding: Finding }) {
             <pre className="mt-3 overflow-x-auto rounded-lg border border-line/70 bg-ink-950 p-3 font-mono text-[12.5px] leading-relaxed text-fog-300">
               {finding.fixPreview}
             </pre>
+          )}
+
+          {finding.fixPrompt && (
+            <div className="mt-3 rounded-lg border border-violet-500/30 bg-violet-500/[0.06] p-3">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-xs font-medium text-violet-400">
+                  Or fix it with your AI tool
+                </span>
+                <button
+                  onClick={copyPrompt}
+                  className="rounded-md border border-violet-500/40 bg-ink-800 px-2.5 py-1 text-xs font-medium text-fog-50 transition-colors hover:bg-ink-700"
+                >
+                  {copied ? "Copied ✓" : "Copy prompt"}
+                </button>
+              </div>
+              <p className="text-[13px] leading-relaxed text-fog-300">{finding.fixPrompt}</p>
+              <div className="mt-2 text-[11px] text-fog-500">
+                Paste into Lovable, Bolt, Cursor or v0 to apply the fix.
+              </div>
+            </div>
           )}
 
           {action && (

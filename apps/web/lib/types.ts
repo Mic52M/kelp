@@ -22,6 +22,8 @@ export interface Finding {
   remediation: string;
   /** for RLS: the proposed migration; for secret: the PR summary */
   fixPreview?: string;
+  /** paste-ready prompt for the user's AI coding tool (Kelp's wedge) */
+  fixPrompt?: string;
   /** end-user PII exposure — category + count only, never raw values */
   exposure?: { category: string; count: number }[];
   detectedAt: string;
