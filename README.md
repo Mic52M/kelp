@@ -68,17 +68,29 @@ These are product requirements implemented as technical controls:
 - **Starter (~€29/mo)** — continuous scanning + auto-fix (RLS, secrets), 1 project.
 - **Agency (~€79–99/mo)** — up to 5 projects, same coverage.
 
-## Status & next slices
+## Status
 
-Done: monorepo skeleton, multi-tenant schema + RLS, consent guard (typechecks).
+**Done and verified (no API keys required):**
+- Monorepo skeleton, multi-tenant schema + RLS policies, BOLA consent guard.
+- Credential encryption (AES-256-GCM), stable finding fingerprints.
+- Secret scanner (provider patterns, service_role vs anon JWT, client-side bump,
+  entropy fallback). RLS analyzer + owner-scoped policy migration generator.
+- Remediation generators: secret PR metadata, BOLA human-review report.
+- Scan orchestrator behind connector interfaces; worker with mock connectors and
+  a runnable end-to-end `demo`. **52 unit tests, all green.**
+- Premium web app: landing, dashboard, and consent-gated onboarding wizard.
+  Production build passes; pages verified in-browser.
 
-Next, in order:
-1. Auth + org/membership bootstrap (Supabase Auth), tenant-scoped DB clients.
-2. GitHub App connect flow + Supabase Management API connect (encrypted creds).
-3. Secret scanner (deterministic) + RLS scanner (schema read + Claude inference).
-4. Scan orchestration on the worker + live progress UI.
-5. Remediation: RLS migration + secret PR; BOLA "request review".
-6. Stripe billing + plan gating. GitHub push webhook → re-scan.
+**Blocked on credentials / external services (next):**
+1. Real GitHub App connector — needs `GITHUB_APP_*`. OAuth connect + PR creation.
+2. Real Supabase Management API connector — needs a user token. Schema read.
+3. App database + Supabase Auth — needs a Supabase project / `DATABASE_URL`.
+4. Redis-backed queue for the worker — needs `REDIS_URL`.
+5. Claude-written explanations — needs `ANTHROPIC_API_KEY`.
+6. Stripe billing + plan gating — needs Stripe keys. GitHub push webhook → re-scan.
+
+Run the pipeline now, without keys: `npm install && npm run build` then
+`node apps/worker/dist/demo.js`.
 
 ## Local setup
 
