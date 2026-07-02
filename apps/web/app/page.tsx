@@ -49,7 +49,7 @@ export default function Landing() {
             Sign in
           </Link>
           <Link
-            href="/dashboard"
+            href="/onboarding"
             className="rounded-lg bg-fog-50 px-3.5 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90"
           >
             Start free scan
@@ -77,7 +77,7 @@ export default function Landing() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
-                href="/dashboard"
+                href="/onboarding"
                 className="rounded-xl bg-gradient-to-r from-aqua-400 to-aqua-600 px-5 py-3 text-sm font-semibold text-ink-950 transition-opacity hover:opacity-90"
               >
                 Scan my app free
@@ -193,7 +193,7 @@ export default function Landing() {
                 ))}
               </ul>
               <Link
-                href="/dashboard"
+                href="/onboarding"
                 className={`mt-6 block rounded-lg px-4 py-2.5 text-center text-sm font-medium transition-opacity hover:opacity-90 ${
                   t.highlight
                     ? "bg-gradient-to-r from-aqua-400 to-aqua-600 text-ink-950"
