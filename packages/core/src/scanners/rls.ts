@@ -109,6 +109,27 @@ function isPermissive(expr: string | null): boolean {
   return norm === "true";
 }
 
+// Roles that BYPASS Row Level Security entirely. A permissive policy scoped only
+// to these is NOT a vulnerability — it's the standard Supabase pattern (e.g.
+// `service_role ALL USING (true)`). Only policies reachable by real API clients
+// (anon / authenticated / public / custom roles) affect a user's access.
+const RLS_BYPASS_ROLES = new Set([
+  "service_role",
+  "postgres",
+  "supabase_admin",
+  "supabase_auth_admin",
+  "supabase_storage_admin",
+  "dashboard_user",
+  "authenticator",
+]);
+
+/** Does this policy apply to a role a real API client can use? */
+function isClientFacing(p: PolicyInfo): boolean {
+  if (p.roles.length === 0) return true; // no explicit role => PUBLIC (all roles)
+  if (p.roles.includes("public")) return true;
+  return p.roles.some((r) => !RLS_BYPASS_ROLES.has(r));
+}
+
 /** Does any policy expression tie rows to the current user via auth.uid()? */
 function referencesAuthUid(policies: PolicyInfo[], ownershipCol: string | null): boolean {
   return policies.some((p) => {
@@ -152,12 +173,15 @@ export function analyzeRls(snapshot: SchemaSnapshot): RlsFinding[] {
       continue; // the disabled-RLS finding subsumes policy analysis
     }
 
-    // RLS is enabled from here on.
-    const permissive = t.policies.filter(
+    // RLS is enabled from here on. Only policies reachable by real API clients
+    // matter — a permissive policy scoped to service_role (which bypasses RLS)
+    // is expected and safe, so we ignore bypass-role policies throughout.
+    const clientPolicies = t.policies.filter(isClientFacing);
+    const permissive = clientPolicies.filter(
       (p) => isPermissive(p.usingExpr) || isPermissive(p.withCheckExpr),
     );
 
-    // B. Permissive policy on a table with an ownership column.
+    // B. Permissive client-facing policy on a table with an ownership column.
     if (permissive.length > 0 && ownershipColumn !== null) {
       findings.push({
         fingerprint: fp("permissive_policy", t),
@@ -178,11 +202,11 @@ export function analyzeRls(snapshot: SchemaSnapshot): RlsFinding[] {
       continue;
     }
 
-    // C. Ownership column present but nothing scopes rows to auth.uid().
+    // C. Ownership column present but no client policy scopes rows to auth.uid().
     if (
       ownershipColumn !== null &&
-      t.policies.length > 0 &&
-      !referencesAuthUid(t.policies, ownershipColumn)
+      clientPolicies.length > 0 &&
+      !referencesAuthUid(clientPolicies, ownershipColumn)
     ) {
       findings.push({
         fingerprint: fp("owner_not_scoped", t),
@@ -202,19 +226,21 @@ export function analyzeRls(snapshot: SchemaSnapshot): RlsFinding[] {
       continue;
     }
 
-    // D. RLS enabled but no policies — fail closed, but usually a misconfig.
-    if (t.policies.length === 0) {
+    // D. RLS enabled but no client-facing policies — fail closed, but often a
+    // misconfig (any service_role-only policies don't grant app users access).
+    if (clientPolicies.length === 0) {
       findings.push({
         fingerprint: fp("rls_no_policies", t),
         issue: "rls_no_policies",
         severity: "low",
         schema: t.schema,
         table: t.name,
-        title: `"${t.name}" has RLS on but no policies`,
+        title: `"${t.name}" has RLS on but no policies for app users`,
         explanation:
-          `"${t.schema}.${t.name}" has Row Level Security enabled but no policies, ` +
-          `so the API currently denies all access to it. This is safe, but often ` +
-          `means the table was left half-configured — confirm this is intended.`,
+          `"${t.schema}.${t.name}" has Row Level Security enabled but no policies ` +
+          `that apply to your app's users (anon/authenticated), so the API currently ` +
+          `denies them all access. This is safe, but often means the table was left ` +
+          `half-configured — confirm this is intended.`,
         ownershipColumn,
         fixable: ownershipColumn !== null,
       });

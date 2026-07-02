@@ -67,6 +67,37 @@ test("flags a permissive USING(true) policy as critical", () => {
   assert.equal(f[0]!.severity, "critical");
 });
 
+test("service_role-only USING(true) is NOT flagged when a correct client policy exists", () => {
+  // The real-world Supabase pattern: service_role bypass policy + proper
+  // authenticated owner-scoped SELECT. Must produce no findings.
+  const f = analyzeRls({
+    tables: [
+      table({
+        name: "purchases",
+        policies: [
+          { name: "svc", command: "ALL", usingExpr: "true", withCheckExpr: "true", roles: ["service_role"] },
+          { name: "own", command: "SELECT", usingExpr: "auth.uid() = user_id", withCheckExpr: null, roles: ["authenticated"] },
+        ],
+      }),
+    ],
+  });
+  assert.equal(f.length, 0, "service_role bypass policy must not be a finding");
+});
+
+test("permissive policy for a client role (authenticated) is still critical", () => {
+  const f = analyzeRls({
+    tables: [
+      table({
+        policies: [
+          { name: "open", command: "ALL", usingExpr: "true", withCheckExpr: null, roles: ["authenticated"] },
+        ],
+      }),
+    ],
+  });
+  assert.equal(f[0]!.issue, "permissive_policy");
+  assert.equal(f[0]!.severity, "critical");
+});
+
 test("flags ownership column not scoped by auth.uid() as high", () => {
   const f = analyzeRls({
     tables: [
