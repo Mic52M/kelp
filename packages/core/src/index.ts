@@ -8,3 +8,5 @@ export * from "./remediation/secret-pr.js";
 export * from "./remediation/bola-report.js";
 export * from "./remediation/fix-prompt.js";
 export * from "./orchestrator.js";
+export * from "./agent/loop.js";
+export * from "./agent/bola.js";
