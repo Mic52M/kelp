@@ -47,6 +47,8 @@ export interface DashboardData {
   project: Project | null;
   findings: Finding[];
   summary: { score: number; critical: number; high: number; medium: number; resolved: number };
+  /** status of the most recent scan for the project ("queued" | "running" | … | null) */
+  scanStatus: string | null;
 }
 
 export async function loadDashboard(): Promise<DashboardData> {
@@ -69,6 +71,16 @@ export async function loadDashboard(): Promise<DashboardData> {
       }
     : null;
 
+  const { data: scanRows } = p
+    ? await supabase
+        .from("scans")
+        .select("status")
+        .eq("project_id", p.id)
+        .order("queued_at", { ascending: false })
+        .limit(1)
+    : { data: null };
+  const scanStatus = (scanRows?.[0]?.status as string | undefined) ?? null;
+
   const { data: rows } = await supabase
     .from("findings")
     .select("id, vuln_class, severity, status, title, location, explanation");
@@ -90,6 +102,7 @@ export async function loadDashboard(): Promise<DashboardData> {
   return {
     project,
     findings,
+    scanStatus,
     summary: {
       score: findings.length === 0 ? 100 : Math.max(5, 100 - penalty),
       critical: activeBySeverity("critical"),

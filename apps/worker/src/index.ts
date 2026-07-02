@@ -5,7 +5,12 @@
 // queue; locally the web app drives scans inline via the exported functions.
 
 export { processOneScan, drainScans, runScanForProject } from "./scan-processor.js";
-export { listInstallationRepos, listSupabaseProjects, createProjectAndScan } from "./api.js";
+export {
+  listInstallationRepos,
+  listSupabaseProjects,
+  createProjectAndEnqueueScan,
+  enqueueScanForProject,
+} from "./api.js";
 export type { SupabaseProjectInfo, ConnectInput } from "./api.js";
 export { InMemoryQueue } from "./queue.js";
 export type { ScanJob, ScanQueue } from "./queue.js";

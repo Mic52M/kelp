@@ -6,7 +6,7 @@ import { ensureTenant } from "@/lib/tenant";
 import {
   listInstallationRepos,
   listSupabaseProjects,
-  createProjectAndScan,
+  createProjectAndEnqueueScan,
   type SupabaseProjectInfo,
 } from "@kelp/worker";
 
@@ -67,7 +67,7 @@ export async function connectAndScanAction(input: {
 
   let error: string | null = null;
   try {
-    await createProjectAndScan({
+    await createProjectAndEnqueueScan({
       orgId,
       name: input.projectName || input.repoFullName || input.supabaseRef || "Project",
       repoFullName: input.repoFullName,
@@ -76,7 +76,7 @@ export async function connectAndScanAction(input: {
       classes,
     });
   } catch (e) {
-    error = friendlyError(e instanceof Error ? e.message : "The scan failed to run.");
+    error = friendlyError(e instanceof Error ? e.message : "The scan could not be started.");
   }
   if (error) return { ok: false, error };
 

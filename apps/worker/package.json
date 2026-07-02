@@ -21,9 +21,11 @@
     "@anthropic-ai/sdk": "^0.109.1",
     "@kelp/core": "*",
     "@octokit/app": "^16.1.2",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "tar-stream": "^3.2.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.20.0"
+    "@types/pg": "^8.20.0",
+    "@types/tar-stream": "^3.1.4"
   }
 }

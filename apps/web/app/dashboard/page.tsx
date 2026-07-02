@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { FindingCard } from "@/components/FindingCard";
 import { ScoreRing } from "@/components/ScoreRing";
+import { ScanStatus } from "@/components/ScanStatus";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { loadDashboard } from "@/lib/data";
@@ -24,7 +25,7 @@ export default async function Dashboard() {
     await ensureTenant({ id: user.id, email: user.email });
   }
 
-  const { project, findings, summary } = await loadDashboard();
+  const { project, findings, summary, scanStatus } = await loadDashboard();
   const active = findings.filter((f) => f.status !== "resolved");
   const resolved = findings.filter((f) => f.status === "resolved");
 
@@ -128,6 +129,8 @@ export default async function Dashboard() {
               </div>
             </div>
           </div>
+
+          <ScanStatus status={scanStatus} />
 
           {/* Findings */}
           <div className="mt-8 flex items-center justify-between">

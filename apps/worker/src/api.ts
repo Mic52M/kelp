@@ -4,7 +4,6 @@
 import type { VulnClass } from "@kelp/core";
 import { getPool, putCredential } from "./db.js";
 import { createGitHubConnector } from "./connectors/github.js";
-import { runScanForProject, type ScanOutcome } from "./scan-processor.js";
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -58,10 +57,25 @@ export interface ConnectInput {
   classes: VulnClass[];
 }
 
-/** Create the project (+ encrypted creds) and run the first scan inline. */
-export async function createProjectAndScan(
+/** Enqueue a scan for a project. The worker poll loop picks it up. */
+export async function enqueueScanForProject(input: {
+  orgId: string;
+  projectId: string;
+  classes: VulnClass[];
+  trigger?: "initial" | "manual" | "webhook_push";
+}): Promise<{ scanId: string }> {
+  const { rows } = await getPool().query(
+    `insert into scans (org_id, project_id, status, trigger, classes)
+     values ($1, $2, 'queued', $3, $4::vuln_class[]) returning id`,
+    [input.orgId, input.projectId, input.trigger ?? "manual", input.classes],
+  );
+  return { scanId: rows[0].id as string };
+}
+
+/** Create the project (+ encrypted creds) and enqueue its first scan. */
+export async function createProjectAndEnqueueScan(
   input: ConnectInput,
-): Promise<{ projectId: string } & ScanOutcome> {
+): Promise<{ projectId: string; scanId: string }> {
   const installationId = input.repoFullName ? githubEnv().installationId : null;
 
   // Idempotent connect: if this repo is already a project for the org, reuse it
@@ -105,11 +119,11 @@ export async function createProjectAndScan(
     await putCredential(input.orgId, projectId, "supabase_management", input.supabaseToken);
   }
 
-  const outcome = await runScanForProject({
+  const { scanId } = await enqueueScanForProject({
     orgId: input.orgId,
     projectId,
     classes: input.classes,
     trigger: "initial",
   });
-  return { projectId, ...outcome };
+  return { projectId, scanId };
 }

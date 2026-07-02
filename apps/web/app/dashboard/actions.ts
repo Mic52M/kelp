@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
-import { runScanForProject } from "@kelp/worker";
+import { enqueueScanForProject } from "@kelp/worker";
 
 /** Re-run the scan for a project the signed-in user owns. */
 export async function rescanAction(formData: FormData): Promise<void> {
@@ -25,6 +25,6 @@ export async function rescanAction(formData: FormData): Promise<void> {
   if (!project) return;
 
   const { orgId } = await ensureTenant({ id: user.id, email: user.email });
-  await runScanForProject({ orgId, projectId, classes: ["secret", "rls"], trigger: "manual" });
+  await enqueueScanForProject({ orgId, projectId, classes: ["secret", "rls"], trigger: "manual" });
   revalidatePath("/dashboard");
 }

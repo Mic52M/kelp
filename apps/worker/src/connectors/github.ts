@@ -7,6 +7,9 @@
 // (PR creation lands in a follow-up). Nothing is written during a scan.
 
 import { App } from "@octokit/app";
+import { createGunzip } from "node:zlib";
+import { Readable } from "node:stream";
+import * as tar from "tar-stream";
 import { shouldScanPath, type GitHubConnector, type SourceFile } from "@kelp/core";
 
 // Guard rails so a scan can't blow up on a huge monorepo.
@@ -71,49 +74,53 @@ export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubCon
       const [owner, repo] = repoFullName.split("/");
       if (!owner || !repo) throw new Error(`invalid repo "${repoFullName}"`);
 
-      const { data: repoInfo } = await withRetry(() =>
-        kit.request("GET /repos/{owner}/{repo}", { owner, repo }),
+      // One request: download the repo tarball (default branch). Far fewer API
+      // calls than fetching each blob, so no secondary rate limits and it's fast.
+      const res = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}/tarball", { owner, repo }),
       );
-      const branch = repoInfo.default_branch;
+      const gzipped = Buffer.from(res.data as ArrayBuffer);
 
-      // One recursive tree call gives every path + blob sha + size.
-      const { data: tree } = await withRetry(() =>
-        kit.request("GET /repos/{owner}/{repo}/git/trees/{tree_sha}", {
-          owner,
-          repo,
-          tree_sha: branch,
-          recursive: "1",
-        }),
-      );
-
-      const blobs = (tree.tree ?? [])
-        .filter(
-          (n): n is typeof n & { path: string; sha: string } =>
-            n.type === "blob" &&
-            typeof n.path === "string" &&
-            typeof n.sha === "string" &&
-            shouldScanPath(n.path) &&
-            (n.size ?? 0) <= MAX_FILE_BYTES,
-        )
-        .slice(0, MAX_FILES);
-
-      const files: SourceFile[] = [];
-      // Fetch blob contents. Sequential keeps us well under rate limits for MVP.
-      for (const b of blobs) {
-        const { data: blob } = await withRetry(() =>
-          kit.request("GET /repos/{owner}/{repo}/git/blobs/{file_sha}", {
-            owner,
-            repo,
-            file_sha: b.sha,
-          }),
-        );
-        if (blob.encoding !== "base64") continue;
-        const content = Buffer.from(blob.content, "base64");
-        if (content.includes(0)) continue; // skip binary files
-        files.push({ path: b.path, content: content.toString("utf8") });
-      }
-
-      return files;
+      return extractSourceFiles(gzipped);
     },
   };
+}
+
+/** Gunzip + untar a GitHub tarball in memory, returning scannable text files. */
+function extractSourceFiles(gzipped: Buffer): Promise<SourceFile[]> {
+  return new Promise((resolve, reject) => {
+    const files: SourceFile[] = [];
+    const extract = tar.extract();
+
+    extract.on("entry", (header, stream, next) => {
+      // GitHub tarballs nest everything under a top-level "<repo>-<sha>/" dir.
+      const path = header.name.replace(/^[^/]+\//, "");
+      const tooMany = files.length >= MAX_FILES;
+      const skip =
+        header.type !== "file" ||
+        tooMany ||
+        !shouldScanPath(path) ||
+        (header.size ?? 0) > MAX_FILE_BYTES;
+
+      if (skip) {
+        stream.on("end", next);
+        stream.resume();
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      stream.on("data", (c: Buffer) => chunks.push(c));
+      stream.on("end", () => {
+        const content = Buffer.concat(chunks);
+        if (!content.includes(0)) files.push({ path, content: content.toString("utf8") });
+        next();
+      });
+      stream.on("error", reject);
+    });
+
+    extract.on("finish", () => resolve(files));
+    extract.on("error", reject);
+
+    Readable.from(gzipped).pipe(createGunzip()).pipe(extract);
+  });
 }
