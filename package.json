@@ -1,0 +1,20 @@
+{
+  "name": "kelp",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Kelp — self-serve security agent for vibe-coded apps (Supabase/Lovable/Bolt/Replit).",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc -b --pretty",
+    "db:migrate": "node --experimental-strip-types packages/db/src/migrate.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

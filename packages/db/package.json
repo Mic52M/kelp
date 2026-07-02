@@ -1,0 +1,10 @@
+{
+  "name": "@kelp/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kelp application schema and migrations (SQL is the source of truth).",
+  "scripts": {
+    "migrate": "echo 'Apply migrations/*.sql in filename order via your Postgres client or Supabase CLI.'"
+  }
+}
