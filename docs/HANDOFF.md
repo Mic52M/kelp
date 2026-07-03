@@ -215,14 +215,45 @@ Useful scripts (worker, run with `--env-file=.env.local`):
 - Next 15 pinned to a patched version (past CVE-2025-66478); Tailwind v4.
 - Scan engine kept out of the Next bundle via `serverExternalPackages`.
 
-## 10. What's next (see GitHub issues)
+## 10. What's next — prioritized backlog (see GitHub issues)
 
-Next: the **Resend design pass** (issue #13), then production deploy (issue #16).
-Still owed for GitHub multi-user: make the App public + move to a dedicated org
-(issue #2) and the per-project read-only Supabase role (issue #5). Everything else
-is tracked in issues.
+**Every open issue now has a "Execution context for a fresh Claude Code session"
+comment** with file pointers, approach and a verification step — a new session can
+pick any issue and run it. Recent work this cycle: real fix PRs (#3, done),
+scanner precision + auto-PR gate (#18, done), multi-user GitHub install (#14, done).
 
-## 11. Working style the user prefers
+Suggested order toward **production-ready, self-serve** (the current north star):
+
+1. **#1** rotate GitHub App secret + private key — security, blocking prod, small.
+2. **#2** make the GitHub App public + dedicated org — unblocks true multi-user
+   install (pairs with the closed #14).
+3. **#5** per-project read-only Supabase role (drop the account-level PAT) — the
+   DB-side twin of #14; least-privilege.
+4. **#15** findings resolve/regress on re-scan — closes the lifecycle loop.
+5. **#4** GitHub push webhook → auto re-scan — continuous scanning (paid value).
+6. **#7** Redis-backed queue — replace the poll loop before real load.
+7. **#13** Resend-grade design pass — do after the connect flow is final (#2/#5).
+8. **#10 + #17** Stripe billing + free-plan gating — the PLG money path.
+9. **#16** production deploy (Vercel + Railway/Fly) — after #1/#2/#7.
+10. **#9** real live BOLA tester — the third vuln class; strictly consent-gated.
+
+## 11. GitHub install flow — how it works now (post-#14)
+
+- `github_installations` table (org → installation_id), migration
+  `packages/db/migrations/0003_github_installations.sql`, RLS-scoped, backfilled
+  from projects that already had an installation.
+- Onboarding "Install the Kelp GitHub App" → `startGithubInstallAction`
+  (`apps/web/app/onboarding/actions.ts`) mints a signed HMAC `state` (org+expiry)
+  and redirects to the App install URL (slug fetched via App JWT).
+- Callback `apps/web/app/api/github/setup/route.ts` verifies state + org
+  membership, then `registerGithubInstallation` stores it (account login/type via
+  `GET /app/installations/{id}`).
+- Repo listing is per-org: `listReposForOrg` (`apps/worker/src/api.ts`) aggregates
+  across the org's installations; each repo carries its `installationId` through
+  connect. `GITHUB_APP_INSTALLATION_ID` is now a **dev-only fallback** (empty in prod).
+- **Requires** the GitHub App **Setup URL** = `<APP_URL>/api/github/setup`.
+
+## 12. Working style the user prefers
 
 - Ship real, verified functionality — verify in the browser/DB, not just "it builds".
 - Be a candid co-founder: push back with reasoning, don't just agree.
