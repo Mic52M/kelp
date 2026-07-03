@@ -28,6 +28,8 @@ export interface Finding {
   exposure?: { category: string; count: number }[];
   /** URL of the fix PR Kelp opened (secret findings) */
   prUrl?: string;
+  /** true when Kelp can safely open an automatic fix PR (high-confidence secrets) */
+  autofixable?: boolean;
   detectedAt: string;
 }
 

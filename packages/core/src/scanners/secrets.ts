@@ -194,6 +194,17 @@ const ASSIGN_RE =
   /(?:key|secret|token|passwd|password|api[_-]?key|auth|credential)["'`\]]?\s*[:=]\s*["'`]([^"'`\s]{20,})["'`]/gi;
 const ENTROPY_MIN = 4.0; // bits/char; random base64/hex is typically > 4
 
+// Character-class diversity: generated credentials (base64/hex) mix at least two
+// of {lowercase, uppercase, digit}. A single class means human-readable text —
+// e.g. a snake_case localStorage key like `blackfit_pending_workouts`, which can
+// clear the entropy bar but is NOT a secret. Requiring ≥2 classes kills those
+// false positives while keeping hex (lower+digit) and base64 (lower+upper+digit).
+function charClasses(s: string): number {
+  return (
+    Number(/[a-z]/.test(s)) + Number(/[A-Z]/.test(s)) + Number(/[0-9]/.test(s))
+  );
+}
+
 // A single in-file match. `value` is the raw secret — it exists only in memory
 // while scanning or building a fix, and must never be persisted or logged.
 interface SecretMatch {
@@ -271,6 +282,7 @@ function scanFile(file: SourceFile): SecretMatch[] {
     // dedicated rule already reported them with high confidence.
     if (value.startsWith("eyJ")) continue;
     if (matchesKnownRule(value)) continue;
+    if (charClasses(value) < 2) continue; // human-readable text, not a credential
     if (shannonEntropy(value) < ENTROPY_MIN) continue;
     out.push({
       value,

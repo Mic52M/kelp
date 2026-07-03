@@ -25,7 +25,7 @@ export function FindingCard({ finding }: { finding: Finding }) {
   const [fixPr, fixPrAction, fixPrPending] = useActionState<FixPrState, FormData>(openFixPr, {});
 
   const prUrl = finding.prUrl ?? fixPr.url;
-  const canOpenPr = finding.vulnClass === "secret" && finding.status === "open" && !prUrl;
+  const canOpenPr = finding.autofixable && finding.status === "open" && !prUrl;
 
   const copyPrompt = async () => {
     if (!finding.fixPrompt) return;

@@ -107,6 +107,24 @@ test("high-entropy string beats a low-entropy one", () => {
   assert.ok(shannonEntropy("Xk92Lm4Qz7Rt1Yw8Nb3Vc6Pd0") > 4);
 });
 
+test("snake_case text assigned to a *_KEY name is NOT flagged (entropy false positive)", () => {
+  // Regression for #18: a localStorage key like this cleared the entropy bar but
+  // is human-readable text, not a secret — auto-fixing it would break the app.
+  const findings = detectSecrets([
+    { path: "src/hooks/useWorkoutSync.ts", content: "const STORAGE_KEY = 'blackfit_pending_workouts';" },
+  ]);
+  assert.equal(findings.length, 0);
+});
+
+test("all-lowercase word phrase is not flagged, but a mixed-charset token is", () => {
+  const text = detectSecrets([{ path: "a.ts", content: "const apiKey = 'user_preferences_cache_value';" }]);
+  assert.equal(text.length, 0, "single character class → treated as readable text");
+
+  const token = detectSecrets([{ path: "b.ts", content: "const apiKey = 'Xk92Lm4Qz7Rt1Yw8Nb3Vc6Pd0';" }]);
+  assert.equal(token.length, 1, "mixed-case + digits still detected");
+  assert.equal(token[0]!.ruleId, "high-entropy-string");
+});
+
 test("reports a stable fingerprint across identical scans", () => {
   const file = { path: "a.ts", content: 'k="sk_live_51H8xQh2eZvKYlo2CabcdEFGH"' };
   const a = detectSecrets([file])[0]!;

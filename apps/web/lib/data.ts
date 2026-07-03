@@ -43,8 +43,16 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
     if (r.fixable && r.ownershipColumn) {
       fixPreview = generateRlsMigration({ schema: r.schema, name: r.table }, r.ownershipColumn);
     }
-  } else if (row.vuln_class === "secret" && raw) {
-    fixPrompt = fixPromptForSecret(raw as SecretFinding, "generic");
+  }
+
+  let autofixable = false;
+  if (row.vuln_class === "secret" && raw) {
+    const s = raw as SecretFinding;
+    fixPrompt = fixPromptForSecret(s, "generic");
+    // Only high-confidence secrets (branded provider keys, service_role) get the
+    // automatic-PR button; medium ones fall back to the prompt. Mirrors the
+    // backend guard in openSecretFixPr.
+    autofixable = s.confidence === "high";
   }
 
   return {
@@ -62,6 +70,7 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
     ...(fixPreview ? { fixPreview } : {}),
     ...(fixPrompt ? { fixPrompt } : {}),
     ...(prUrl ? { prUrl } : {}),
+    ...(autofixable ? { autofixable: true } : {}),
     detectedAt: "recent",
   };
 }

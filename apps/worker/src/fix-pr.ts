@@ -27,6 +27,10 @@ const FALLBACK_TO_PROMPT =
   "Kelp couldn't build a safe automatic fix for this file — the secret may have " +
   "moved, already been fixed, or sit inside a larger string. Use the fix prompt instead.";
 
+const NEEDS_REVIEW =
+  "This detection isn't confident enough for an automatic PR. Review it and use " +
+  "the fix prompt below.";
+
 /**
  * Open (or reuse) the fix PR for a secret finding. Caller must have verified
  * the requesting user owns the finding — this runs with the privileged pool.
@@ -53,6 +57,13 @@ export async function openSecretFixPr(
   const raw = finding.evidence?.raw;
   if (!raw?.path || !raw.fingerprint) {
     return { ok: false, error: "This finding predates fix PRs — re-scan the project first." };
+  }
+  // Only auto-open PRs for high-confidence detections (branded provider keys,
+  // service_role). Medium-confidence ones (generic JWTs, high-entropy strings)
+  // are too ambiguous to rewrite unattended — a wrong PR costs more trust than a
+  // prompt the user reviews. This is the backend guard behind the UI's gate.
+  if (raw.confidence !== "high") {
+    return { ok: false, error: NEEDS_REVIEW };
   }
 
   // Idempotent: if we already opened a PR for this finding, return it.
