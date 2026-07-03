@@ -1,3 +1,10 @@
+import {
+  generateRlsMigration,
+  fixPromptForRls,
+  fixPromptForSecret,
+  type RlsFinding,
+  type SecretFinding,
+} from "@kelp/core";
 import { getServerSupabase } from "./supabase/server";
 import type { Finding, FindingStatus, Project, Severity, VulnClass } from "./types";
 
@@ -22,9 +29,24 @@ interface FindingRow {
   title: string;
   location: string | null;
   explanation: string;
+  evidence: { fixable?: boolean; raw?: unknown } | null;
 }
 
 function mapFinding(row: FindingRow): Finding {
+  const raw = row.evidence?.raw;
+  let fixPreview: string | undefined;
+  let fixPrompt: string | undefined;
+
+  if (row.vuln_class === "rls" && raw) {
+    const r = raw as RlsFinding;
+    fixPrompt = fixPromptForRls(r, "generic");
+    if (r.fixable && r.ownershipColumn) {
+      fixPreview = generateRlsMigration({ schema: r.schema, name: r.table }, r.ownershipColumn);
+    }
+  } else if (row.vuln_class === "secret" && raw) {
+    fixPrompt = fixPromptForSecret(raw as SecretFinding, "generic");
+  }
+
   return {
     id: row.id,
     vulnClass: row.vuln_class,
@@ -36,7 +58,9 @@ function mapFinding(row: FindingRow): Finding {
     remediation:
       row.vuln_class === "bola"
         ? "Queued for review by the Kelp team before it is confirmed."
-        : "Kelp can generate a fix for this — review it before applying.",
+        : "Apply the fix below, or paste the prompt into your AI coding tool.",
+    ...(fixPreview ? { fixPreview } : {}),
+    ...(fixPrompt ? { fixPrompt } : {}),
     detectedAt: "recent",
   };
 }
@@ -66,6 +90,48 @@ function friendlyScanIssue(vulnClass: string, message: string): string {
     return `The ${vulnClass === "rls" ? "Supabase project" : "repository"} could not be reached — it may have been removed.`;
   }
   return `The ${vulnClass.toUpperCase()} scan didn't complete. Try re-scanning.`;
+}
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  repo: string | null;
+  supabaseRef: string | null;
+  activeFindings: number;
+  scanStatus: string | null;
+}
+
+/** All projects for the signed-in org, with active-finding counts. */
+export async function loadProjects(): Promise<ProjectSummary[]> {
+  const supabase = await getServerSupabase();
+  const { data: projects } = await supabase
+    .from("projects")
+    .select("id, name, github_repo_full_name, supabase_project_ref")
+    .order("created_at", { ascending: false });
+
+  const out: ProjectSummary[] = [];
+  for (const p of projects ?? []) {
+    const { count } = await supabase
+      .from("findings")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", p.id)
+      .neq("status", "resolved");
+    const { data: scan } = await supabase
+      .from("scans")
+      .select("status")
+      .eq("project_id", p.id)
+      .order("queued_at", { ascending: false })
+      .limit(1);
+    out.push({
+      id: p.id,
+      name: p.name,
+      repo: p.github_repo_full_name,
+      supabaseRef: p.supabase_project_ref,
+      activeFindings: count ?? 0,
+      scanStatus: (scan?.[0]?.status as string | undefined) ?? null,
+    });
+  }
+  return out;
 }
 
 export async function loadDashboard(): Promise<DashboardData> {
@@ -114,7 +180,7 @@ export async function loadDashboard(): Promise<DashboardData> {
   const { data: rows } = p
     ? await supabase
         .from("findings")
-        .select("id, vuln_class, severity, status, title, location, explanation")
+        .select("id, vuln_class, severity, status, title, location, explanation, evidence")
         .eq("project_id", p.id)
     : { data: null };
 

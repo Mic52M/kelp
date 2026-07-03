@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Finding } from "@/lib/types";
 import { SeverityBadge } from "./SeverityBadge";
+import { dismissFinding } from "@/app/dashboard/finding-actions";
 
 const CLASS_LABEL: Record<Finding["vulnClass"], string> = {
   rls: "Row Level Security",
@@ -17,13 +18,6 @@ const STATUS: Record<Finding["status"], { label: string; className: string }> = 
   confirmed: { label: "Confirmed", className: "text-[color:var(--color-high)] border-line" },
   resolved: { label: "Resolved", className: "text-ok border-aqua-600/40" },
 };
-
-function actionFor(f: Finding): { label: string; primary: boolean } | null {
-  if (f.status === "resolved") return null;
-  if (f.vulnClass === "bola") return { label: "Request review", primary: false };
-  if (f.status === "pr_opened") return { label: "View pull request", primary: false };
-  return { label: "Generate fix", primary: true };
-}
 
 export function FindingCard({ finding }: { finding: Finding }) {
   const [open, setOpen] = useState(finding.severity === "critical" && finding.status === "open");
@@ -40,7 +34,6 @@ export function FindingCard({ finding }: { finding: Finding }) {
     }
   };
   const status = STATUS[finding.status];
-  const action = actionFor(finding);
 
   return (
     <div className="glass overflow-hidden rounded-xl">
@@ -113,20 +106,22 @@ export function FindingCard({ finding }: { finding: Finding }) {
             </div>
           )}
 
-          {action && (
-            <div className="mt-4 flex gap-2">
-              <button
-                className={
-                  action.primary
-                    ? "rounded-lg bg-gradient-to-r from-aqua-500 to-aqua-600 px-3.5 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90"
-                    : "rounded-lg border border-line bg-ink-800 px-3.5 py-2 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700"
-                }
-              >
-                {action.label}
-              </button>
-              <button className="rounded-lg px-3.5 py-2 text-sm text-fog-400 transition-colors hover:text-fog-50">
-                Dismiss
-              </button>
+          {finding.status !== "resolved" && (
+            <div className="mt-4 flex items-center gap-2">
+              {finding.vulnClass === "bola" && (
+                <span className="rounded-lg border border-violet-500/40 bg-violet-500/[0.08] px-3.5 py-2 text-sm text-violet-300">
+                  Queued for Kelp review
+                </span>
+              )}
+              <form action={dismissFinding}>
+                <input type="hidden" name="findingId" value={finding.id} />
+                <button
+                  type="submit"
+                  className="rounded-lg border border-line bg-ink-800 px-3.5 py-2 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700"
+                >
+                  Dismiss
+                </button>
+              </form>
             </div>
           )}
         </div>

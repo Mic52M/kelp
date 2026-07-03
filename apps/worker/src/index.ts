@@ -11,6 +11,7 @@ export {
   createProjectAndEnqueueScan,
   enqueueScanForProject,
 } from "./api.js";
+export { putCredential } from "./db.js";
 export type { SupabaseProjectInfo, ConnectInput } from "./api.js";
 export { InMemoryQueue } from "./queue.js";
 export type { ScanJob, ScanQueue } from "./queue.js";
