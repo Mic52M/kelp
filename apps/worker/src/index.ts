@@ -6,15 +6,18 @@
 
 export { processOneScan, drainScans, runScanForProject } from "./scan-processor.js";
 export {
-  listInstallationRepos,
+  listReposForOrg,
   listSupabaseProjects,
   createProjectAndEnqueueScan,
   enqueueScanForProject,
+  getGithubInstallUrl,
+  verifyInstallState,
+  registerGithubInstallation,
 } from "./api.js";
 export { putCredential } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";
 export type { SecretFixPrResult } from "./fix-pr.js";
-export type { SupabaseProjectInfo, ConnectInput } from "./api.js";
+export type { SupabaseProjectInfo, ConnectInput, RepoOption } from "./api.js";
 export { InMemoryQueue } from "./queue.js";
 export type { ScanJob, ScanQueue } from "./queue.js";
 

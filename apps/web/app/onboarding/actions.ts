@@ -5,10 +5,12 @@ import { after } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import {
-  listInstallationRepos,
+  listReposForOrg,
   listSupabaseProjects,
   createProjectAndEnqueueScan,
+  getGithubInstallUrl,
   drainScans,
+  type RepoOption,
   type SupabaseProjectInfo,
 } from "@kelp/worker";
 
@@ -30,13 +32,25 @@ async function requireOrg(): Promise<{ orgId: string }> {
 }
 
 export async function getGithubReposAction(): Promise<
-  { ok: true; repos: string[] } | { ok: false; error: string }
+  { ok: true; repos: RepoOption[] } | { ok: false; error: string }
 > {
   try {
-    await requireOrg();
-    return { ok: true, repos: await listInstallationRepos() };
+    const { orgId } = await requireOrg();
+    return { ok: true, repos: await listReposForOrg(orgId) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not list repositories" };
+  }
+}
+
+/** Signed URL to install the Kelp GitHub App for the current org. */
+export async function startGithubInstallAction(): Promise<
+  { ok: true; url: string } | { ok: false; error: string }
+> {
+  try {
+    const { orgId } = await requireOrg();
+    return { ok: true, url: await getGithubInstallUrl(orgId) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not start GitHub install" };
   }
 }
 
@@ -55,6 +69,7 @@ export async function getSupabaseProjectsAction(
 export async function connectAndScanAction(input: {
   projectName: string;
   repoFullName: string | null;
+  installationId: number | null;
   supabaseRef: string | null;
   supabaseToken: string | null;
 }): Promise<{ ok: false; error: string }> {
@@ -73,6 +88,7 @@ export async function connectAndScanAction(input: {
       orgId,
       name: input.projectName || input.repoFullName || input.supabaseRef || "Project",
       repoFullName: input.repoFullName,
+      installationId: input.installationId,
       supabaseRef: input.supabaseRef,
       supabaseToken: input.supabaseToken,
       classes,

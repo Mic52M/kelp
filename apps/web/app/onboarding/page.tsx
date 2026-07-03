@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
 import {
   getGithubReposAction,
   getSupabaseProjectsAction,
+  startGithubInstallAction,
   connectAndScanAction,
 } from "./actions";
-import type { SupabaseProjectInfo } from "@kelp/worker";
+import type { RepoOption, SupabaseProjectInfo } from "@kelp/worker";
 
 const STEPS = ["Connect GitHub", "Connect Supabase", "Scan"] as const;
 
@@ -16,10 +17,12 @@ export default function Onboarding() {
   const [step, setStep] = useState(0);
 
   // GitHub
-  const [repos, setRepos] = useState<string[] | null>(null);
+  const [repos, setRepos] = useState<RepoOption[] | null>(null);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [repoError, setRepoError] = useState<string | null>(null);
-  const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installNote, setInstallNote] = useState<string | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
   const [repoFilter, setRepoFilter] = useState("");
 
   // Supabase
@@ -42,6 +45,34 @@ export default function Onboarding() {
     else setRepoError(res.error);
   }
 
+  async function startInstall() {
+    setInstalling(true);
+    setRepoError(null);
+    const res = await startGithubInstallAction();
+    if (res.ok) window.location.href = res.url; // leaves the app for GitHub
+    else {
+      setInstalling(false);
+      setRepoError(res.error);
+    }
+  }
+
+  // Handle the return from the GitHub install callback (?github=…).
+  useEffect(() => {
+    const status = new URLSearchParams(window.location.search).get("github");
+    if (!status) return;
+    window.history.replaceState(null, "", "/onboarding"); // clean the URL
+    if (status === "connected") {
+      setInstallNote("GitHub App installed — loading your repositories…");
+      void loadRepos();
+    } else if (status === "pending") {
+      setInstallNote(
+        "Install requested. An owner of that GitHub organization needs to approve it, then come back and load your repositories.",
+      );
+    } else if (status === "error") {
+      setRepoError("We couldn't complete the GitHub install. Please try again.");
+    }
+  }, []);
+
   async function loadProjects() {
     if (!token.trim()) return;
     setLoadingProjects(true);
@@ -56,8 +87,12 @@ export default function Onboarding() {
     setSubmitting(true);
     setSubmitError(null);
     const res = await connectAndScanAction({
-      projectName: selectedRepo?.split("/")[1] ?? projects?.find((p) => p.ref === selectedRef)?.name ?? "Project",
-      repoFullName: selectedRepo,
+      projectName:
+        selectedRepo?.fullName.split("/")[1] ??
+        projects?.find((p) => p.ref === selectedRef)?.name ??
+        "Project",
+      repoFullName: selectedRepo?.fullName ?? null,
+      installationId: selectedRepo?.installationId ?? null,
       supabaseRef: selectedRef,
       supabaseToken: selectedRef ? token : null,
     });
@@ -68,7 +103,7 @@ export default function Onboarding() {
 
   const canScan = Boolean(selectedRepo || selectedRef);
   const filteredRepos = (repos ?? []).filter((r) =>
-    r.toLowerCase().includes(repoFilter.toLowerCase()),
+    r.fullName.toLowerCase().includes(repoFilter.toLowerCase()),
   );
 
   return (
@@ -113,13 +148,27 @@ export default function Onboarding() {
               subtitle="Kelp reads your code to find exposed secrets. Choose one repository the Kelp GitHub App can access. (Optional — you can scan Supabase alone.)"
             >
               {!repos && (
-                <button
-                  onClick={loadRepos}
-                  disabled={loadingRepos}
-                  className="inline-flex items-center gap-2 rounded-lg bg-fog-50 px-4 py-2.5 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  {loadingRepos ? "Loading repositories…" : "Load my repositories"}
-                </button>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <button
+                    onClick={startInstall}
+                    disabled={installing}
+                    className="inline-flex items-center gap-2 rounded-lg bg-fog-50 px-4 py-2.5 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90 disabled:opacity-50"
+                  >
+                    {installing ? "Redirecting to GitHub…" : "Install the Kelp GitHub App"}
+                  </button>
+                  <button
+                    onClick={loadRepos}
+                    disabled={loadingRepos}
+                    className="text-sm text-fog-400 transition-colors hover:text-fog-50 disabled:opacity-40"
+                  >
+                    {loadingRepos ? "Loading…" : "Already installed? Load my repositories"}
+                  </button>
+                </div>
+              )}
+              {installNote && (
+                <p className="mt-3 rounded-lg border border-aqua-600/40 bg-aqua-500/[0.08] px-3 py-2 text-xs text-aqua-300">
+                  {installNote}
+                </p>
               )}
               {repoError && <ErrorNote>{repoError}</ErrorNote>}
 
@@ -134,20 +183,33 @@ export default function Onboarding() {
                   <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
                     {filteredRepos.map((r) => (
                       <button
-                        key={r}
-                        onClick={() => setSelectedRepo(selectedRepo === r ? null : r)}
+                        key={r.fullName}
+                        onClick={() =>
+                          setSelectedRepo(selectedRepo?.fullName === r.fullName ? null : r)
+                        }
                         className={`flex w-full items-center justify-between rounded-lg border px-3.5 py-2.5 text-left text-sm transition-colors ${
-                          selectedRepo === r
+                          selectedRepo?.fullName === r.fullName
                             ? "border-aqua-600/50 bg-aqua-500/10 text-fog-50"
                             : "border-line bg-ink-900/50 text-fog-300 hover:border-line hover:bg-white/[0.02]"
                         }`}
                       >
-                        <span className="truncate font-mono">{r}</span>
-                        {selectedRepo === r && <span className="text-aqua-400">✓</span>}
+                        <span className="truncate font-mono">{r.fullName}</span>
+                        {selectedRepo?.fullName === r.fullName && (
+                          <span className="text-aqua-400">✓</span>
+                        )}
                       </button>
                     ))}
                     {filteredRepos.length === 0 && (
                       <p className="px-1 py-4 text-sm text-fog-500">No repositories match.</p>
+                    )}
+                    {repos.length === 0 && (
+                      <div className="px-1 py-4 text-sm text-fog-500">
+                        No repositories yet.{" "}
+                        <button onClick={startInstall} className="text-aqua-400 hover:text-aqua-300">
+                          Install the Kelp GitHub App
+                        </button>{" "}
+                        and grant it access to a repo.
+                      </div>
                     )}
                   </div>
                 </>
@@ -229,7 +291,7 @@ export default function Onboarding() {
                   <span className="text-fog-300">
                     Secret scan{" "}
                     {selectedRepo ? (
-                      <span className="font-mono text-fog-50">{selectedRepo}</span>
+                      <span className="font-mono text-fog-50">{selectedRepo.fullName}</span>
                     ) : (
                       "(no repository selected)"
                     )}

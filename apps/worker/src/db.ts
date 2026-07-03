@@ -68,6 +68,39 @@ export async function loadProject(projectId: string): Promise<ProjectRow | null>
   };
 }
 
+/** Record (or re-activate) a GitHub App installation for an org. Idempotent. */
+export async function saveGithubInstallation(input: {
+  orgId: string;
+  installationId: number;
+  accountLogin: string | null;
+  accountType: string | null;
+  connectedBy: string | null;
+}): Promise<void> {
+  await getPool().query(
+    `insert into github_installations
+       (org_id, installation_id, account_login, account_type, connected_by)
+     values ($1, $2, $3, $4, $5)
+     on conflict (installation_id) do update set
+       org_id = excluded.org_id,
+       account_login = excluded.account_login,
+       account_type = excluded.account_type,
+       connected_by = excluded.connected_by,
+       revoked_at = null`,
+    [input.orgId, input.installationId, input.accountLogin, input.accountType, input.connectedBy],
+  );
+}
+
+/** Active (non-revoked) installation ids for an org. */
+export async function listOrgInstallationIds(orgId: string): Promise<number[]> {
+  const { rows } = await getPool().query(
+    `select installation_id from github_installations
+     where org_id = $1 and revoked_at is null
+     order by created_at`,
+    [orgId],
+  );
+  return rows.map((r) => Number(r.installation_id));
+}
+
 /** Decrypt a stored credential, or null if the project doesn't have that kind. */
 export async function getCredential(projectId: string, kind: string): Promise<string | null> {
   const { rows } = await getPool().query(

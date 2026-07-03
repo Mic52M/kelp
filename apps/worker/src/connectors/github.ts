@@ -75,6 +75,39 @@ async function withRetry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
   throw lastErr;
 }
 
+export interface GitHubAppConfig {
+  appId: string;
+  privateKey: string; // PEM
+}
+
+/** App-level (JWT-authenticated) operations, not scoped to any installation. */
+export interface GitHubApp {
+  /** The app's URL slug, used to build the install redirect. */
+  getAppSlug(): Promise<string>;
+  /** Account (user/org) a given installation belongs to. */
+  getInstallationAccount(installationId: number): Promise<{ login: string | null; type: string | null }>;
+}
+
+export function createGitHubApp(cfg: GitHubAppConfig): GitHubApp {
+  const app = new App({ appId: cfg.appId, privateKey: cfg.privateKey });
+  return {
+    async getAppSlug(): Promise<string> {
+      const { data } = await withRetry(() => app.octokit.request("GET /app"));
+      if (!data?.slug) throw new Error("GitHub app has no slug");
+      return data.slug;
+    },
+    async getInstallationAccount(installationId: number) {
+      const { data } = await withRetry(() =>
+        app.octokit.request("GET /app/installations/{installation_id}", {
+          installation_id: installationId,
+        }),
+      );
+      const acct = data.account as { login?: string; type?: string } | null;
+      return { login: acct?.login ?? null, type: acct?.type ?? null };
+    },
+  };
+}
+
 export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubConnector {
   const app = new App({ appId: cfg.appId, privateKey: cfg.privateKey });
 

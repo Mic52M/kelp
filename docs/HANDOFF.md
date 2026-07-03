@@ -129,8 +129,19 @@ record a BOLA finding unless a real probe confirmed it).
 - ✅ **Fix-prompt generator** — paste-ready prompts for Lovable/Bolt/Cursor/v0.
 - ✅ **Auth** — Supabase Auth (email/password), tenant bootstrap (user/org/
   membership on first login). Verified end-to-end (browser + DB).
-- ✅ **Connect flow** — onboarding: pick a GitHub repo (from the App installation),
-  pick a Supabase project (from a pasted Management token), run scan. Verified live.
+- ✅ **Connect flow** — onboarding: pick a GitHub repo, pick a Supabase project
+  (from a pasted Management token), run scan. Verified live.
+- ✅ **Multi-user GitHub install (issue #14)** — users install the Kelp App on their
+  own account/org via a signed-`state` redirect; the post-install callback
+  (`/api/github/setup`) verifies the HMAC state + org membership and stores the
+  installation per org (`github_installations` table, migration 0003). Repo listing
+  is now per-org (`listReposForOrg`, aggregates across an org's installations,
+  carries each repo's installation id through connect) instead of a single env
+  installation. Env `GITHUB_APP_INSTALLATION_ID` is now a dev-only fallback.
+  **Requires** the GitHub App "Setup URL" → `<APP_URL>/api/github/setup`. Verified
+  live: per-org listing (40 real repos), connect stores the right installation,
+  scan succeeds; install URL resolves to the real app slug; state HMAC round-trip
+  rejects expired/tampered/forged tokens.
 - ✅ **Scan pipeline** — enqueue → process (via after() locally, or worker poll loop)
   → findings persisted (upsert by fingerprint) → dashboard shows real, RLS-scoped
   data. Verified live.
@@ -207,7 +218,9 @@ Useful scripts (worker, run with `--env-file=.env.local`):
 ## 10. What's next (see GitHub issues)
 
 Next: the **Resend design pass** (issue #13), then production deploy (issue #16).
-Everything else is tracked in issues.
+Still owed for GitHub multi-user: make the App public + move to a dedicated org
+(issue #2) and the per-project read-only Supabase role (issue #5). Everything else
+is tracked in issues.
 
 ## 11. Working style the user prefers
 
