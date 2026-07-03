@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
-import { enqueueScanForProject } from "@kelp/worker";
+import { enqueueScanForProject, drainScans } from "@kelp/worker";
 
 /** Re-run the scan for a project the signed-in user owns. */
 export async function rescanAction(formData: FormData): Promise<void> {
@@ -26,5 +27,6 @@ export async function rescanAction(formData: FormData): Promise<void> {
 
   const { orgId } = await ensureTenant({ id: user.id, email: user.email });
   await enqueueScanForProject({ orgId, projectId, classes: ["secret", "rls"], trigger: "manual" });
+  after(() => drainScans().catch((e) => console.error("scan processing failed:", e)));
   revalidatePath("/dashboard");
 }

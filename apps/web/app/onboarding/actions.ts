@@ -1,12 +1,14 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import {
   listInstallationRepos,
   listSupabaseProjects,
   createProjectAndEnqueueScan,
+  drainScans,
   type SupabaseProjectInfo,
 } from "@kelp/worker";
 
@@ -80,5 +82,8 @@ export async function connectAndScanAction(input: {
   }
   if (error) return { ok: false, error };
 
+  // Process the queue in the background after the response is sent — so the scan
+  // runs even when no separate worker process is up (local dev "just works").
+  after(() => drainScans().catch((e) => console.error("scan processing failed:", e)));
   redirect("/dashboard");
 }

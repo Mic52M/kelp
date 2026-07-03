@@ -133,10 +133,37 @@ body {
   animation: rise 0.5s ease-out both;
 }
 
+/* Expanding radar rings for the scanning view (Resend-style, restrained). */
+@keyframes radar {
+  0% { transform: scale(0.35); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.animate-radar {
+  animation: radar 1.8s cubic-bezier(0.2, 0.6, 0.2, 1) infinite;
+}
+
+/* Soft sweeping shimmer for progress surfaces. */
+@keyframes shimmer {
+  0% { background-position: -150% 0; }
+  100% { background-position: 250% 0; }
+}
+.animate-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(52, 230, 207, 0.14) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-scanline,
   .animate-pulse-soft,
-  .animate-rise {
+  .animate-rise,
+  .animate-radar,
+  .animate-shimmer {
     animation: none;
   }
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { FindingCard } from "@/components/FindingCard";
 import { ScoreRing } from "@/components/ScoreRing";
-import { ScanStatus } from "@/components/ScanStatus";
+import { ScanningView } from "@/components/ScanningView";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { loadDashboard } from "@/lib/data";
@@ -25,7 +25,8 @@ export default async function Dashboard() {
     await ensureTenant({ id: user.id, email: user.email });
   }
 
-  const { project, findings, summary, scanStatus } = await loadDashboard();
+  const { project, findings, summary, scanStatus, scanIssues } = await loadDashboard();
+  const scanning = scanStatus === "queued" || scanStatus === "running";
   const active = findings.filter((f) => f.status !== "resolved");
   const resolved = findings.filter((f) => f.status === "resolved");
 
@@ -130,27 +131,50 @@ export default async function Dashboard() {
             </div>
           </div>
 
-          <ScanStatus status={scanStatus} />
-
-          {/* Findings */}
-          <div className="mt-8 flex items-center justify-between">
-            <h2 className="text-lg font-medium">Findings</h2>
-            <span className="text-sm text-fog-400">{active.length} active</span>
-          </div>
-          <div className="mt-4 space-y-3">
-            {active.map((f) => (
-              <FindingCard key={f.id} finding={f} />
-            ))}
-          </div>
-
-          {resolved.length > 0 && (
+          {scanning ? (
+            <ScanningView status={scanStatus} />
+          ) : (
             <>
-              <h2 className="mt-10 text-lg font-medium text-fog-400">Resolved</h2>
-              <div className="mt-4 space-y-3 opacity-70">
-                {resolved.map((f) => (
+              {scanIssues.length > 0 && (
+                <div className="mt-8 space-y-2">
+                  {scanIssues.map((issue) => (
+                    <div
+                      key={issue}
+                      className="flex items-start gap-2.5 rounded-xl border border-[color:var(--color-high)]/25 bg-[color:var(--color-high)]/[0.06] px-4 py-3 text-sm text-fog-200"
+                    >
+                      <span className="mt-0.5 text-[color:var(--color-high)]">!</span>
+                      <span>{issue}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Findings */}
+              <div className="mt-8 flex items-center justify-between">
+                <h2 className="text-lg font-medium">Findings</h2>
+                <span className="text-sm text-fog-400">{active.length} active</span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {active.map((f) => (
                   <FindingCard key={f.id} finding={f} />
                 ))}
+                {active.length === 0 && project && (
+                  <div className="rounded-xl border border-line/60 bg-ink-900/30 px-4 py-8 text-center text-sm text-fog-400">
+                    No active findings on the last scan.
+                  </div>
+                )}
               </div>
+
+              {resolved.length > 0 && (
+                <>
+                  <h2 className="mt-10 text-lg font-medium text-fog-400">Resolved</h2>
+                  <div className="mt-4 space-y-3 opacity-70">
+                    {resolved.map((f) => (
+                      <FindingCard key={f.id} finding={f} />
+                    ))}
+                  </div>
+                </>
+              )}
             </>
           )}
         </main>
