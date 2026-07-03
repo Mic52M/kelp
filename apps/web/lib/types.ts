@@ -26,6 +26,8 @@ export interface Finding {
   fixPrompt?: string;
   /** end-user PII exposure — category + count only, never raw values */
   exposure?: { category: string; count: number }[];
+  /** URL of the fix PR Kelp opened (secret findings) */
+  prUrl?: string;
   detectedAt: string;
 }
 

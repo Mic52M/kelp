@@ -3,8 +3,10 @@
 // installed on. Uses the official @octokit/app SDK, which handles the App JWT
 // and installation-token exchange.
 //
-// Scope used: Contents (read) to fetch files, Pull requests (write) for fixes
-// (PR creation lands in a follow-up). Nothing is written during a scan.
+// Scopes used: Contents (read/write) to fetch files and commit fixes, Pull
+// requests (write) to open fix PRs. Nothing is written during a scan — writes
+// happen only through openFixPr, always on a fresh kelp/* branch, never the
+// default branch.
 
 import { App } from "@octokit/app";
 import { createGunzip } from "node:zlib";
@@ -22,9 +24,37 @@ export interface GitHubConnectorConfig {
   installationId: number;
 }
 
+export interface FixPrInput {
+  /** head branch to create (must be namespaced, e.g. "kelp/…") */
+  branch: string;
+  title: string;
+  body: string;
+  commitMessage: string;
+  /** file to rewrite */
+  path: string;
+  /** pure edit: current content → fixed content, or null if no safe fix */
+  edit: (content: string) => string | null;
+}
+
+export interface FixPrResult {
+  url: string;
+  /** true when an open PR for this branch already existed and was reused */
+  alreadyExisted: boolean;
+}
+
+/** Thrown when the edit callback can't produce a safe fix for the file. */
+export class FixNotApplicableError extends Error {
+  constructor() {
+    super("no safe automatic fix for this file");
+    this.name = "FixNotApplicableError";
+  }
+}
+
 export interface RealGitHubConnector extends GitHubConnector {
   /** repos the installation can access, as "owner/repo". */
   listRepos(): Promise<string[]>;
+  /** Open (or reuse) a fix PR: branch off the default branch, commit the edited file, open the PR. */
+  openFixPr(repoFullName: string, input: FixPrInput): Promise<FixPrResult>;
 }
 
 // Retry transient GitHub errors (5xx and secondary/abuse rate limits, which can
@@ -82,6 +112,103 @@ export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubCon
       const gzipped = Buffer.from(res.data as ArrayBuffer);
 
       return extractSourceFiles(gzipped);
+    },
+
+    async openFixPr(repoFullName: string, input: FixPrInput): Promise<FixPrResult> {
+      const kit = await octokit();
+      const [owner, repo] = repoFullName.split("/");
+      if (!owner || !repo) throw new Error(`invalid repo "${repoFullName}"`);
+      if (!input.branch.startsWith("kelp/")) {
+        throw new Error(`fix branch must be kelp-namespaced, got "${input.branch}"`);
+      }
+
+      const { data: repoInfo } = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}", { owner, repo }),
+      );
+      const base = repoInfo.default_branch;
+
+      // Idempotent: if an open PR for this branch already exists, reuse it.
+      const { data: existing } = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}/pulls", {
+          owner,
+          repo,
+          head: `${owner}:${input.branch}`,
+          state: "open",
+        }),
+      );
+      if (existing.length > 0) {
+        return { url: existing[0]!.html_url, alreadyExisted: true };
+      }
+
+      // Read the file at the tip of the default branch and build the fix.
+      const { data: baseRef } = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}/git/ref/{ref}", {
+          owner,
+          repo,
+          ref: `heads/${base}`,
+        }),
+      );
+      const headSha = baseRef.object.sha;
+
+      const { data: fileData } = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+          owner,
+          repo,
+          path: input.path,
+          ref: base,
+        }),
+      );
+      if (Array.isArray(fileData) || fileData.type !== "file" || !("content" in fileData)) {
+        throw new Error(`"${input.path}" is not a file on ${base}`);
+      }
+      const current = Buffer.from(fileData.content, "base64").toString("utf8");
+
+      const fixed = input.edit(current);
+      if (fixed === null) throw new FixNotApplicableError();
+
+      // Branch off the default branch head. If a stale kelp/* branch exists
+      // (e.g. a previous PR was closed unmerged), reset it — it's our namespace.
+      try {
+        await kit.request("POST /repos/{owner}/{repo}/git/refs", {
+          owner,
+          repo,
+          ref: `refs/heads/${input.branch}`,
+          sha: headSha,
+        });
+      } catch (e) {
+        if ((e as { status?: number }).status !== 422) throw e;
+        await kit.request("PATCH /repos/{owner}/{repo}/git/refs/{ref}", {
+          owner,
+          repo,
+          ref: `heads/${input.branch}`,
+          sha: headSha,
+          force: true,
+        });
+      }
+
+      await withRetry(() =>
+        kit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
+          owner,
+          repo,
+          path: input.path,
+          branch: input.branch,
+          message: input.commitMessage,
+          content: Buffer.from(fixed, "utf8").toString("base64"),
+          sha: fileData.sha,
+        }),
+      );
+
+      const { data: pr } = await withRetry(() =>
+        kit.request("POST /repos/{owner}/{repo}/pulls", {
+          owner,
+          repo,
+          title: input.title,
+          body: input.body,
+          head: input.branch,
+          base,
+        }),
+      );
+      return { url: pr.html_url, alreadyExisted: false };
     },
   };
 }

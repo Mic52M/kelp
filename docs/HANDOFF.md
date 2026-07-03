@@ -57,8 +57,8 @@ polished.
 **Vulnerability classes (priority order):**
 1. **RLS** (Row Level Security) missing/misconfigured on Supabase — DONE (scanner
    + fix migration generator).
-2. **Exposed secrets** in the GitHub repo — DONE (scanner + fix-prompt; real PR
-   creation is the next functional piece, issue #3).
+2. **Exposed secrets** in the GitHub repo — DONE (scanner + fix-prompt + real
+   fix-PR creation, verified live — issue #3 closed).
 3. **BOLA** (broken object-level authorization) — active testing. Deterministic
    probe + agentic engine (Claude plans, deterministic executor runs) are BUILT
    and tested with mocks; the real live tester needs user test accounts (issue #9).
@@ -137,6 +137,12 @@ record a BOLA finding unless a real probe confirmed it).
 - ✅ **Async scan + live status** — Resend-style `ScanningView` (radar + phased
   checklist + shimmer) while scanning; old findings hidden; auto-refresh swaps in
   results. Verified live.
+- ✅ **Real fix PRs for secrets** — "Open fix PR" on a secret finding creates a
+  `kelp/*` branch, replaces the hard-coded value with `process.env.X` (edit built
+  deterministically in core, refuses partial fixes so the value can never survive),
+  opens the PR against the default branch, records the remediation + audit row and
+  moves the finding to `pr_opened`. Idempotent (re-click returns the same PR).
+  Verified live: https://github.com/Mic52M/luneai/pull/3.
 - ✅ **Dashboard fully navigable** — sidebar (Overview/Findings/Projects/Settings),
   Billing (Upgrade), per-project re-scan, **Reconnect Supabase token** (Settings),
   finding **Copy prompt** (computed for real findings) + **Dismiss** (functional).
@@ -200,9 +206,8 @@ Useful scripts (worker, run with `--env-file=.env.local`):
 
 ## 10. What's next (see GitHub issues)
 
-Immediate functional gap: **real GitHub PR creation for secret fixes** (issue #3) —
-the "Generate fix" button that opens a PR. Then the **Resend design pass** (issue
-#13). Then production deploy (issue #16). Everything else is tracked in issues.
+Next: the **Resend design pass** (issue #13), then production deploy (issue #16).
+Everything else is tracked in issues.
 
 ## 11. Working style the user prefers
 

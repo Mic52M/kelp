@@ -32,7 +32,7 @@ interface FindingRow {
   evidence: { fixable?: boolean; raw?: unknown } | null;
 }
 
-function mapFinding(row: FindingRow): Finding {
+function mapFinding(row: FindingRow, prUrl?: string): Finding {
   const raw = row.evidence?.raw;
   let fixPreview: string | undefined;
   let fixPrompt: string | undefined;
@@ -61,6 +61,7 @@ function mapFinding(row: FindingRow): Finding {
         : "Apply the fix below, or paste the prompt into your AI coding tool.",
     ...(fixPreview ? { fixPreview } : {}),
     ...(fixPrompt ? { fixPrompt } : {}),
+    ...(prUrl ? { prUrl } : {}),
     detectedAt: "recent",
   };
 }
@@ -184,8 +185,24 @@ export async function loadDashboard(): Promise<DashboardData> {
         .eq("project_id", p.id)
     : { data: null };
 
+  // Fix-PR links for these findings (RLS scopes remediations to the user's orgs).
+  const findingIds = ((rows ?? []) as FindingRow[]).map((r) => r.id);
+  const { data: rems } = findingIds.length
+    ? await supabase
+        .from("remediations")
+        .select("finding_id, github_pr_url")
+        .in("finding_id", findingIds)
+        .not("github_pr_url", "is", null)
+    : { data: null };
+  const prUrls = new Map(
+    ((rems ?? []) as { finding_id: string; github_pr_url: string }[]).map((r) => [
+      r.finding_id,
+      r.github_pr_url,
+    ]),
+  );
+
   const findings = ((rows ?? []) as FindingRow[])
-    .map(mapFinding)
+    .map((r) => mapFinding(r, prUrls.get(r.id)))
     .sort(
       (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
     );

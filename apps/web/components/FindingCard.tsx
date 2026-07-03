@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import type { Finding } from "@/lib/types";
 import { SeverityBadge } from "./SeverityBadge";
-import { dismissFinding } from "@/app/dashboard/finding-actions";
+import { dismissFinding, openFixPr, type FixPrState } from "@/app/dashboard/finding-actions";
 
 const CLASS_LABEL: Record<Finding["vulnClass"], string> = {
   rls: "Row Level Security",
@@ -22,6 +22,10 @@ const STATUS: Record<Finding["status"], { label: string; className: string }> = 
 export function FindingCard({ finding }: { finding: Finding }) {
   const [open, setOpen] = useState(finding.severity === "critical" && finding.status === "open");
   const [copied, setCopied] = useState(false);
+  const [fixPr, fixPrAction, fixPrPending] = useActionState<FixPrState, FormData>(openFixPr, {});
+
+  const prUrl = finding.prUrl ?? fixPr.url;
+  const canOpenPr = finding.vulnClass === "secret" && finding.status === "open" && !prUrl;
 
   const copyPrompt = async () => {
     if (!finding.fixPrompt) return;
@@ -107,11 +111,33 @@ export function FindingCard({ finding }: { finding: Finding }) {
           )}
 
           {finding.status !== "resolved" && (
-            <div className="mt-4 flex items-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               {finding.vulnClass === "bola" && (
                 <span className="rounded-lg border border-violet-500/40 bg-violet-500/[0.08] px-3.5 py-2 text-sm text-violet-300">
                   Queued for Kelp review
                 </span>
+              )}
+              {canOpenPr && (
+                <form action={fixPrAction}>
+                  <input type="hidden" name="findingId" value={finding.id} />
+                  <button
+                    type="submit"
+                    disabled={fixPrPending}
+                    className="rounded-lg bg-fog-50 px-3.5 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90 disabled:opacity-60"
+                  >
+                    {fixPrPending ? "Opening PR…" : "Open fix PR"}
+                  </button>
+                </form>
+              )}
+              {prUrl && (
+                <a
+                  href={prUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-aqua-600/40 bg-aqua-500/[0.08] px-3.5 py-2 text-sm font-medium text-aqua-400 transition-colors hover:bg-aqua-500/[0.14]"
+                >
+                  View PR on GitHub ↗
+                </a>
               )}
               <form action={dismissFinding}>
                 <input type="hidden" name="findingId" value={finding.id} />
@@ -123,6 +149,12 @@ export function FindingCard({ finding }: { finding: Finding }) {
                 </button>
               </form>
             </div>
+          )}
+
+          {fixPr.error && !prUrl && (
+            <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-[13px] leading-relaxed text-amber-300/90">
+              {fixPr.error}
+            </p>
           )}
         </div>
       )}

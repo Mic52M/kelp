@@ -12,6 +12,8 @@ export {
   enqueueScanForProject,
 } from "./api.js";
 export { putCredential } from "./db.js";
+export { openSecretFixPr } from "./fix-pr.js";
+export type { SecretFixPrResult } from "./fix-pr.js";
 export type { SupabaseProjectInfo, ConnectInput } from "./api.js";
 export { InMemoryQueue } from "./queue.js";
 export type { ScanJob, ScanQueue } from "./queue.js";

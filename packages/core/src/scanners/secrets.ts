@@ -194,28 +194,28 @@ const ASSIGN_RE =
   /(?:key|secret|token|passwd|password|api[_-]?key|auth|credential)["'`\]]?\s*[:=]\s*["'`]([^"'`\s]{20,})["'`]/gi;
 const ENTROPY_MIN = 4.0; // bits/char; random base64/hex is typically > 4
 
-/** Scan already-read files for exposed secrets. */
-export function detectSecrets(files: readonly SourceFile[]): SecretFinding[] {
-  const out: SecretFinding[] = [];
-  const seen = new Set<string>();
+// A single in-file match. `value` is the raw secret — it exists only in memory
+// while scanning or building a fix, and must never be persisted or logged.
+interface SecretMatch {
+  finding: SecretFinding;
+  value: string;
+  index: number;
+}
 
-  const push = (f: SecretFinding) => {
-    if (seen.has(f.fingerprint)) return;
-    seen.add(f.fingerprint);
-    out.push(f);
-  };
+function scanFile(file: SourceFile): SecretMatch[] {
+  const out: SecretMatch[] = [];
+  const clientSide = isClientSide(file.path);
 
-  for (const file of files) {
-    if (!shouldScanPath(file.path)) continue;
-    const clientSide = isClientSide(file.path);
-
-    // Layer 1: provider patterns.
-    for (const rule of RULES) {
-      rule.regex.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = rule.regex.exec(file.content)) !== null) {
-        const value = m[0];
-        push({
+  // Layer 1: provider patterns.
+  for (const rule of RULES) {
+    rule.regex.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = rule.regex.exec(file.content)) !== null) {
+      const value = m[0];
+      out.push({
+        value,
+        index: m.index,
+        finding: {
           fingerprint: fingerprint([rule.id, file.path, mask(value)]),
           ruleId: rule.id,
           provider: rule.provider,
@@ -226,19 +226,23 @@ export function detectSecrets(files: readonly SourceFile[]): SecretFinding[] {
           preview: mask(value),
           clientSide,
           confidence: "high",
-        });
-      }
+        },
+      });
     }
+  }
 
-    // Supabase / generic JWTs: flag service_role, ignore anon (public by design).
-    JWT_RE.lastIndex = 0;
-    let jm: RegExpExecArray | null;
-    while ((jm = JWT_RE.exec(file.content)) !== null) {
-      const token = jm[0];
-      const role = jwtRole(token);
-      if (role === "anon") continue; // anon key is meant to be public with RLS
-      const isServiceRole = role === "service_role";
-      push({
+  // Supabase / generic JWTs: flag service_role, ignore anon (public by design).
+  JWT_RE.lastIndex = 0;
+  let jm: RegExpExecArray | null;
+  while ((jm = JWT_RE.exec(file.content)) !== null) {
+    const token = jm[0];
+    const role = jwtRole(token);
+    if (role === "anon") continue; // anon key is meant to be public with RLS
+    const isServiceRole = role === "service_role";
+    out.push({
+      value: token,
+      index: jm.index,
+      finding: {
         fingerprint: fingerprint(["jwt", file.path, mask(token)]),
         ruleId: isServiceRole ? "supabase-service-role" : "jwt-exposed",
         provider: isServiceRole ? "Supabase" : "Generic",
@@ -251,23 +255,27 @@ export function detectSecrets(files: readonly SourceFile[]): SecretFinding[] {
         preview: mask(token),
         clientSide,
         confidence: isServiceRole ? "high" : "medium",
-      });
-    }
+      },
+    });
+  }
 
-    // Layer 2: high-entropy assignments not already matched above.
-    ASSIGN_RE.lastIndex = 0;
-    let am: RegExpExecArray | null;
-    while ((am = ASSIGN_RE.exec(file.content)) !== null) {
-      const value = am[1]!;
-      if (PLACEHOLDER_RE.test(value)) continue;
-      // JWTs are owned by the JWT layer above — which deliberately SKIPS the
-      // Supabase anon key (public by design). Don't second-guess it here, or we
-      // re-flag public keys as suspicious. Same for known provider secrets: the
-      // dedicated rule already reported them with high confidence.
-      if (value.startsWith("eyJ")) continue;
-      if (matchesKnownRule(value)) continue;
-      if (shannonEntropy(value) < ENTROPY_MIN) continue;
-      push({
+  // Layer 2: high-entropy assignments not already matched above.
+  ASSIGN_RE.lastIndex = 0;
+  let am: RegExpExecArray | null;
+  while ((am = ASSIGN_RE.exec(file.content)) !== null) {
+    const value = am[1]!;
+    if (PLACEHOLDER_RE.test(value)) continue;
+    // JWTs are owned by the JWT layer above — which deliberately SKIPS the
+    // Supabase anon key (public by design). Don't second-guess it here, or we
+    // re-flag public keys as suspicious. Same for known provider secrets: the
+    // dedicated rule already reported them with high confidence.
+    if (value.startsWith("eyJ")) continue;
+    if (matchesKnownRule(value)) continue;
+    if (shannonEntropy(value) < ENTROPY_MIN) continue;
+    out.push({
+      value,
+      index: am.index,
+      finding: {
         fingerprint: fingerprint(["entropy", file.path, mask(value)]),
         ruleId: "high-entropy-string",
         provider: "Unknown",
@@ -278,9 +286,44 @@ export function detectSecrets(files: readonly SourceFile[]): SecretFinding[] {
         preview: mask(value),
         clientSide,
         confidence: "medium",
-      });
+      },
+    });
+  }
+
+  return out;
+}
+
+/** Scan already-read files for exposed secrets. */
+export function detectSecrets(files: readonly SourceFile[]): SecretFinding[] {
+  const out: SecretFinding[] = [];
+  const seen = new Set<string>();
+
+  for (const file of files) {
+    if (!shouldScanPath(file.path)) continue;
+    for (const m of scanFile(file)) {
+      if (seen.has(m.finding.fingerprint)) continue;
+      seen.add(m.finding.fingerprint);
+      out.push(m.finding);
     }
   }
 
   return out;
+}
+
+/**
+ * Re-locate a previously detected secret in a (possibly newer) copy of its
+ * file, by fingerprint. Returns the raw value and byte offset so a remediation
+ * can replace it, or null if the secret is no longer there (moved/fixed).
+ * The returned value must never be persisted or logged.
+ */
+export function locateSecret(
+  file: SourceFile,
+  findingFingerprint: string,
+): { value: string; index: number } | null {
+  for (const m of scanFile(file)) {
+    if (m.finding.fingerprint === findingFingerprint) {
+      return { value: m.value, index: m.index };
+    }
+  }
+  return null;
 }
