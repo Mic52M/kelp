@@ -1,5 +1,9 @@
 # Kelp
 
+> **New here (human or AI)? Read [`docs/HANDOFF.md`](docs/HANDOFF.md) first** — it
+> has the full context: vision, north star, architecture, what's built & verified,
+> how to run, credentials, and what's next.
+
 Self-serve security agent for **vibe-coded apps** — apps built with Lovable, Bolt.new,
 Replit, Cursor or v0, typically on a Supabase backend. Kelp finds and helps fix the
 security holes these tools routinely ship, for solo founders and small agencies who
