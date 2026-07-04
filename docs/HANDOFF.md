@@ -237,7 +237,27 @@ Suggested order toward **production-ready, self-serve** (the current north star)
 9. **#16** production deploy (Vercel + Railway/Fly) — after #1/#2/#7.
 10. **#9** real live BOLA tester — the third vuln class; strictly consent-gated.
 
-## 11. GitHub install flow — how it works now (post-#14)
+## 11a. Findings lifecycle (post-#15)
+
+Every scan closes what it doesn't re-detect. After `upsertFindings` in
+`apps/worker/src/scan-processor.ts`, `resolveMissingFindings` closes findings
+whose `last_scan_id <> currentScanId` and status is in
+(`open`, `pr_opened`, `regressed`). Scoped to project × **successfully-run**
+vuln classes only (a class that errored doesn't get to resolve anything).
+`needs_review` / `confirmed` / `dismissed` are left alone. Existing resolve→
+regress on re-detection (`upsertFindings`) is unchanged.
+
+## 11b. Webhook re-scan (post-#4)
+
+`apps/web/app/api/github/webhook/route.ts` — GitHub push webhook. Verifies
+`X-Hub-Signature-256` HMAC against `GITHUB_WEBHOOK_SECRET` (constant-time),
+returns `ping` OK, ignores non-`push` events, non-default-branch pushes, and
+pushes for repos not connected to a Kelp project. A matching push enqueues a
+secret re-scan with `trigger='webhook_push'`. Requires the GitHub App's Webhook
+URL set to `<APP_URL>/api/github/webhook` with the same secret and the `push`
+event subscribed.
+
+## 11c. GitHub install flow — how it works now (post-#14)
 
 - `github_installations` table (org → installation_id), migration
   `packages/db/migrations/0003_github_installations.sql`, RLS-scoped, backfilled

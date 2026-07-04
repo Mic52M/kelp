@@ -90,6 +90,21 @@ export async function saveGithubInstallation(input: {
   );
 }
 
+/** Locate a project by GitHub identity — used by the push webhook. */
+export async function findProjectByRepo(
+  repoFullName: string,
+  installationId: number,
+): Promise<{ id: string; orgId: string } | null> {
+  const { rows } = await getPool().query(
+    `select id, org_id from projects
+     where github_repo_full_name = $1 and github_installation_id = $2
+     limit 1`,
+    [repoFullName, installationId],
+  );
+  if (rows.length === 0) return null;
+  return { id: rows[0].id as string, orgId: rows[0].org_id as string };
+}
+
 /** Active (non-revoked) installation ids for an org. */
 export async function listOrgInstallationIds(orgId: string): Promise<number[]> {
   const { rows } = await getPool().query(

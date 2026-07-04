@@ -14,7 +14,7 @@ export {
   verifyInstallState,
   registerGithubInstallation,
 } from "./api.js";
-export { putCredential } from "./db.js";
+export { putCredential, findProjectByRepo } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";
 export type { SecretFixPrResult } from "./fix-pr.js";
 export type { SupabaseProjectInfo, ConnectInput, RepoOption } from "./api.js";
