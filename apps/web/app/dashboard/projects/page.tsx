@@ -37,12 +37,13 @@ export default async function ProjectsPage() {
             />
 
             <div className="mt-10 space-y-3">
-            {projects.map((p) => {
+            {projects.map((p, i) => {
               const scanning = p.scanStatus === "queued" || p.scanStatus === "running";
               return (
                 <div
                   key={p.id}
-                  className="glass flex items-center gap-4 rounded-2xl px-5 py-4 transition-colors hover:border-white/10"
+                  className="glass animate-rise flex items-center gap-4 rounded-2xl px-5 py-4 transition-all hover:-translate-y-0.5 hover:border-white/10 hover:shadow-[0_20px_60px_-40px_rgba(0,0,0,0.9)]"
+                  style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
                 >
                   <span className={`h-2 w-2 rounded-full ${scanning ? "bg-aqua-400 animate-pulse-soft" : "bg-fog-600"}`} />
                   <div className="min-w-0 flex-1">

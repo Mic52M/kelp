@@ -54,8 +54,14 @@ export default async function FindingsPage({
             />
 
             <div className="mt-10 space-y-3">
-              {active.map((f) => (
-                <FindingCard key={f.id} finding={f} />
+              {active.map((f, i) => (
+                <div
+                  key={f.id}
+                  className="animate-rise"
+                  style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
+                >
+                  <FindingCard finding={f} />
+                </div>
               ))}
               {active.length === 0 && (
                 <div className="rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-14 text-center text-sm text-fog-400">
@@ -73,8 +79,14 @@ export default async function FindingsPage({
                   Fixed on the last scan
                 </h2>
                 <div className="mt-6 space-y-3 opacity-70">
-                  {resolved.map((f) => (
-                    <FindingCard key={f.id} finding={f} />
+                  {resolved.map((f, i) => (
+                    <div
+                      key={f.id}
+                      className="animate-rise"
+                      style={{ animationDelay: `${(active.length + i) * 60}ms`, animationFillMode: "both" }}
+                    >
+                      <FindingCard finding={f} />
+                    </div>
                   ))}
                 </div>
               </div>
