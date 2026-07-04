@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { buttonClasses } from "@/components/Button";
+import { CheckPreview } from "@/components/CheckPreview";
 import { CountUp } from "@/components/CountUp";
+import { GridParallax } from "@/components/GridParallax";
+import { HeroSpotlight } from "@/components/HeroSpotlight";
 import { Logo } from "@/components/Logo";
 import { Reveal } from "@/components/Reveal";
 import { ScanConsole } from "@/components/ScanConsole";
@@ -60,7 +63,8 @@ export default function Landing() {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="aurora hero-glow" />
-        <div className="grid-texture absolute inset-0" />
+        <GridParallax />
+        <HeroSpotlight />
         <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 px-6 pb-24 pt-16 lg:grid-cols-2 lg:pt-24">
           <div>
             <Reveal>
@@ -169,6 +173,7 @@ export default function Landing() {
                 </div>
                 <h3 className="mt-4 text-lg font-medium">{c.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-fog-300">{c.body}</p>
+                <CheckPreview tag={c.tag as "RLS" | "Secrets" | "BOLA"} />
               </div>
             </Reveal>
           ))}
