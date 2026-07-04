@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/Button";
 import { Logo } from "@/components/Logo";
 import {
   getGithubReposAction,
@@ -149,20 +150,12 @@ export default function Onboarding() {
             >
               {!repos && (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <button
-                    onClick={startInstall}
-                    disabled={installing}
-                    className="inline-flex items-center gap-2 rounded-lg bg-fog-50 px-4 py-2.5 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90 disabled:opacity-50"
-                  >
+                  <Button onClick={startInstall} disabled={installing} size="lg">
                     {installing ? "Redirecting to GitHub…" : "Install the Kelp GitHub App"}
-                  </button>
-                  <button
-                    onClick={loadRepos}
-                    disabled={loadingRepos}
-                    className="text-sm text-fog-400 transition-colors hover:text-fog-50 disabled:opacity-40"
-                  >
+                  </Button>
+                  <Button onClick={loadRepos} disabled={loadingRepos} variant="tertiary">
                     {loadingRepos ? "Loading…" : "Already installed? Load my repositories"}
-                  </button>
+                  </Button>
                 </div>
               )}
               {installNote && (
@@ -233,13 +226,15 @@ export default function Onboarding() {
                   placeholder="sbp_…"
                   className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm outline-none focus:border-aqua-600/60"
                 />
-                <button
+                <Button
                   onClick={loadProjects}
                   disabled={loadingProjects || !token.trim()}
-                  className="shrink-0 rounded-lg border border-line bg-ink-800 px-3.5 py-2.5 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700 disabled:opacity-40"
+                  variant="secondary"
+                  size="lg"
+                  className="shrink-0"
                 >
                   {loadingProjects ? "Loading…" : "Load projects"}
-                </button>
+                </Button>
               </div>
               <p className="mt-2 text-xs text-fog-500">Stored encrypted. Read-only schema access.</p>
               {sbError && <ErrorNote>{sbError}</ErrorNote>}
@@ -319,31 +314,27 @@ export default function Onboarding() {
               )}
               {submitError && <ErrorNote>{submitError}</ErrorNote>}
 
-              <button
+              <Button
                 onClick={runScan}
                 disabled={!canScan || submitting}
-                className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-5 py-2.5 text-sm font-semibold text-ink-950 transition-opacity hover:opacity-90 disabled:opacity-50"
+                size="lg"
+                className="mt-6"
               >
                 {submitting ? "Scanning… this can take a moment" : "Connect & run scan"}
-              </button>
+              </Button>
             </Panel>
           )}
 
           <div className="mt-7 flex items-center justify-between border-t border-line/70 pt-5">
-            <button
+            <Button
               onClick={() => setStep((s) => Math.max(0, s - 1))}
               disabled={step === 0 || submitting}
-              className="text-sm text-fog-400 transition-colors hover:text-fog-50 disabled:opacity-30"
+              variant="tertiary"
             >
               Back
-            </button>
+            </Button>
             {step < STEPS.length - 1 && (
-              <button
-                onClick={() => setStep((s) => s + 1)}
-                className="rounded-lg bg-fog-50 px-4 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90"
-              >
-                Continue
-              </button>
+              <Button onClick={() => setStep((s) => s + 1)}>Continue</Button>
             )}
           </div>
         </div>

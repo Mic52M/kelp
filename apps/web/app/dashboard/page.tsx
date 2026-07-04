@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Button, buttonClasses } from "@/components/Button";
 import { FindingCard } from "@/components/FindingCard";
 import { ScoreRing } from "@/components/ScoreRing";
 import { ScanningView } from "@/components/ScanningView";
@@ -35,19 +36,12 @@ export default async function Dashboard() {
           {project ? (
             <form action={rescanAction}>
               <input type="hidden" name="projectId" value={project.id} />
-              <button
-                type="submit"
-                disabled={scanning}
-                className="rounded-lg border border-line bg-ink-800 px-3.5 py-2 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700 disabled:opacity-40"
-              >
+              <Button type="submit" variant="secondary" disabled={scanning}>
                 {scanning ? "Scanning…" : "Re-scan"}
-              </button>
+              </Button>
             </form>
           ) : (
-            <Link
-              href="/onboarding"
-              className="rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-3.5 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90"
-            >
+            <Link href="/onboarding" className={buttonClasses("primary")}>
               Connect a project
             </Link>
           )}

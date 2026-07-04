@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Button, buttonClasses } from "@/components/Button";
+import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { loadProjects } from "@/lib/data";
@@ -17,25 +19,18 @@ export default async function ProjectsPage() {
         title="Projects"
         email={user?.email}
         action={
-          <Link
-            href="/onboarding"
-            className="rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-3.5 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90"
-          >
+          <Link href="/onboarding" className={buttonClasses("primary")}>
             Connect project
           </Link>
         }
       />
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
         {projects.length === 0 ? (
-          <div className="rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-16 text-center">
-            <p className="text-sm text-fog-400">No projects yet.</p>
-            <Link
-              href="/onboarding"
-              className="mt-4 inline-block rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-4 py-2 text-sm font-medium text-ink-950"
-            >
-              Connect your first project
-            </Link>
-          </div>
+          <EmptyState
+            title="No projects yet"
+            body="Connect a GitHub repository or a Supabase project to run your first Kelp scan."
+            cta={{ href: "/onboarding", label: "Connect your first project" }}
+          />
         ) : (
           <div className="space-y-3">
             {projects.map((p) => {
@@ -57,15 +52,11 @@ export default async function ProjectsPage() {
                   <span className="shrink-0 text-sm text-fog-400">
                     {p.activeFindings} {p.activeFindings === 1 ? "finding" : "findings"}
                   </span>
-                  <form action={rescanAction}>
+                  <form action={rescanAction} className="shrink-0">
                     <input type="hidden" name="projectId" value={p.id} />
-                    <button
-                      type="submit"
-                      disabled={scanning}
-                      className="shrink-0 rounded-lg border border-line bg-ink-800 px-3 py-1.5 text-xs font-medium text-fog-50 transition-colors hover:bg-ink-700 disabled:opacity-40"
-                    >
+                    <Button type="submit" variant="secondary" size="sm" disabled={scanning}>
                       {scanning ? "Scanning…" : "Re-scan"}
-                    </button>
+                    </Button>
                   </form>
                 </div>
               );

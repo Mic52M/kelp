@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import type { Finding } from "@/lib/types";
 import { SeverityBadge } from "./SeverityBadge";
+import { Button } from "./Button";
 import { dismissFinding, openFixPr, type FixPrState } from "@/app/dashboard/finding-actions";
 
 const CLASS_LABEL: Record<Finding["vulnClass"], string> = {
@@ -120,13 +121,9 @@ export function FindingCard({ finding }: { finding: Finding }) {
               {canOpenPr && (
                 <form action={fixPrAction}>
                   <input type="hidden" name="findingId" value={finding.id} />
-                  <button
-                    type="submit"
-                    disabled={fixPrPending}
-                    className="rounded-lg bg-fog-50 px-3.5 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90 disabled:opacity-60"
-                  >
+                  <Button type="submit" disabled={fixPrPending}>
                     {fixPrPending ? "Opening PR…" : "Open fix PR"}
-                  </button>
+                  </Button>
                 </form>
               )}
               {prUrl && (
@@ -141,12 +138,9 @@ export function FindingCard({ finding }: { finding: Finding }) {
               )}
               <form action={dismissFinding}>
                 <input type="hidden" name="findingId" value={finding.id} />
-                <button
-                  type="submit"
-                  className="rounded-lg border border-line bg-ink-800 px-3.5 py-2 text-sm font-medium text-fog-50 transition-colors hover:bg-ink-700"
-                >
+                <Button type="submit" variant="secondary">
                   Dismiss
-                </button>
+                </Button>
               </form>
             </div>
           )}

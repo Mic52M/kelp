@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buttonClasses } from "@/components/Button";
 import { Logo } from "@/components/Logo";
 import { ScanConsole } from "@/components/ScanConsole";
 import { scanSteps } from "@/lib/mock";
@@ -48,10 +49,7 @@ export default function Landing() {
           <Link href="/dashboard" className="text-sm text-fog-300 transition-colors hover:text-fog-50">
             Sign in
           </Link>
-          <Link
-            href="/onboarding"
-            className="rounded-lg bg-fog-50 px-3.5 py-2 text-sm font-medium text-ink-950 transition-opacity hover:opacity-90"
-          >
+          <Link href="/onboarding" className={buttonClasses("primary")}>
             Start free scan
           </Link>
         </div>

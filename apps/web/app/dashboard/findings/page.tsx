@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { EmptyState } from "@/components/EmptyState";
 import { FindingCard } from "@/components/FindingCard";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { getServerSupabase } from "@/lib/supabase/server";
@@ -19,15 +19,11 @@ export default async function FindingsPage() {
       <PageHeader title="Findings" email={user?.email} />
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
         {!project ? (
-          <div className="rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-16 text-center">
-            <p className="text-sm text-fog-400">Connect a project to see findings.</p>
-            <Link
-              href="/onboarding"
-              className="mt-4 inline-block rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-4 py-2 text-sm font-medium text-ink-950"
-            >
-              Connect a project
-            </Link>
-          </div>
+          <EmptyState
+            title="No findings yet"
+            body="Connect a project so Kelp can scan it — the results will show up here."
+            cta={{ href: "/onboarding", label: "Connect a project" }}
+          />
         ) : (
           <>
             <div className="flex items-center justify-between">
