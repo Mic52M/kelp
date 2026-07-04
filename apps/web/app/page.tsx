@@ -33,6 +33,40 @@ const steps = [
   { n: "03", t: "Fix", d: "Review a plain-language report, apply ready-made fixes with one click, and stay covered on every push." },
 ];
 
+const ecosystem = [
+  "Lovable",
+  "Bolt.new",
+  "Replit",
+  "Cursor",
+  "v0",
+  "Windsurf",
+  "Firebase Studio",
+  "Supabase",
+  "GitHub",
+  "Vercel",
+  "Next.js",
+  "React",
+];
+
+const faqs = [
+  {
+    q: "Do I need to give Kelp my Supabase service_role key?",
+    a: "No. Kelp connects with a scoped Management API token, and we're moving to a per-project read-only Postgres role. The service_role key stays in your project.",
+  },
+  {
+    q: "Will Kelp change anything in my code without asking?",
+    a: "Never. Fixes for secrets are opened as pull requests against a fresh kelp/… branch, never pushed to your default branch. RLS fixes are proposed as migrations you review and run yourself.",
+  },
+  {
+    q: "How is active testing (BOLA) safe?",
+    a: "Live tests only run through a hard consent gate you explicitly accept per project — no consent, no probe. Every request is logged in your audit trail, and evidence is stored as category + count, never raw customer data.",
+  },
+  {
+    q: "Does Kelp claim to find every vulnerability?",
+    a: "No. We deliberately cover a small set of high-impact classes with high precision — the ones that actually breach AI-generated apps. We'd rather ship real fixes for RLS, exposed secrets, and BOLA than a 40-page report of maybes.",
+  },
+];
+
 const tiers = [
   { name: "Free", price: "€0", tagline: "One full scan, report only.", features: ["1 project", "All three checks", "Full findings report"], cta: "Start free scan", highlight: false },
   { name: "Starter", price: "€29", tagline: "Continuous cover for your app.", features: ["1 project", "Continuous scanning", "Auto-fix for RLS & secrets", "Re-scan on every push"], cta: "Choose Starter", highlight: true },
@@ -129,6 +163,30 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Ecosystem marquee — the whole vibe-coding surface Kelp covers, drifting
+          left continuously. A silent flex that this is a real ecosystem, not a
+          one-tool integration. */}
+      <section className="relative z-10 border-b border-line/70 py-8">
+        <Reveal>
+          <div className="mb-4 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+            Built for the tools you already ship with
+          </div>
+        </Reveal>
+        <div className="marquee-mask relative overflow-hidden">
+          <div className="flex w-max animate-marquee items-center gap-10">
+            {[...ecosystem, ...ecosystem].map((name, i) => (
+              <div
+                key={`${name}-${i}`}
+                className="flex shrink-0 items-center gap-2 rounded-full border border-line bg-ink-800/50 px-4 py-1.5 text-sm text-fog-300"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-aqua-400/70" />
+                {name}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Stat strip — numbers count up as they enter view */}
       <section className="relative z-10 border-y border-line/70 bg-ink-900/40">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px px-6 md:grid-cols-4">
@@ -199,6 +257,43 @@ export default function Landing() {
                   <h3 className="mt-4 text-xl font-medium">{s.t}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-fog-300">{s.d}</p>
                 </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="border-t border-line/70">
+        <div className="mx-auto max-w-4xl px-6 py-24">
+          <Reveal>
+            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+              Common questions
+            </div>
+          </Reveal>
+          <Reveal delay={60}>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Things founders ask before their first scan.
+            </h2>
+          </Reveal>
+          <div className="mt-12 divide-y divide-line/70 border-y border-line/70">
+            {faqs.map((faq, i) => (
+              <Reveal key={faq.q} delay={i * 80}>
+                <details className="group py-6 [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer items-center justify-between gap-6 list-none">
+                    <span className="text-[15px] font-medium text-fog-50 transition-colors group-hover:text-aqua-300">
+                      {faq.q}
+                    </span>
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-line text-fog-400 transition-all group-open:rotate-45 group-open:border-aqua-600/50 group-open:text-aqua-400">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                  </summary>
+                  <p className="animate-rise mt-4 max-w-3xl text-sm leading-relaxed text-fog-300">
+                    {faq.a}
+                  </p>
+                </details>
               </Reveal>
             ))}
           </div>
