@@ -36,7 +36,7 @@ export async function claimQueuedScan(): Promise<ClaimedScan | null> {
        select id from scans where status = 'queued'
        order by queued_at limit 1 for update skip locked
      )
-     returning id, org_id, project_id, classes`,
+     returning id, org_id, project_id, classes::text[]`,
   );
   if (rows.length === 0) return null;
   const r = rows[0];
@@ -178,6 +178,34 @@ export async function upsertFindings(
     client.release();
   }
   return findings.length;
+}
+
+/**
+ * Close findings the current scan should have re-detected but didn't. Scope is
+ * (project_id × vuln_class × currently-open states) — scanning only the repo
+ * must not resolve RLS findings, and a class that errored this run must not
+ * resolve its findings either (the caller filters `classes` to successful ones).
+ * `needs_review`, `confirmed` and `dismissed` are left alone: BOLA needs a human,
+ * and dismissed is the user's explicit choice.
+ */
+export async function resolveMissingFindings(
+  projectId: string,
+  currentScanId: string,
+  classes: VulnClass[],
+): Promise<number> {
+  if (classes.length === 0) return 0;
+  const { rowCount } = await getPool().query(
+    `update findings
+       set status = 'resolved',
+           resolved_at = now(),
+           updated_at = now()
+     where project_id = $1
+       and vuln_class = any($2::vuln_class[])
+       and last_scan_id <> $3
+       and status in ('open', 'pr_opened', 'regressed')`,
+    [projectId, classes, currentScanId],
+  );
+  return rowCount ?? 0;
 }
 
 export async function finishScan(scanId: string, status: "succeeded" | "failed", error?: string): Promise<void> {

@@ -10,6 +10,7 @@ import {
   getCredential,
   getPool,
   loadProject,
+  resolveMissingFindings,
   upsertFindings,
   writeAudit,
 } from "./db.js";
@@ -68,6 +69,14 @@ async function executeScan(scan: {
     );
 
     const found = await upsertFindings(scan.orgId, scan.projectId, scan.scanId, findings);
+
+    // Findings for classes that ran successfully but weren't re-detected are now
+    // resolved. Skip classes that errored — no re-detection isn't evidence the
+    // vuln is gone if the class couldn't run at all.
+    const erroredClasses = new Set(errors.map((e) => e.vulnClass));
+    const successfulClasses = scan.classes.filter((c) => !erroredClasses.has(c));
+    await resolveMissingFindings(scan.projectId, scan.scanId, successfulClasses);
+
     await finishScan(scan.scanId, "succeeded", errors.length ? JSON.stringify(errors) : undefined);
     return { scanId: scan.scanId, found, errors: errors.length };
   } catch (e) {
