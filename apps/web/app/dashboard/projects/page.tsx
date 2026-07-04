@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button, buttonClasses } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
-import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageHeader, PageHero } from "@/components/dashboard/PageHeader";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { loadProjects } from "@/lib/data";
 import { rescanAction } from "../actions";
@@ -15,16 +15,8 @@ export default async function ProjectsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Projects"
-        email={user?.email}
-        action={
-          <Link href="/onboarding" className={buttonClasses("primary")}>
-            Connect project
-          </Link>
-        }
-      />
-      <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
+      <PageHeader title="Projects" email={user?.email} />
+      <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-14">
         {projects.length === 0 ? (
           <EmptyState
             title="No projects yet"
@@ -32,13 +24,25 @@ export default async function ProjectsPage() {
             cta={{ href: "/onboarding", label: "Connect your first project" }}
           />
         ) : (
-          <div className="space-y-3">
+          <>
+            <PageHero
+              label="Workspace"
+              title="Projects"
+              description={`${projects.length} connected ${projects.length === 1 ? "project" : "projects"} — re-scan any of them or connect a new one.`}
+              action={
+                <Link href="/onboarding" className={buttonClasses("primary")}>
+                  Connect project
+                </Link>
+              }
+            />
+
+            <div className="mt-10 space-y-3">
             {projects.map((p) => {
               const scanning = p.scanStatus === "queued" || p.scanStatus === "running";
               return (
                 <div
                   key={p.id}
-                  className="glass flex items-center gap-4 rounded-xl px-4 py-3.5"
+                  className="glass flex items-center gap-4 rounded-2xl px-5 py-4 transition-colors hover:border-white/10"
                 >
                   <span className={`h-2 w-2 rounded-full ${scanning ? "bg-aqua-400 animate-pulse-soft" : "bg-fog-600"}`} />
                   <div className="min-w-0 flex-1">
@@ -61,7 +65,8 @@ export default async function ProjectsPage() {
                 </div>
               );
             })}
-          </div>
+            </div>
+          </>
         )}
       </main>
     </>

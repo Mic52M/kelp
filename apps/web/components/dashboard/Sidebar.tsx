@@ -25,28 +25,31 @@ export function Sidebar() {
     projectParam && carriesProject(href) ? `${href}?project=${projectParam}` : href;
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-line/70 bg-ink-900/40 px-4 py-5 lg:flex">
-      <Link href="/">
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-line/70 bg-ink-900/40 px-5 py-6 lg:flex">
+      <Link href="/" className="mb-10">
         <Logo />
       </Link>
 
-      <div className="mt-8 px-1 text-xs font-medium uppercase tracking-wider text-fog-500">
+      <div className="mb-3 px-2 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
         Workspace
       </div>
-      <nav className="mt-3 space-y-1">
+      <nav className="space-y-0.5">
         {NAV.map((n) => {
           const active = n.href === "/dashboard" ? pathname === n.href : pathname.startsWith(n.href);
           return (
             <Link
               key={n.href}
               href={hrefWithProject(n.href)}
-              className={`flex w-full items-center rounded-lg px-3 py-2 text-sm transition-colors ${
+              className={`relative flex w-full items-center rounded-lg px-2.5 py-2 text-sm transition-colors ${
                 active
-                  ? "bg-ink-700/60 text-fog-50"
-                  : "text-fog-400 hover:bg-white/[0.02] hover:text-fog-50"
+                  ? "text-fog-50"
+                  : "text-fog-400 hover:text-fog-50"
               }`}
             >
-              {n.label}
+              {active && (
+                <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-aqua-400" />
+              )}
+              <span className={active ? "pl-2 font-medium" : "pl-2"}>{n.label}</span>
             </Link>
           );
         })}

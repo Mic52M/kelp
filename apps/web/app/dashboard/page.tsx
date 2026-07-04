@@ -31,7 +31,7 @@ export default async function Dashboard({
   return (
     <>
       {/* Topbar */}
-      <header className="flex items-center gap-4 border-b border-line/70 px-6 py-3.5">
+      <header className="flex items-center gap-4 border-b border-line/70 px-8 py-4">
         {project ? (
           <ProjectSwitcher
             current={{ id: project.id, name: project.name, repo: project.repo }}
@@ -64,36 +64,48 @@ export default async function Dashboard({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
-        {/* Posture header */}
-        <div className="glass flex flex-col items-center gap-6 rounded-2xl p-6 sm:flex-row sm:gap-8">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-14">
+        {/* Section label — Resend-style tiny uppercase */}
+        <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+          Overview
+        </div>
+
+        {/* Hero — big title with accent gradient, one-line context */}
+        <h1 className="text-4xl font-semibold tracking-tight sm:text-[42px]">
+          Security posture
+        </h1>
+        <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-fog-300">
+          {!project
+            ? "Connect a project to run your first scan."
+            : summary.critical > 0
+              ? `${summary.critical} critical ${summary.critical === 1 ? "issue needs" : "issues need"} your attention right now.`
+              : findings.length > 0
+                ? "No critical issues — nice work. Review the items below."
+                : "Nothing found in the last scan. You're clear."}
+        </p>
+
+        {/* Score + stats: one open surface, not four boxed cards */}
+        <div className="mt-10 flex flex-col items-start gap-10 sm:flex-row sm:items-center sm:gap-16">
           <ScoreRing score={summary.score} />
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold">Security posture</h1>
-            <p className="mt-1 text-sm text-fog-300">
-              {!project
-                ? "Connect a project to run your first scan."
-                : summary.critical > 0
-                  ? `${summary.critical} critical ${summary.critical === 1 ? "issue" : "issues"} need your attention right now.`
-                  : findings.length > 0
-                    ? "No critical issues — nice work. Review the items below."
-                    : "No issues found in the last scan."}
-            </p>
-            <div className="mt-4 grid grid-cols-4 gap-3">
-              <Stat label="Critical" value={summary.critical} color="var(--color-crit)" />
-              <Stat label="High" value={summary.high} color="var(--color-high)" />
-              <Stat label="Medium" value={summary.medium} color="var(--color-med)" />
-              <Stat label="Resolved" value={summary.resolved} color="var(--color-ok)" />
-            </div>
+          <div className="grid w-full grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-4 sm:gap-x-14">
+            <Stat label="Critical" value={summary.critical} color="var(--color-crit)" />
+            <Stat label="High" value={summary.high} color="var(--color-high)" />
+            <Stat label="Medium" value={summary.medium} color="var(--color-med)" />
+            <Stat label="Resolved" value={summary.resolved} color="var(--color-ok)" />
           </div>
         </div>
 
+        {/* Subtle rule separating hero from list — Resend uses these a lot */}
+        <div className="mt-14 h-px w-full bg-gradient-to-r from-transparent via-line to-transparent" />
+
         {scanning ? (
-          <ScanningView status={scanStatus} />
+          <div className="mt-10">
+            <ScanningView status={scanStatus} />
+          </div>
         ) : (
           <>
             {scanIssues.length > 0 && (
-              <div className="mt-8 space-y-2">
+              <div className="mt-10 space-y-2">
                 {scanIssues.map((issue) => (
                   <div
                     key={issue}
@@ -107,30 +119,42 @@ export default async function Dashboard({
             )}
 
             {/* Findings */}
-            <div className="mt-8 flex items-center justify-between">
-              <h2 className="text-lg font-medium">Findings</h2>
-              <span className="text-sm text-fog-400">{active.length} active</span>
-            </div>
-            <div className="mt-4 space-y-3">
-              {active.map((f) => (
-                <FindingCard key={f.id} finding={f} />
-              ))}
-              {active.length === 0 && project && (
-                <div className="rounded-xl border border-line/60 bg-ink-900/30 px-4 py-8 text-center text-sm text-fog-400">
-                  No active findings on the last scan.
-                </div>
-              )}
+            <div className="mt-14">
+              <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+                Findings
+              </div>
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-2xl font-semibold tracking-tight">Active issues</h2>
+                <span className="text-sm text-fog-400">
+                  {active.length} {active.length === 1 ? "finding" : "findings"}
+                </span>
+              </div>
+              <div className="mt-6 space-y-3">
+                {active.map((f) => (
+                  <FindingCard key={f.id} finding={f} />
+                ))}
+                {active.length === 0 && project && (
+                  <div className="rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-14 text-center text-sm text-fog-400">
+                    No active findings on the last scan.
+                  </div>
+                )}
+              </div>
             </div>
 
             {resolved.length > 0 && (
-              <>
-                <h2 className="mt-10 text-lg font-medium text-fog-400">Resolved</h2>
-                <div className="mt-4 space-y-3 opacity-70">
+              <div className="mt-16">
+                <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+                  Resolved
+                </div>
+                <h2 className="text-2xl font-semibold tracking-tight text-fog-300">
+                  Fixed on the last scan
+                </h2>
+                <div className="mt-6 space-y-3 opacity-70">
                   {resolved.map((f) => (
                     <FindingCard key={f.id} finding={f} />
                   ))}
                 </div>
-              </>
+              </div>
             )}
           </>
         )}
@@ -141,11 +165,11 @@ export default async function Dashboard({
 
 function Stat({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="rounded-xl border border-line/70 bg-ink-900/50 px-3 py-2.5">
-      <div className="text-2xl font-semibold" style={{ color }}>
+    <div>
+      <div className="text-3xl font-semibold tabular-nums" style={{ color }}>
         {value}
       </div>
-      <div className="text-xs text-fog-400">{label}</div>
+      <div className="mt-1 text-xs uppercase tracking-wider text-fog-500">{label}</div>
     </div>
   );
 }
