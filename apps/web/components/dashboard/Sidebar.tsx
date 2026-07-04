@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { signOut } from "@/app/login/actions";
 
@@ -14,6 +14,15 @@ const NAV = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  // Carry the selected project across sidebar navigation so the switcher choice
+  // survives when the user jumps Overview → Findings → back. Only propagate to
+  // pages that actually read it (Overview + Findings today).
+  const searchParams = useSearchParams();
+  const projectParam = searchParams.get("project");
+  const carriesProject = (href: string) =>
+    href === "/dashboard" || href === "/dashboard/findings";
+  const hrefWithProject = (href: string) =>
+    projectParam && carriesProject(href) ? `${href}?project=${projectParam}` : href;
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-line/70 bg-ink-900/40 px-4 py-5 lg:flex">
@@ -30,7 +39,7 @@ export function Sidebar() {
           return (
             <Link
               key={n.href}
-              href={n.href}
+              href={hrefWithProject(n.href)}
               className={`flex w-full items-center rounded-lg px-3 py-2 text-sm transition-colors ${
                 active
                   ? "bg-ink-700/60 text-fog-50"
