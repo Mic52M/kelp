@@ -50,7 +50,9 @@ body {
   letter-spacing: -0.011em;
 }
 
-/* Ambient background glow used behind heroes and panels. */
+/* Ambient background glow used behind heroes and panels. Now breathing —
+   the two orbs drift in scale and opacity to give the surface a subtle
+   feeling of "always alive" without ever crossing into distracting. */
 .aurora {
   position: absolute;
   inset: 0;
@@ -72,12 +74,63 @@ body {
   background: radial-gradient(circle, var(--color-aqua-500), transparent 60%);
   top: -22rem;
   left: -10rem;
+  animation: aurora-drift-a 18s ease-in-out infinite;
 }
 .aurora::after {
   background: radial-gradient(circle, var(--color-violet-500), transparent 60%);
   top: -14rem;
   right: -14rem;
   opacity: 0.16;
+  animation: aurora-drift-b 22s ease-in-out infinite;
+}
+@keyframes aurora-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.22; }
+  50%      { transform: translate(3rem, 2rem) scale(1.08); opacity: 0.28; }
+}
+@keyframes aurora-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.16; }
+  50%      { transform: translate(-2rem, 3rem) scale(1.1); opacity: 0.22; }
+}
+
+/* Card that "shines" once when it appears — a Resend-style single sweep of
+   the accent gradient across the border. Restrained, doesn't loop. */
+.card-shine {
+  position: relative;
+  isolation: isolate;
+}
+.card-shine::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    120deg,
+    transparent 20%,
+    rgba(52, 230, 207, 0.35),
+    transparent 60%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 400ms ease;
+  z-index: -1;
+}
+.card-shine:hover::before {
+  opacity: 1;
+}
+
+/* Subtle diagonal parallax shimmer for hero-scale surfaces. */
+@keyframes hero-glow {
+  0%, 100% { filter: hue-rotate(0deg) brightness(1); }
+  50%      { filter: hue-rotate(-8deg) brightness(1.08); }
+}
+.hero-glow {
+  animation: hero-glow 12s ease-in-out infinite;
 }
 
 /* Fine grid texture. */
