@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button, buttonClasses } from "@/components/Button";
+import { ProjectSwitcher } from "@/components/dashboard/ProjectSwitcher";
 import { FindingCard } from "@/components/FindingCard";
 import { ScoreRing } from "@/components/ScoreRing";
 import { ScanningView } from "@/components/ScanningView";
@@ -8,7 +9,11 @@ import { ensureTenant } from "@/lib/tenant";
 import { loadDashboard } from "@/lib/data";
 import { rescanAction } from "./actions";
 
-export default async function Dashboard() {
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams?: Promise<{ project?: string }>;
+}) {
   const supabase = await getServerSupabase();
   const {
     data: { user },
@@ -17,7 +22,8 @@ export default async function Dashboard() {
     await ensureTenant({ id: user.id, email: user.email });
   }
 
-  const { project, findings, summary, scanStatus, scanIssues } = await loadDashboard();
+  const params = (await searchParams) ?? {};
+  const { project, projectOptions, findings, summary, scanStatus, scanIssues } = await loadDashboard(params.project);
   const scanning = scanStatus === "queued" || scanStatus === "running";
   const active = findings.filter((f) => f.status !== "resolved");
   const resolved = findings.filter((f) => f.status === "resolved");
@@ -26,11 +32,17 @@ export default async function Dashboard() {
     <>
       {/* Topbar */}
       <header className="flex items-center gap-4 border-b border-line/70 px-6 py-3.5">
-        <div className="flex items-center gap-2 rounded-lg border border-line bg-ink-800/60 px-3 py-1.5 text-sm">
-          <span className={`h-2 w-2 rounded-full ${project ? "bg-aqua-400" : "bg-fog-600"}`} />
-          <span className="font-medium">{project?.name ?? "No project yet"}</span>
-          {project && <span className="font-mono text-xs text-fog-500">{project.repo}</span>}
-        </div>
+        {project ? (
+          <ProjectSwitcher
+            current={{ id: project.id, name: project.name, repo: project.repo }}
+            options={projectOptions}
+          />
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg border border-line bg-ink-800/60 px-3 py-1.5 text-sm">
+            <span className="h-2 w-2 rounded-full bg-fog-600" />
+            <span className="font-medium">No project yet</span>
+          </div>
+        )}
         {project && <span className="text-xs text-fog-500">Last scan {project.lastScan}</span>}
         <div className="ml-auto flex items-center gap-3">
           {project ? (

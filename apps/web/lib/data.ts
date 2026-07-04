@@ -79,6 +79,8 @@ const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low"];
 
 export interface DashboardData {
   project: Project | null;
+  /** all projects the caller can see (for the top-bar switcher) */
+  projectOptions: { id: string; name: string; repo: string | null }[];
   findings: Finding[];
   summary: { score: number; critical: number; high: number; medium: number; resolved: number };
   /** status of the most recent scan for the project ("queued" | "running" | … | null) */
@@ -144,16 +146,31 @@ export async function loadProjects(): Promise<ProjectSummary[]> {
   return out;
 }
 
-export async function loadDashboard(): Promise<DashboardData> {
+export async function loadDashboard(projectId?: string): Promise<DashboardData> {
   const supabase = await getServerSupabase();
 
-  const { data: projects } = await supabase
-    .from("projects")
-    .select("id, name, github_repo_full_name, supabase_project_ref")
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  const p = projects?.[0];
+  // If the user picked a specific project (via ?project=…), try to load it.
+  // Fall back to the most-recent project if the id is missing or not accessible
+  // (RLS returns nothing — pretend it wasn't set).
+  let p:
+    | { id: string; name: string; github_repo_full_name: string | null; supabase_project_ref: string | null }
+    | undefined;
+  if (projectId) {
+    const { data } = await supabase
+      .from("projects")
+      .select("id, name, github_repo_full_name, supabase_project_ref")
+      .eq("id", projectId)
+      .maybeSingle();
+    p = data ?? undefined;
+  }
+  if (!p) {
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id, name, github_repo_full_name, supabase_project_ref")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    p = projects?.[0];
+  }
   const project: Project | null = p
     ? {
         id: p.id,
@@ -224,8 +241,20 @@ export async function loadDashboard(): Promise<DashboardData> {
     activeBySeverity("medium") * 5 +
     activeBySeverity("low") * 1;
 
+  // All projects the user can see — powers the top-bar switcher without an extra roundtrip.
+  const { data: allProjects } = await supabase
+    .from("projects")
+    .select("id, name, github_repo_full_name")
+    .order("created_at", { ascending: false });
+  const projectOptions = ((allProjects ?? []) as Array<{
+    id: string;
+    name: string;
+    github_repo_full_name: string | null;
+  }>).map((r) => ({ id: r.id, name: r.name, repo: r.github_repo_full_name }));
+
   return {
     project,
+    projectOptions,
     findings,
     scanStatus,
     scanIssues,

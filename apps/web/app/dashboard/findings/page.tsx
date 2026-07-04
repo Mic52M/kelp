@@ -1,22 +1,39 @@
 import { EmptyState } from "@/components/EmptyState";
 import { FindingCard } from "@/components/FindingCard";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ProjectSwitcher } from "@/components/dashboard/ProjectSwitcher";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { loadDashboard } from "@/lib/data";
 
-export default async function FindingsPage() {
+export default async function FindingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ project?: string }>;
+}) {
   const supabase = await getServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { project, findings } = await loadDashboard();
+  const params = (await searchParams) ?? {};
+  const { project, projectOptions, findings } = await loadDashboard(params.project);
   const active = findings.filter((f) => f.status !== "resolved");
   const resolved = findings.filter((f) => f.status === "resolved");
 
   return (
     <>
-      <PageHeader title="Findings" email={user?.email} />
+      <PageHeader
+        title="Findings"
+        email={user?.email}
+        action={
+          project && (
+            <ProjectSwitcher
+              current={{ id: project.id, name: project.name, repo: project.repo }}
+              options={projectOptions}
+            />
+          )
+        }
+      />
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
         {!project ? (
           <EmptyState
