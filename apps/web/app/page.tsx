@@ -67,6 +67,25 @@ const faqs = [
   },
 ];
 
+function FooterCol({ title, links }: { title: string; links: [string, string][] }) {
+  return (
+    <div>
+      <div className="mb-4 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-400">
+        {title}
+      </div>
+      <ul className="space-y-2 text-sm text-fog-400">
+        {links.map(([label, href]) => (
+          <li key={label}>
+            <a href={href} className="transition-colors hover:text-fog-50">
+              {label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 const tiers = [
   { name: "Free", price: "€0", tagline: "One full scan, report only.", features: ["1 project", "All three checks", "Full findings report"], cta: "Start free scan", highlight: false },
   { name: "Starter", price: "€29", tagline: "Continuous cover for your app.", features: ["1 project", "Continuous scanning", "Auto-fix for RLS & secrets", "Re-scan on every push"], cta: "Choose Starter", highlight: true },
@@ -357,15 +376,73 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Final CTA — Vercel/Linear-style "one last big ask before you leave" */}
+      <section className="relative overflow-hidden border-t border-line/70">
+        <div className="aurora hero-glow" />
+        <div className="grid-texture absolute inset-0 opacity-40" />
+        <div className="relative z-10 mx-auto max-w-4xl px-6 py-28 text-center">
+          <Reveal>
+            <div className="mb-4 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+              Free forever tier
+            </div>
+          </Reveal>
+          <Reveal delay={80}>
+            <h2 className="text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
+              Find the holes before <span className="accent-text">someone else does.</span>
+            </h2>
+          </Reveal>
+          <Reveal delay={160}>
+            <p className="mx-auto mt-5 max-w-lg text-lg leading-relaxed text-fog-300">
+              Ten minutes. No credit card. One honest report of what an attacker
+              would actually reach in your app.
+            </p>
+          </Reveal>
+          <Reveal delay={240}>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/onboarding"
+                className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-aqua-400 to-aqua-600 px-6 py-3.5 text-sm font-semibold text-ink-950 transition-all hover:-translate-y-0.5 hover:shadow-[0_0_36px_-4px_rgba(52,230,207,0.65)]"
+              >
+                <span className="relative z-10">Start free scan</span>
+                <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
+              </Link>
+              <a
+                href="#pricing"
+                className="rounded-xl border border-line bg-ink-800/50 px-6 py-3.5 text-sm font-medium text-fog-50 transition-all hover:-translate-y-0.5 hover:border-white/10 hover:bg-ink-700"
+              >
+                Compare plans
+              </a>
+            </div>
+          </Reveal>
+          <Reveal delay={320}>
+            <p className="mt-6 text-xs text-fog-500">
+              First scan in under 10 minutes · No card · Cancel anytime on paid tiers.
+            </p>
+          </Reveal>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="border-t border-line/70">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-10 sm:flex-row">
-          <Logo />
-          <p className="text-xs text-fog-500">© 2026 Kelp. Security for the way you build now.</p>
-          <div className="flex gap-5 text-xs text-fog-400">
-            <a href="#" className="hover:text-fog-50">Privacy</a>
-            <a href="#" className="hover:text-fog-50">Terms</a>
-            <a href="#" className="hover:text-fog-50">Security</a>
+      <footer className="border-t border-line/70 bg-ink-900/30">
+        <div className="mx-auto max-w-6xl px-6 py-14">
+          <div className="grid gap-10 md:grid-cols-4">
+            <div>
+              <Logo />
+              <p className="mt-4 max-w-xs text-xs leading-relaxed text-fog-500">
+                Security for the way you build now — self-serve pen testing for
+                vibe-coded apps.
+              </p>
+            </div>
+            <FooterCol title="Product" links={[["What we check", "#checks"], ["How it works", "#how"], ["Pricing", "#pricing"], ["Start free scan", "/onboarding"]]} />
+            <FooterCol title="Company" links={[["Blog", "#"], ["Changelog", "#"], ["Careers", "#"], ["Contact", "mailto:hello@kelp.dev"]]} />
+            <FooterCol title="Legal" links={[["Privacy", "#"], ["Terms", "#"], ["Security", "#"], ["Responsible disclosure", "#"]]} />
+          </div>
+          <div className="mt-14 flex flex-col items-start justify-between gap-4 border-t border-line/70 pt-8 text-xs text-fog-500 sm:flex-row sm:items-center">
+            <span>© 2026 Kelp. Security for the way you build now.</span>
+            <span className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-aqua-400" />
+              All systems operational
+            </span>
           </div>
         </div>
       </footer>
