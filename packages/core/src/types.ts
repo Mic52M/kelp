@@ -4,7 +4,7 @@
 export type PlanTier = "free" | "starter" | "agency";
 export type MemberRole = "owner" | "admin" | "member";
 
-export type VulnClass = "rls" | "secret" | "bola" | "auth" | "injection" | "ssrf";
+export type VulnClass = "rls" | "secret" | "bola" | "auth" | "injection" | "ssrf" | "exposure";
 export type Severity = "critical" | "high" | "medium" | "low";
 
 export type FindingStatus =

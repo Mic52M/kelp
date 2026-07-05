@@ -19,6 +19,7 @@ Each entry names the specialist expected to find it and the corresponding
 | `GET /api/session-lookup?as=…`  | `auth`   | `auth-bypass`      | Confirmed: query param bypasses the session identity check.     |
 | `GET /api/orders/search?q=…`    | `injection` | `injection`     | Confirmed: `' OR '1'='1--` widens the WHERE clause to all rows. |
 | `GET /api/fetch?url=…`          | `ssrf`      | `ssrf`          | Confirmed: any URL (loopback, RFC1918, metadata IP) is fetched. |
+| `GET /api/admin/users-with-hashes` | `exposure` | `exposure`   | Confirmed: response shape includes password_hash, salt, reset token. |
 
 Control (properly-scoped) endpoints used to prove **no false positives**:
 
@@ -28,6 +29,7 @@ Control (properly-scoped) endpoints used to prove **no false positives**:
 | `GET /api/me`           | Not flagged — no impersonation technique wins.|
 | `GET /api/orders/find`  | Not flagged — parameterised filter, no bypass.|
 | `GET /api/fetch-safe`   | Not flagged — allowlist rejects any non-listed host. |
+| `GET /api/public-users` | Not flagged — response shape is only id + display_name. |
 
 ## Seed users
 

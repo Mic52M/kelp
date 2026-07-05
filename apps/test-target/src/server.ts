@@ -268,6 +268,46 @@ app.get("/api/fetch-safe", async (req: Request, res: Response) => {
   }
 });
 
+// ─── VULNERABLE: data exposure on /api/admin/users-with-hashes ────────────────
+// The classic "we needed the user list for the admin panel and shipped the
+// whole row shape" mistake. Returns password hashes, salts, and reset tokens
+// in the response — precisely the fields the data-exposure specialist looks
+// for by name (never by value).
+app.get("/api/admin/users-with-hashes", (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  res.json(
+    users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      // ↓↓↓ these three are the sensitive fields the specialist must detect
+      password_hash: `<mock-hash-${u.id}>`,
+      salt: `<mock-salt-${u.id}>`,
+      password_reset_token: `<mock-reset-${u.id}>`,
+    })),
+  );
+});
+
+// ─── SECURE control: /api/public-users returns only public fields ─────────────
+// Same feature (list users) but the response is projected to just id +
+// displayName. The specialist must NOT flag this.
+app.get("/api/public-users", (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  res.json(
+    users.map((u) => ({
+      id: u.id,
+      display_name: u.email.split("@")[0],
+    })),
+  );
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 const PORT = Number(process.env.PORT ?? 4400);
@@ -282,6 +322,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`  INJECTION-safe control:   GET /api/orders/find?q=<text>`);
     console.log(`  SSRF-vulnerable:          GET /api/fetch?url=<any-url>`);
     console.log(`  SSRF-safe control:        GET /api/fetch-safe?url=<allowlisted-host>`);
+    console.log(`  DATA-EXPOSURE vulnerable: GET /api/admin/users-with-hashes`);
+    console.log(`  DATA-EXPOSURE safe:       GET /api/public-users`);
   });
 }
 

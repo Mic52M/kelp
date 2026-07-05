@@ -312,8 +312,24 @@ Findings are per-technique (a fix for `127.0.0.1` may not cover `localhost`).
 `injection` and `ssrf` were added to the enum via migrations 0004 and 0005;
 both applied.
 
-Total: **four specialists live end-to-end** with confirmed evidence and
-zero false positives on the test target. 82/82 core tests green.
+**Fifth specialist (data-exposure) — response-shape audit pattern.** Fifth
+detection shape in the roster: no fuzzing, no cross-account, no out-of-band
+callback — just audits the field NAMES of the response body (never values;
+the backend's data-hygiene invariant is non-negotiable) against Kelp's
+sensitive-terms dictionary (`password`, `password_hash`, `salt`,
+`otp_secret`, `refresh_token`, `stripe_secret`, `private_key`, and their
+naming-convention variants). The dictionary lives in the executor, not the
+model: Kelp — never the LLM — decides what counts as sensitive. `exposure`
+added to the enum via migration 0006 (applied).
+
+Total: **five specialists live end-to-end** with confirmed evidence and
+zero false positives on the test target. 88/88 core tests green. Each
+specialist demonstrates a different detection shape:
+  · BOLA        → cross-account probe
+  · Auth-bypass → impersonation techniques
+  · Injection   → baseline vs payload result-set diff
+  · SSRF        → out-of-band callback listener
+  · Exposure    → response field-name audit
 
 Left for phase 2 (see #19): add real specialists (auth-bypass, injection,
 SSRF, RLS-deep, exposure, weak-crypto), bump consent to v2 with the expanded
