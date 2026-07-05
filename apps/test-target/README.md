@@ -20,6 +20,7 @@ Each entry names the specialist expected to find it and the corresponding
 | `GET /api/orders/search?q=…`    | `injection` | `injection`     | Confirmed: `' OR '1'='1--` widens the WHERE clause to all rows. |
 | `GET /api/fetch?url=…`          | `ssrf`      | `ssrf`          | Confirmed: any URL (loopback, RFC1918, metadata IP) is fetched. |
 | `GET /api/admin/users-with-hashes` | `exposure` | `exposure`   | Confirmed: response shape includes password_hash, salt, reset token. |
+| `GET /api/db/select?table=orders_public&owner=…` | `rls` | `rls-deep` | Confirmed: RLS off → cross-account read succeeds against other-owner filter. |
 
 Control (properly-scoped) endpoints used to prove **no false positives**:
 
@@ -30,6 +31,7 @@ Control (properly-scoped) endpoints used to prove **no false positives**:
 | `GET /api/orders/find`  | Not flagged — parameterised filter, no bypass.|
 | `GET /api/fetch-safe`   | Not flagged — allowlist rejects any non-listed host. |
 | `GET /api/public-users` | Not flagged — response shape is only id + display_name. |
+| `GET /api/db/select?table=orders_scoped&owner=…` | Not flagged — RLS enforced, cross-account read denied. |
 
 ## Seed users
 

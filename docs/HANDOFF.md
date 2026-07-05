@@ -322,14 +322,27 @@ naming-convention variants). The dictionary lives in the executor, not the
 model: Kelp — never the LLM — decides what counts as sensitive. `exposure`
 added to the enum via migration 0006 (applied).
 
-Total: **five specialists live end-to-end** with confirmed evidence and
-zero false positives on the test target. 88/88 core tests green. Each
+**Sixth specialist (RLS-deep) — probe-based complement to the static
+analyzer.** Complements the RLS analyzer (which reads `pg_policies` and
+flags "no policy" / "USING(true)") with an ACTIVE variant that
+authenticates as two test accounts and actually tries to read across
+them. Reuses `vulnClass: "rls"` — same fix path as the static findings.
+Uses the test target's mock DB endpoints (`/api/db/tables`,
+`/api/db/select?table=…&owner=…`) as ground truth: `orders_public` (RLS
+off) leaks, `orders_scoped` (RLS on) doesn't.
+
+Total: **six specialists live end-to-end** with confirmed evidence and
+zero false positives on the test target. 92/92 core tests green. Each
 specialist demonstrates a different detection shape:
-  · BOLA        → cross-account probe
+  · BOLA        → cross-account probe by resource id
   · Auth-bypass → impersonation techniques
   · Injection   → baseline vs payload result-set diff
   · SSRF        → out-of-band callback listener
   · Exposure    → response field-name audit
+  · RLS-deep    → cross-account probe at the *table* level
+
+Only #23 (weak-crypto) remains in phase 2. Phase 3 (consent v2, cost
+accounting, live Anthropic verify) still open.
 
 Left for phase 2 (see #19): add real specialists (auth-bypass, injection,
 SSRF, RLS-deep, exposure, weak-crypto), bump consent to v2 with the expanded

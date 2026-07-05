@@ -308,6 +308,54 @@ app.get("/api/public-users", (req: Request, res: Response) => {
   );
 });
 
+// ─── Mock RLS-deep surface ────────────────────────────────────────────────────
+// A very thin "SQL-like" table select endpoint. Each mock table declares
+// whether it has Row-Level Security enforced. The RLS-deep specialist doesn't
+// see this flag — it must confirm the leak by observing that account A can
+// read a row owned by userB. Two tables so the specialist can distinguish
+// "leaky RLS" from "properly-scoped RLS" and prove no false positive.
+
+interface MockTable {
+  rls: boolean;
+  rows: readonly { ownerId: string }[];
+}
+const MOCK_TABLES: Record<string, MockTable> = {
+  orders_public: { rls: false, rows: orders },  // VULNERABLE — RLS off
+  orders_scoped: { rls: true, rows: orders },   // SECURE   — RLS on
+};
+
+app.get("/api/db/select", (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  const table = String(req.query.table ?? "");
+  const filterOwner = String(req.query.owner ?? "");
+  const t = MOCK_TABLES[table];
+  if (!t) {
+    res.status(404).json({ error: "no such table" });
+    return;
+  }
+  const filtered = t.rows.filter((r) => r.ownerId === filterOwner);
+  if (t.rls && filterOwner !== userId) {
+    // Correct behavior: RLS blocks cross-account reads regardless of caller.
+    res.json({ table, rowCount: 0, rows: [] });
+    return;
+  }
+  res.json({ table, rowCount: filtered.length, rows: filtered });
+});
+
+app.get("/api/db/tables", (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  // The specialist sees a table list; it does NOT see the rls flag from here.
+  res.json({ tables: Object.keys(MOCK_TABLES).map((name) => ({ name })) });
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 const PORT = Number(process.env.PORT ?? 4400);
@@ -324,6 +372,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`  SSRF-safe control:        GET /api/fetch-safe?url=<allowlisted-host>`);
     console.log(`  DATA-EXPOSURE vulnerable: GET /api/admin/users-with-hashes`);
     console.log(`  DATA-EXPOSURE safe:       GET /api/public-users`);
+    console.log(`  RLS-DEEP vulnerable:      GET /api/db/select?table=orders_public&owner=<uid>`);
+    console.log(`  RLS-DEEP safe:            GET /api/db/select?table=orders_scoped&owner=<uid>`);
   });
 }
 

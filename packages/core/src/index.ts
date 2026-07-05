@@ -17,3 +17,4 @@ export * from "./agent/specialists/auth-bypass.js";
 export * from "./agent/specialists/injection.js";
 export * from "./agent/specialists/ssrf.js";
 export * from "./agent/specialists/exposure.js";
+export * from "./agent/specialists/rls-deep.js";
