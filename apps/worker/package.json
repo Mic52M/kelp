@@ -16,7 +16,8 @@
     "build": "tsc -b",
     "start": "node dist/index.js",
     "demo": "node dist/demo.js",
-    "verify:bola-target": "node dist/agent/verify-bola-target.js"
+    "verify:bola-target": "node dist/agent/verify-bola-target.js",
+    "verify:auth-bypass-target": "node dist/agent/verify-auth-bypass-target.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.1",

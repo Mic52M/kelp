@@ -271,13 +271,23 @@ with ground-truth-known flaws: `GET /api/orders/:id` (BOLA-vulnerable), `GET
 for the ground-truth table and sanity-check curl commands. Boot with `npm run
 dev -w @kelp/test-target` → `:4400`.
 
-**Validation**: `npm run verify:bola-target -w @kelp/worker` boots a BOLA
-specialist campaign against the running target (needs the target on `:4400`)
-and asserts:
- · `/api/orders/:id` IS flagged (evidence-confirmed cross-account read), and
- · `/api/profiles/:id` is NOT flagged (correctly denied)
-Every new specialist must ship its analogue verify script before being enabled
-in the customer path.
+**Validation** — every specialist ships with a `verify:<name>-target` npm
+script that runs one campaign against the running target and asserts the
+ground-truth outcome:
+ · `npm run verify:bola-target -w @kelp/worker` — asserts `/api/orders/:id`
+   IS flagged and `/api/profiles/:id` is NOT (no false positive)
+ · `npm run verify:auth-bypass-target -w @kelp/worker` — asserts
+   `/api/session-lookup` IS flagged via `query_as_param` and `/api/me` is NOT
+Every new specialist added in phase 2 must add its own verify script before
+being enabled in the customer path.
+
+**Second specialist (auth-bypass) — proof the framework generalizes.**
+Added `packages/core/src/agent/specialists/auth-bypass.ts` with four known
+impersonation techniques (`query_as_param`, `x_user_header`,
+`userid_body_override`, `token_swap`) and the same load-bearing invariant
+(no confirmed probe → no finding). Adding this specialist required zero
+changes to the framework core, orchestrator, or consent gate — the whole
+scaffold from phase 1 held up under a real-world second class.
 
 Left for phase 2 (see #19): add real specialists (auth-bypass, injection,
 SSRF, RLS-deep, exposure, weak-crypto), bump consent to v2 with the expanded

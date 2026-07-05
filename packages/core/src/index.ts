@@ -13,3 +13,4 @@ export * from "./agent/loop.js";
 export * from "./agent/specialist.js";
 export * from "./agent/orchestrator.js";
 export * from "./agent/bola.js";
+export * from "./agent/specialists/auth-bypass.js";
