@@ -301,8 +301,19 @@ widens the WHERE) and `/api/orders/find` (parameterised control). `npm run
 verify:injection-target -w @kelp/worker` confirms live: search flagged,
 find clean, exit 0.
 
-Total: **three specialists live end-to-end** with confirmed evidence and
-zero false positives on the test target. 78/78 core tests green.
+**Fourth specialist (SSRF) — out-of-band evidence pattern.** BOLA/auth/
+injection all confirm via response inspection; SSRF requires *the target
+actually made an outbound request*. The backend (`test-target-ssrf-backend.ts`)
+spins up a local HTTP listener on a random port, feeds each probe URL
+(five techniques: plain_http, loopback_127, loopback_localhost,
+url_encoded_host, metadata_ip), waits for the callback to fire with a
+matching one-time token, and treats a listener hit as unforgeable evidence.
+Findings are per-technique (a fix for `127.0.0.1` may not cover `localhost`).
+`injection` and `ssrf` were added to the enum via migrations 0004 and 0005;
+both applied.
+
+Total: **four specialists live end-to-end** with confirmed evidence and
+zero false positives on the test target. 82/82 core tests green.
 
 Left for phase 2 (see #19): add real specialists (auth-bypass, injection,
 SSRF, RLS-deep, exposure, weak-crypto), bump consent to v2 with the expanded

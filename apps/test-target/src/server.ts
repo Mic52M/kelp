@@ -214,6 +214,60 @@ app.get("/api/session-lookup", (req: Request, res: Response) => {
   res.json({ effectiveUserId: effective, orders: owned });
 });
 
+// ─── VULNERABLE: SSRF on /api/fetch?url=… ─────────────────────────────────────
+// Models the classic "fetch this URL server-side for me" endpoint that many
+// vibe-coded apps ship (avatar mirror, webhook forwarder, "import from URL").
+// This one fetches ANY URL the caller supplies — perfect ground truth for the
+// SSRF specialist. Returns only the response status + byte length so we don't
+// leak third-party bodies into the specialist's transcript.
+app.get("/api/fetch", async (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  const url = String(req.query.url ?? "");
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(2000) });
+    const buf = await r.arrayBuffer();
+    res.json({ status: r.status, length: buf.byteLength });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+// ─── SECURE control: /api/fetch-safe with a host allowlist ────────────────────
+// Same shape (fetch a URL) but only allowed for a hard-coded host — any other
+// host, including any loopback / RFC1918 / metadata-IP payload, is rejected
+// with 403 before any request goes out. The SSRF specialist must NOT flag this.
+const FETCH_ALLOWLIST = new Set(["example.com"]);
+app.get("/api/fetch-safe", async (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  const url = String(req.query.url ?? "");
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    res.status(400).json({ error: "malformed url" });
+    return;
+  }
+  if (!FETCH_ALLOWLIST.has(parsed.host)) {
+    res.status(403).json({ error: "host not on allowlist" });
+    return;
+  }
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(2000) });
+    const buf = await r.arrayBuffer();
+    res.json({ status: r.status, length: buf.byteLength });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 const PORT = Number(process.env.PORT ?? 4400);
@@ -226,6 +280,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`  AUTH-BYPASS endpoint:     GET /api/session-lookup?as=<userId>`);
     console.log(`  INJECTION-vulnerable:     GET /api/orders/search?q=<payload>`);
     console.log(`  INJECTION-safe control:   GET /api/orders/find?q=<text>`);
+    console.log(`  SSRF-vulnerable:          GET /api/fetch?url=<any-url>`);
+    console.log(`  SSRF-safe control:        GET /api/fetch-safe?url=<allowlisted-host>`);
   });
 }
 

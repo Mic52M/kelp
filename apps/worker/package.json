@@ -18,7 +18,8 @@
     "demo": "node dist/demo.js",
     "verify:bola-target": "node dist/agent/verify-bola-target.js",
     "verify:auth-bypass-target": "node dist/agent/verify-auth-bypass-target.js",
-    "verify:injection-target": "node dist/agent/verify-injection-target.js"
+    "verify:injection-target": "node dist/agent/verify-injection-target.js",
+    "verify:ssrf-target": "node dist/agent/verify-ssrf-target.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.1",
