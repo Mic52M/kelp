@@ -1,0 +1,20 @@
+{
+  "name": "@kelp/test-target",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deliberately vulnerable Express app used to validate Kelp's pen-testing specialists end-to-end. NEVER deploy publicly.",
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/server.js",
+    "dev": "tsc -b && node dist/server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0"
+  }
+}

@@ -264,10 +264,26 @@ Verified: 70/70 core tests pass (63 pre-existing + 7 new orchestrator).
 Coverage includes dispatch, aggregation, invariant enforcement,
 crash-isolation, consent gating, `maxParallel` bound, order preservation.
 
+**Test target app** (`apps/test-target`) — deliberately-vulnerable Express app
+with ground-truth-known flaws: `GET /api/orders/:id` (BOLA-vulnerable), `GET
+/api/profiles/:id` (secure control), `GET /api/session-lookup?as=…`
+(auth-bypass). Never deploy outside localhost. See `apps/test-target/README.md`
+for the ground-truth table and sanity-check curl commands. Boot with `npm run
+dev -w @kelp/test-target` → `:4400`.
+
+**Validation**: `npm run verify:bola-target -w @kelp/worker` boots a BOLA
+specialist campaign against the running target (needs the target on `:4400`)
+and asserts:
+ · `/api/orders/:id` IS flagged (evidence-confirmed cross-account read), and
+ · `/api/profiles/:id` is NOT flagged (correctly denied)
+Every new specialist must ship its analogue verify script before being enabled
+in the customer path.
+
 Left for phase 2 (see #19): add real specialists (auth-bypass, injection,
-SSRF, RLS-deep, exposure, weak-crypto), ship a deliberately-vulnerable test
-target app for end-to-end validation, bump consent to v2 with the expanded
-copy, add cost accounting for Claude API tokens per specialist.
+SSRF, RLS-deep, exposure, weak-crypto), bump consent to v2 with the expanded
+copy, add cost accounting for Claude API tokens per specialist, and a
+`verify:*-target-live.ts` variant per specialist that uses the real Anthropic
+driver instead of the scripted driver used today.
 
 ## 11a. Findings lifecycle (post-#15)
 
