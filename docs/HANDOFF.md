@@ -237,6 +237,38 @@ Suggested order toward **production-ready, self-serve** (the current north star)
 9. **#16** production deploy (Vercel + Railway/Fly) — after #1/#2/#7.
 10. **#9** real live BOLA tester — the third vuln class; strictly consent-gated.
 
+## 11z. Multi-agent pen-testing framework (post-#19 phase 1)
+
+Foundation for the "XBOW-for-vibe-code" moat is now shipped:
+
+- `packages/core/src/agent/specialist.ts` — `Specialist<Backend, Finding>`
+  interface. Each specialist declares its name, `vulnClass`, system prompt,
+  tools, initial prompt, and — critically — a `createExecutor` that OWNS the
+  "no confirmed evidence = no finding" invariant. The model cannot fabricate.
+- `packages/core/src/agent/specialists/bola.ts` — BOLA migrated as the first
+  specialist. Same behavior, same tests pass, but now plugs into the shared
+  orchestrator alongside future specialists (auth, injection, SSRF, RLS-deep,
+  exposure, weak crypto).
+- `packages/core/src/agent/orchestrator.ts` — `runActivePentest`, the
+  consent-gated entry point for a multi-specialist campaign. Dispatches N
+  specialists in parallel (bounded by `maxParallel`), each with its own
+  driver + backend. Aggregates confirmed findings, preserves caller-provided
+  ordering in the outcome list, isolates specialist crashes (one blowing up
+  doesn't kill the campaign). `runCampaignUnsafe` skips the consent gate —
+  unit tests only.
+- `packages/core/src/agent/bola.ts` — legacy `runBolaAgent` now delegates to
+  the orchestrator with a single-specialist campaign, so existing worker
+  call sites and tests keep working unchanged.
+
+Verified: 70/70 core tests pass (63 pre-existing + 7 new orchestrator).
+Coverage includes dispatch, aggregation, invariant enforcement,
+crash-isolation, consent gating, `maxParallel` bound, order preservation.
+
+Left for phase 2 (see #19): add real specialists (auth-bypass, injection,
+SSRF, RLS-deep, exposure, weak-crypto), ship a deliberately-vulnerable test
+target app for end-to-end validation, bump consent to v2 with the expanded
+copy, add cost accounting for Claude API tokens per specialist.
+
 ## 11a. Findings lifecycle (post-#15)
 
 Every scan closes what it doesn't re-detect. After `upsertFindings` in
