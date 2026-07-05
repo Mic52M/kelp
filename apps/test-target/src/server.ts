@@ -128,6 +128,41 @@ app.get("/api/me", (req: Request, res: Response) => {
   res.json({ userId, email: user?.email });
 });
 
+// ─── VULNERABLE: naive "SQL-like" search on /api/orders/search ────────────────
+// Registered BEFORE /api/orders/:id so Express matches this specific route
+// first; otherwise "search" would be captured as an :id value.
+app.get("/api/orders/search", (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  const q = String(req.query.q ?? "");
+  const isInjection =
+    /(?:'\s*OR\s*'1'\s*=\s*'1|OR\s+1\s*=\s*1|UNION\s+SELECT|;\s*DROP\b|--\s*$)/i.test(q);
+  const results = isInjection
+    ? orders // BYPASS: caller-controlled payload widens the WHERE → all rows
+    : orders.filter(
+        (o) => o.ownerId === userId && o.memo.toLowerCase().includes(q.toLowerCase()),
+      );
+  res.json({ q, count: results.length, results });
+});
+
+// ─── SECURE control: /api/orders/find uses a parameterised filter ─────────────
+// Also registered before /:id so it's actually reachable.
+app.get("/api/orders/find", (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  const q = String(req.query.q ?? "").toLowerCase();
+  const results = orders.filter(
+    (o) => o.ownerId === userId && o.memo.toLowerCase().includes(q),
+  );
+  res.json({ q, count: results.length, results });
+});
+
 // ─── VULNERABLE: BOLA on /api/orders/:id ──────────────────────────────────────
 // Missing ownership check — anyone authenticated can read any order.
 app.get("/api/orders/:id", (req: Request, res: Response) => {
@@ -189,6 +224,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`  BOLA-vulnerable endpoint: GET /api/orders/:id`);
     console.log(`  SECURE control endpoint:  GET /api/profiles/:id`);
     console.log(`  AUTH-BYPASS endpoint:     GET /api/session-lookup?as=<userId>`);
+    console.log(`  INJECTION-vulnerable:     GET /api/orders/search?q=<payload>`);
+    console.log(`  INJECTION-safe control:   GET /api/orders/find?q=<text>`);
   });
 }
 

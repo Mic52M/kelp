@@ -289,6 +289,21 @@ impersonation techniques (`query_as_param`, `x_user_header`,
 changes to the framework core, orchestrator, or consent gate — the whole
 scaffold from phase 1 held up under a real-world second class.
 
+**Third specialist (injection) — proof it holds under a radically
+different pattern.** BOLA and auth-bypass both work by probing whether one
+account can act as another; injection instead compares response counts
+against a baseline as a small catalog of payloads is applied. Different
+detection shape, same framework, same invariant. Added the `injection`
+value to `VulnClass` (migration `0004_vuln_class_injection.sql`, applied)
+and shipped `packages/core/src/agent/specialists/injection.ts`. The target
+gained `/api/orders/search` (deliberately vulnerable: `' OR '1'='1--`
+widens the WHERE) and `/api/orders/find` (parameterised control). `npm run
+verify:injection-target -w @kelp/worker` confirms live: search flagged,
+find clean, exit 0.
+
+Total: **three specialists live end-to-end** with confirmed evidence and
+zero false positives on the test target. 78/78 core tests green.
+
 Left for phase 2 (see #19): add real specialists (auth-bypass, injection,
 SSRF, RLS-deep, exposure, weak-crypto), bump consent to v2 with the expanded
 copy, add cost accounting for Claude API tokens per specialist, and a

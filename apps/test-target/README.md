@@ -16,15 +16,16 @@ Each entry names the specialist expected to find it and the corresponding
 | Endpoint                        | Class    | Specialist         | Expected outcome                                                |
 | ------------------------------- | -------- | ------------------ | --------------------------------------------------------------- |
 | `GET /api/orders/:id`           | `bola`   | `bola`             | Confirmed: account A can read account B's order id `ord_2001`.  |
-| `GET /api/session-lookup?as=…`  | `bola`   | `auth-bypass` \*   | Confirmed: query param bypasses the session identity check.     |
+| `GET /api/session-lookup?as=…`  | `auth`   | `auth-bypass`      | Confirmed: query param bypasses the session identity check.     |
+| `GET /api/orders/search?q=…`    | `injection` | `injection`     | Confirmed: `' OR '1'='1--` widens the WHERE clause to all rows. |
 
-Control (properly-scoped) endpoint used to prove **no false positives**:
+Control (properly-scoped) endpoints used to prove **no false positives**:
 
-| Endpoint                | Class  | Expected outcome                              |
-| ----------------------- | ------ | --------------------------------------------- |
-| `GET /api/profiles/:id` | `bola` | Not flagged — enforces `owner === caller`.   |
-
-\* `auth-bypass` specialist ships in phase 2.
+| Endpoint                | Expected outcome                              |
+| ----------------------- | --------------------------------------------- |
+| `GET /api/profiles/:id` | Not flagged — enforces `owner === caller`.    |
+| `GET /api/me`           | Not flagged — no impersonation technique wins.|
+| `GET /api/orders/find`  | Not flagged — parameterised filter, no bypass.|
 
 ## Seed users
 
