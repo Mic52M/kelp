@@ -2,7 +2,12 @@
 
 > Read this first. It is the single source of truth for a new contributor (human
 > or a fresh Claude session) to understand what Kelp is, where it stands, and how
-> to continue. Repo: `github.com/Mic52M/kelp` (private). Last updated: 2026-07-03.
+> to continue. Repo: `github.com/Mic52M/kelp` (private). Last updated: 2026-07-05.
+>
+> **For the multi-agent engine specifically** (Layer-by-layer architecture, the
+> load-bearing invariant, how to add a new specialist, verify commands): read
+> [`docs/AGENT-FRAMEWORK.md`](./AGENT-FRAMEWORK.md). It's the authoritative doc
+> for that subsystem; this file gives you the product/business context around it.
 
 ---
 
