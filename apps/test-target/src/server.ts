@@ -356,6 +356,36 @@ app.get("/api/db/tables", (req: Request, res: Response) => {
   res.json({ tables: Object.keys(MOCK_TABLES).map((name) => ({ name })) });
 });
 
+// ─── VULNERABLE: /api/set-insecure-cookie ─────────────────────────────────────
+// Sets a session-like cookie without HttpOnly / Secure / SameSite. Every one
+// of those flags missing is a common vibe-coded auth mistake — the AI-generated
+// snippet just wrote `res.cookie(name, value)` and moved on.
+app.get("/api/set-insecure-cookie", (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  res.setHeader("Set-Cookie", `sid=mock-session-${userId}`);
+  res.json({ ok: true });
+});
+
+// ─── SECURE control: /api/set-secure-cookie ───────────────────────────────────
+// Sets the same cookie with HttpOnly, Secure and SameSite properly set. The
+// weak-crypto specialist must NOT flag this endpoint.
+app.get("/api/set-secure-cookie", (req: Request, res: Response) => {
+  const userId = currentUser(req);
+  if (!userId) {
+    res.status(401).json({ error: "not authenticated" });
+    return;
+  }
+  res.setHeader(
+    "Set-Cookie",
+    `sid=mock-session-${userId}; HttpOnly; Secure; SameSite=Strict; Path=/`,
+  );
+  res.json({ ok: true });
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 const PORT = Number(process.env.PORT ?? 4400);
@@ -374,6 +404,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`  DATA-EXPOSURE safe:       GET /api/public-users`);
     console.log(`  RLS-DEEP vulnerable:      GET /api/db/select?table=orders_public&owner=<uid>`);
     console.log(`  RLS-DEEP safe:            GET /api/db/select?table=orders_scoped&owner=<uid>`);
+    console.log(`  WEAK-CRYPTO vulnerable:   GET /api/set-insecure-cookie`);
+    console.log(`  WEAK-CRYPTO safe:         GET /api/set-secure-cookie`);
   });
 }
 

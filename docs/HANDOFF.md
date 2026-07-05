@@ -341,8 +341,34 @@ specialist demonstrates a different detection shape:
   · Exposure    → response field-name audit
   · RLS-deep    → cross-account probe at the *table* level
 
-Only #23 (weak-crypto) remains in phase 2. Phase 3 (consent v2, cost
-accounting, live Anthropic verify) still open.
+**Seventh (last of phase 2) specialist — weak-crypto (cookie flags).**
+Highest-signal, lowest-false-positive audit: inspects the `Set-Cookie`
+header of each endpoint and flags cookies missing HttpOnly, Secure, or
+SameSite. Kelp — never the model — holds the flag dictionary via the
+executor; the backend's data-hygiene rule extends here too (cookie
+values are never inspected). `auditSetCookie` in the core specialist
+handles the parsing so any specialist can reuse it if needed. Reuses
+`vulnClass: "auth"` — no enum churn.
+
+**Phase 2 complete.** All seven planned specialists live end-to-end
+against the deliberately-vulnerable test target:
+  · BOLA        → cross-account probe by resource id
+  · Auth-bypass → impersonation techniques
+  · Injection   → baseline vs payload result-set diff
+  · SSRF        → out-of-band callback listener
+  · Exposure    → response field-name audit
+  · RLS-deep    → cross-account probe at the *table* level
+  · Weak-crypto → Set-Cookie flag audit
+
+99/99 core tests green. All 7 `npm run verify:*-target -w @kelp/worker`
+scripts exit 0 against the running test target, with zero false
+positives on any control endpoint.
+
+**Phase 3 remains** (see #19): consent v2 UI + migration (#24),
+per-specialist token cost accounting (#25), live Anthropic-driver
+verify variants (#26). Everything else — deployment (#16), Stripe
+(#10), the read-only Supabase role (#5) — is independent of the
+multi-agent roadmap and tracked separately.
 
 Left for phase 2 (see #19): add real specialists (auth-bypass, injection,
 SSRF, RLS-deep, exposure, weak-crypto), bump consent to v2 with the expanded
