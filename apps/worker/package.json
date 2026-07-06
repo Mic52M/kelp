@@ -23,7 +23,15 @@
     "verify:exposure-target": "node dist/agent/verify-exposure-target.js",
     "verify:rls-deep-target": "node dist/agent/verify-rls-deep-target.js",
     "verify:weak-crypto-target": "node dist/agent/verify-weak-crypto-target.js",
-    "verify:cost-accounting": "node dist/agent/verify-cost-accounting.js"
+    "verify:cost-accounting": "node dist/agent/verify-cost-accounting.js",
+    "verify:bola-target-live": "node dist/agent/verify-bola-target-live.js",
+    "verify:auth-bypass-target-live": "node dist/agent/verify-auth-bypass-target-live.js",
+    "verify:injection-target-live": "node dist/agent/verify-injection-target-live.js",
+    "verify:ssrf-target-live": "node dist/agent/verify-ssrf-target-live.js",
+    "verify:exposure-target-live": "node dist/agent/verify-exposure-target-live.js",
+    "verify:rls-deep-target-live": "node dist/agent/verify-rls-deep-target-live.js",
+    "verify:weak-crypto-target-live": "node dist/agent/verify-weak-crypto-target-live.js",
+    "verify:live": "npm run verify:bola-target-live && npm run verify:auth-bypass-target-live && npm run verify:injection-target-live && npm run verify:ssrf-target-live && npm run verify:exposure-target-live && npm run verify:rls-deep-target-live && npm run verify:weak-crypto-target-live"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.1",
