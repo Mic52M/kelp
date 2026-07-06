@@ -34,10 +34,30 @@ export interface LlmStep {
   done: boolean;
 }
 
+/**
+ * Cumulative token usage a driver reports across every model call in its run.
+ * `model` is optional — scripted drivers used in unit tests have no model to
+ * price against; only the real (Anthropic) driver populates it. The orchestrator
+ * uses model + tokens to estimate cost per specialist.
+ */
+export interface LlmUsage {
+  inputTokens: number;
+  outputTokens: number;
+  /** Driver's model id, used for cost estimation (e.g. "claude-opus-4-8"). */
+  model?: string;
+}
+
 /** Drives a single tool-use conversation. The driver owns message state. */
 export interface LlmAgentDriver {
   start(opts: { system: string; tools: AgentTool[]; prompt: string }): Promise<LlmStep>;
   provideToolResults(results: ToolResult[]): Promise<LlmStep>;
+  /**
+   * Optional: cumulative token usage since `start()`. Drivers that don't call an
+   * LLM (scripted test drivers) may omit this. The orchestrator treats a missing
+   * `getUsage` as "cost accounting not available for this specialist" — not an
+   * error — so tests keep working.
+   */
+  getUsage?(): LlmUsage;
 }
 
 /** Executes tool calls deterministically. */

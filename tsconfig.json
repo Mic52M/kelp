@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": "Solution file for `tsc -b` (npm run typecheck / build). Lists the composite TS projects. apps/web is a Next app typechecked separately (tsc -p apps/web --noEmit); @kelp/db runs via runtime strip-types and is not built.",
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./apps/worker" }
+  ]
+}

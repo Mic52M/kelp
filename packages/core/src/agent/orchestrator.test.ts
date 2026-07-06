@@ -6,6 +6,7 @@ import type {
   AgentTool,
   LlmAgentDriver,
   LlmStep,
+  LlmUsage,
   ToolCall,
   ToolResult,
 } from "./loop.js";
@@ -191,6 +192,34 @@ test("maxParallel bounds concurrent specialists", async () => {
   ];
   await runCampaignUnsafe(ctx, { entries, maxParallel: 1 });
   assert.equal(maxSeen, 1);
+});
+
+test("driver.getUsage() is threaded into SpecialistOutcome.usage + campaign totalUsage (#25)", async () => {
+  // Wrap the scripted driver with a getUsage() that pretends 1000/2000 haiku tokens.
+  class MeteredDriver implements LlmAgentDriver {
+    private inner: ScriptedDriver;
+    constructor(steps: LlmStep[]) { this.inner = new ScriptedDriver(steps); }
+    start(opts: { system: string; tools: AgentTool[]; prompt: string }) { return this.inner.start(); }
+    provideToolResults(r: ToolResult[]) { return this.inner.provideToolResults(r); }
+    getUsage(): LlmUsage { return { inputTokens: 1000, outputTokens: 2000, model: "claude-haiku-4-5" }; }
+  }
+  const entries: SpecialistEntry<unknown, unknown>[] = [
+    { specialist: makeTiny("a") as unknown as Specialist<unknown, unknown>, backend: alwaysYes, driver: new MeteredDriver(scriptProbeAndReport("t1")) },
+    { specialist: makeTiny("b") as unknown as Specialist<unknown, unknown>, backend: alwaysYes, driver: new ScriptedDriver(scriptProbeAndReport("t2")) },
+  ];
+  const report = await runActivePentest({ consent: validConsent, audit: auditNoop }, ctx, { entries });
+  // Metered specialist populated usage; scripted specialist reports null.
+  assert.deepEqual(report.outcomes[0]!.usage, {
+    inputTokens: 1000,
+    outputTokens: 2000,
+    // haiku-4-5: $1/Mtok in + $5/Mtok out => 1000*1e-6 + 2000*5e-6 = $0.011
+    estimatedCostUsd: 0.011,
+  });
+  assert.equal(report.outcomes[1]!.usage, null);
+  // Campaign total is the sum across specialists that reported usage.
+  assert.equal(report.totalUsage.inputTokens, 1000);
+  assert.equal(report.totalUsage.outputTokens, 2000);
+  assert.equal(Math.round(report.totalUsage.estimatedCostUsd * 1000) / 1000, 0.011);
 });
 
 test("outcomes preserve the caller-provided specialist order even when run concurrently", async () => {

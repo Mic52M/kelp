@@ -7,6 +7,7 @@
 // several specialists in one go and gives a per-specialist outcome report.
 
 import type { AuditLogger, ConsentStore } from "../consent.js";
+import { CONSENT_ACCEPTED_FOR_BOLA_ONLY } from "../consent.js";
 import type { BolaReport } from "../remediation/bola-report.js";
 import type { LlmAgentDriver } from "./loop.js";
 import { runActivePentest } from "./orchestrator.js";
@@ -51,6 +52,8 @@ export async function runBolaAgent(
         } as unknown as import("./orchestrator.js").SpecialistEntry<unknown, unknown>,
       ],
     },
+    // A single-BOLA run is the legacy path — v1 consents remain valid here (#24).
+    { acceptedVersions: CONSENT_ACCEPTED_FOR_BOLA_ONLY },
   );
 
   // Single-specialist campaign — there's exactly one outcome. Surface its

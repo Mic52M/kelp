@@ -14,7 +14,15 @@ export {
   verifyInstallState,
   registerGithubInstallation,
 } from "./api.js";
-export { putCredential, findProjectByRepo } from "./db.js";
+export {
+  putCredential,
+  findProjectByRepo,
+  loadActiveTestConsent,
+  saveActiveTestConsent,
+  revokeActiveTestConsent,
+  monthToDateCampaignCostCents,
+} from "./db.js";
+export type { StoredActiveTestConsent } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";
 export type { SecretFixPrResult } from "./fix-pr.js";
 export type { SupabaseProjectInfo, ConnectInput, RepoOption } from "./api.js";

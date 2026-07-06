@@ -22,7 +22,8 @@
     "verify:ssrf-target": "node dist/agent/verify-ssrf-target.js",
     "verify:exposure-target": "node dist/agent/verify-exposure-target.js",
     "verify:rls-deep-target": "node dist/agent/verify-rls-deep-target.js",
-    "verify:weak-crypto-target": "node dist/agent/verify-weak-crypto-target.js"
+    "verify:weak-crypto-target": "node dist/agent/verify-weak-crypto-target.js",
+    "verify:cost-accounting": "node dist/agent/verify-cost-accounting.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.1",

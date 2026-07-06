@@ -5,15 +5,24 @@
 // and Claude's tool-use content blocks.
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { AgentTool, LlmAgentDriver, LlmStep, ToolCall, ToolResult } from "@kelp/core";
+import type { AgentTool, LlmAgentDriver, LlmStep, LlmUsage, ToolCall, ToolResult } from "@kelp/core";
 
 export function createAnthropicDriver(client: Anthropic, model: string): LlmAgentDriver {
   let system = "";
   let tools: Anthropic.Tool[] = [];
   let messages: Anthropic.MessageParam[] = [];
+  // Cumulative token counters (issue #25). Anthropic returns `usage` on every
+  // response; we sum across every step so getUsage() at run-end reflects the
+  // full conversation.
+  let inputTokens = 0;
+  let outputTokens = 0;
 
   async function run(): Promise<LlmStep> {
     const res = await client.messages.create({ model, max_tokens: 2048, system, tools, messages });
+    if (res.usage) {
+      inputTokens += res.usage.input_tokens ?? 0;
+      outputTokens += res.usage.output_tokens ?? 0;
+    }
     // Preserve the full assistant turn (incl. tool_use blocks) for the next request.
     messages.push({ role: "assistant", content: res.content });
 
@@ -52,6 +61,10 @@ export function createAnthropicDriver(client: Anthropic, model: string): LlmAgen
         })),
       });
       return run();
+    },
+
+    getUsage(): LlmUsage {
+      return { inputTokens, outputTokens, model };
     },
   };
 }

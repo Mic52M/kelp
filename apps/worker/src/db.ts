@@ -223,10 +223,127 @@ export async function resolveMissingFindings(
   return rowCount ?? 0;
 }
 
-export async function finishScan(scanId: string, status: "succeeded" | "failed", error?: string): Promise<void> {
+export async function finishScan(
+  scanId: string,
+  status: "succeeded" | "failed",
+  error?: string,
+  /**
+   * Claude spend attributable to this scan, in USD cents (issue #25). Null for
+   * deterministic scans that never call an LLM; populated for active-pentest
+   * scans from the campaign's totalUsage.
+   */
+  costCents?: number | null,
+): Promise<void> {
   await getPool().query(
-    `update scans set status = $2, finished_at = now(), error = $3 where id = $1`,
-    [scanId, status, error ?? null],
+    `update scans set status = $2, finished_at = now(), error = $3, cost_cents = $4 where id = $1`,
+    [scanId, status, error ?? null, costCents ?? null],
+  );
+}
+
+/**
+ * Month-to-date campaign Claude spend for an org, in USD cents (issue #25).
+ * Used by the cap check before dispatching a new active-pentest campaign.
+ * NULL cost_cents rows (deterministic scans) are excluded — they don't spend.
+ */
+export async function monthToDateCampaignCostCents(orgId: string): Promise<number> {
+  const { rows } = await getPool().query(
+    `select coalesce(sum(cost_cents), 0)::int as total
+       from scans
+      where org_id = $1
+        and cost_cents is not null
+        and started_at >= date_trunc('month', now())`,
+    [orgId],
+  );
+  return rows[0]?.total ?? 0;
+}
+
+// ─── Active-test consent (issue #24) ─────────────────────────────────────────
+// The consent row is the load-bearing legal artifact: multi-specialist campaigns
+// need a non-revoked v2, BOLA-only campaigns accept v1 or v2. These helpers own
+// the writes so scattered callers can't corrupt the shape (e.g. forget to store
+// the verbatim text alongside the version).
+
+export interface StoredActiveTestConsent {
+  id: string;
+  projectId: string;
+  orgId: string;
+  consented: boolean;
+  consentVersion: string;
+  consentedAt: Date;
+  revokedAt: Date | null;
+}
+
+/** Current (non-revoked) consent for a project, or null. */
+export async function loadActiveTestConsent(
+  projectId: string,
+): Promise<StoredActiveTestConsent | null> {
+  const { rows } = await getPool().query(
+    `select id, project_id, org_id, consented, consent_version, consented_at, revoked_at
+       from active_test_consents
+      where project_id = $1 and revoked_at is null
+      limit 1`,
+    [projectId],
+  );
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    orgId: r.org_id,
+    consented: r.consented,
+    consentVersion: r.consent_version,
+    consentedAt: new Date(r.consented_at),
+    revokedAt: r.revoked_at === null ? null : new Date(r.revoked_at),
+  };
+}
+
+/**
+ * Insert a fresh consent row (v1 or v2). Revokes any existing non-revoked row
+ * for the project first — the schema has a unique index on `project_id` where
+ * `revoked_at is null`, so two active rows would fail to insert. Idempotent
+ * against double-clicks (the caller sees the newest row after).
+ */
+export async function saveActiveTestConsent(input: {
+  orgId: string;
+  projectId: string;
+  consentText: string;
+  consentVersion: string;
+  consentedBy: string;
+}): Promise<void> {
+  const client = await getPool().connect();
+  try {
+    await client.query("begin");
+    await client.query(
+      `update active_test_consents
+          set revoked_at = now(), revoked_by = $2
+        where project_id = $1 and revoked_at is null`,
+      [input.projectId, input.consentedBy],
+    );
+    await client.query(
+      `insert into active_test_consents
+          (org_id, project_id, consented, consent_text, consent_version, consented_by)
+       values ($1, $2, true, $3, $4, $5)`,
+      [input.orgId, input.projectId, input.consentText, input.consentVersion, input.consentedBy],
+    );
+    await client.query("commit");
+  } catch (e) {
+    await client.query("rollback");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/** Revoke the current consent for a project. No-op if none is active. */
+export async function revokeActiveTestConsent(input: {
+  projectId: string;
+  revokedBy: string;
+}): Promise<void> {
+  await getPool().query(
+    `update active_test_consents
+        set revoked_at = now(), revoked_by = $2
+      where project_id = $1 and revoked_at is null`,
+    [input.projectId, input.revokedBy],
   );
 }
 

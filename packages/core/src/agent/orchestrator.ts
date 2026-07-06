@@ -12,8 +12,9 @@
 
 import type { VulnClass } from "../types.js";
 import type { AuditLogger, ConsentStore } from "../consent.js";
-import { runWithActiveTestConsent } from "../consent.js";
-import { runAgent, type LlmAgentDriver } from "./loop.js";
+import { runWithActiveTestConsent, CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST } from "../consent.js";
+import { runAgent, type LlmAgentDriver, type LlmUsage } from "./loop.js";
+import { estimateCostUsd } from "./pricing.js";
 import type { Specialist, SpecialistContext } from "./specialist.js";
 
 /**
@@ -28,6 +29,14 @@ export interface SpecialistEntry<Backend, Finding> {
   driver: LlmAgentDriver;
 }
 
+/** Token & cost usage attributed to one specialist run (issue #25). */
+export interface SpecialistUsage {
+  inputTokens: number;
+  outputTokens: number;
+  /** USD estimate — 0 if the driver's model is unknown to the rate table. */
+  estimatedCostUsd: number;
+}
+
 export interface SpecialistOutcome {
   name: string;
   vulnClass: VulnClass;
@@ -39,12 +48,16 @@ export interface SpecialistOutcome {
   error: string | null;
   /** how many agent loop iterations were spent */
   steps: number;
+  /** null when the driver reports no usage (scripted / non-LLM drivers) */
+  usage: SpecialistUsage | null;
 }
 
 export interface CampaignReport {
   outcomes: SpecialistOutcome[];
   /** flattened findings across every successful specialist */
   findings: unknown[];
+  /** summed usage across every specialist that reported it (issue #25) */
+  totalUsage: SpecialistUsage;
 }
 
 export interface CampaignConfig {
@@ -53,6 +66,26 @@ export interface CampaignConfig {
   maxParallel?: number;
   /** step cap per specialist; passed through to runAgent */
   maxStepsPer?: number;
+}
+
+/**
+ * Ask the driver for its cumulative usage, converting to a SpecialistUsage or
+ * null if the driver doesn't implement getUsage (scripted test driver). Never
+ * throws — a driver bug can't tank the whole report.
+ */
+function collectUsage(driver: LlmAgentDriver): SpecialistUsage | null {
+  if (typeof driver.getUsage !== "function") return null;
+  let raw: LlmUsage;
+  try {
+    raw = driver.getUsage();
+  } catch {
+    return null;
+  }
+  return {
+    inputTokens: raw.inputTokens,
+    outputTokens: raw.outputTokens,
+    estimatedCostUsd: estimateCostUsd(raw),
+  };
 }
 
 /** Run one specialist and package its outcome. Never throws. */
@@ -77,6 +110,7 @@ async function runOne(
       transcript,
       error: null,
       steps,
+      usage: collectUsage(driver),
     };
   } catch (e) {
     return {
@@ -86,6 +120,8 @@ async function runOne(
       transcript: [],
       error: e instanceof Error ? e.message : String(e),
       steps: 0,
+      // Usage may still be non-zero if the crash happened mid-conversation.
+      usage: collectUsage(driver),
     };
   }
 }
@@ -120,7 +156,18 @@ async function runCampaign(
   outcomes.sort((a, b) => (orderOf.get(a.name) ?? 0) - (orderOf.get(b.name) ?? 0));
 
   const findings = outcomes.flatMap((o) => o.findings);
-  return { outcomes, findings };
+  const totalUsage: SpecialistUsage = outcomes.reduce<SpecialistUsage>(
+    (acc, o) => {
+      if (!o.usage) return acc;
+      return {
+        inputTokens: acc.inputTokens + o.usage.inputTokens,
+        outputTokens: acc.outputTokens + o.usage.outputTokens,
+        estimatedCostUsd: acc.estimatedCostUsd + o.usage.estimatedCostUsd,
+      };
+    },
+    { inputTokens: 0, outputTokens: 0, estimatedCostUsd: 0 },
+  );
+  return { outcomes, findings, totalUsage };
 }
 
 export interface ActivePentestDeps {
@@ -135,15 +182,26 @@ export interface ActivePentestDeps {
  * consent. On success, writes a single audit row naming the campaign; each
  * specialist is expected to write its own probe-level audit rows in its
  * backend.
+ *
+ * `acceptedVersions` (issue #24) defaults to the multi-specialist set (v2 only);
+ * the legacy BOLA-only wrapper passes CONSENT_ACCEPTED_FOR_BOLA_ONLY so an
+ * existing v1 consent still works for that one class.
  */
 export async function runActivePentest(
   deps: ActivePentestDeps,
   ctx: SpecialistContext,
   config: CampaignConfig,
+  opts?: { acceptedVersions?: readonly string[] },
 ): Promise<CampaignReport> {
   return runWithActiveTestConsent(
     { store: deps.consent, audit: deps.audit },
-    { orgId: ctx.orgId, projectId: ctx.projectId, actorId: ctx.jobId, action: "active_pentest_campaign" },
+    {
+      orgId: ctx.orgId,
+      projectId: ctx.projectId,
+      actorId: ctx.jobId,
+      action: "active_pentest_campaign",
+      acceptedVersions: opts?.acceptedVersions ?? CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST,
+    },
     () => runCampaign(ctx, config),
   );
 }

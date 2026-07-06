@@ -1,14 +1,34 @@
 import { PageHeader, PageHero } from "@/components/dashboard/PageHeader";
 import { ReconnectForm } from "@/components/dashboard/ReconnectForm";
+import {
+  ActiveTestingConsentForm,
+  type ProjectConsent,
+} from "@/components/dashboard/ActiveTestingConsentForm";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { loadProjects } from "@/lib/data";
+import { CONSENT_V2_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
+import { loadActiveTestConsent } from "@kelp/worker";
 
 export default async function SettingsPage() {
   const supabase = await getServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const projects = (await loadProjects()).filter((p) => p.supabaseRef);
+  const allProjects = await loadProjects();
+  const projects = allProjects.filter((p) => p.supabaseRef);
+
+  // Consent status per project — small N (projects per org), so sequential is fine.
+  const consents: ProjectConsent[] = [];
+  for (const p of allProjects) {
+    const row = await loadActiveTestConsent(p.id);
+    consents.push({
+      projectId: p.id,
+      projectName: p.name,
+      status: row ? "granted" : "none",
+      version: row?.consentVersion ?? null,
+      consentedAt: row?.consentedAt.toISOString() ?? null,
+    });
+  }
 
   return (
     <>
@@ -34,6 +54,18 @@ export default async function SettingsPage() {
             description="Rotated or revoked your token? Paste a fresh Management API token to restore the RLS scan for a project."
           >
             <ReconnectForm projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
+          </Section>
+
+          <Section
+            label="Active testing"
+            title="Consent for the multi-agent pen test"
+            description="Kelp only runs live security probes against a project after you grant consent for that specific project. Revoke any time — new campaigns will refuse immediately."
+          >
+            <ActiveTestingConsentForm
+              consents={consents}
+              copy={CONSENT_V2_TEXT}
+              version={CONSENT_VERSION_LATEST}
+            />
           </Section>
         </div>
       </main>
