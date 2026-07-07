@@ -2,7 +2,7 @@
 
 > Read this first. It is the single source of truth for a new contributor (human
 > or a fresh Claude session) to understand what Kelp is, where it stands, and how
-> to continue. Repo: `github.com/Mic52M/kelp` (private). Last updated: 2026-07-05.
+> to continue. Repo: `github.com/Mic52M/kelp` (private). Last updated: 2026-07-07.
 >
 > **For the multi-agent engine specifically** (Layer-by-layer architecture, the
 > load-bearing invariant, how to add a new specialist, verify commands): read
@@ -163,6 +163,37 @@ record a BOLA finding unless a real probe confirmed it).
   Billing (Upgrade), per-project re-scan, **Reconnect Supabase token** (Settings),
   finding **Copy prompt** (computed for real findings) + **Dismiss** (functional).
   Scan errors surfaced as calm banners (e.g. rejected Supabase token → "reconnect").
+- ✅ **Redis-backed scan queue (#7)** — BullMQ delivery replaces the in-process
+  poll loop for production. `apps/worker/src/redis-queue.ts` + `index.ts` bootstraps
+  a worker consuming `scans` jobs; the web app enqueues via the same queue when
+  `REDIS_URL` is set (falls back to `after()` locally). Idempotent by `scan_id`.
+- ✅ **Stripe billing scaffolding (#10)** — `apps/worker/src/stripe.ts` +
+  `/api/billing/checkout` + `/api/billing/webhook`. Signed webhook verification,
+  plan tier flipped on `checkout.session.completed` / `customer.subscription.*`.
+  `UpgradeButton.tsx` triggers hosted checkout from the dashboard.
+- ✅ **PLG free-plan gating (#17)** — `packages/core/src/plans.ts` owns tier
+  limits (scans/mo, projects, active-pentest access). Enforced server-side in
+  scan enqueue + orchestrator entry; over-limit returns a calm 402 banner instead
+  of crashing. Free = 1 project / N scans / no active pentest.
+- ✅ **Supabase per-project read-only role (#5)** — replaces the account-level
+  Management PAT for scans. `apps/worker/src/connectors/supabase-pg.ts` connects
+  as a least-privilege role provisioned per project; `SupabaseReadonlyForm.tsx`
+  walks the user through creating it. Old PAT path retained as fallback.
+- ✅ **Consent v2 (#24)** — `packages/core/src/consent.ts` exports
+  `CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST = ["v2"]` vs
+  `CONSENT_ACCEPTED_FOR_BOLA_ONLY = ["v1","v2"]`; multi-specialist campaigns
+  require v2. Full copy + toggle in `ActiveTestingConsentForm.tsx` (dashboard
+  settings). Legacy v1 acceptances stay valid for single-specialist BOLA.
+- ✅ **Cost accounting (#25)** — `packages/core/src/agent/pricing.ts` prices
+  Opus 4.7/4.8, Sonnet 5, Haiku 4.5 by longest-prefix match on model id.
+  Anthropic driver reports `LlmUsage`; orchestrator attaches `SpecialistUsage`
+  (tokens + `estimatedCostUsd`) to every outcome and a `totalUsage` on the
+  campaign. Persisted per scan in `scans.cost_cents` (migration `0007`).
+- ✅ **Live-Anthropic verify variants (#26)** — one `verify-<name>-target-live.ts`
+  per specialist, gated by `KELP_ANTHROPIC_LIVE=1`. Shared harness in
+  `apps/worker/src/agent/live-verify.ts`. `npm run verify:live -w @kelp/worker`
+  chains all seven; each burns real tokens against `localhost:4400` and prints
+  cost. Gate absent → skips (never fails CI by default).
 
 ## 7. Credentials & environment (NOT in the repo)
 
@@ -224,23 +255,23 @@ Useful scripts (worker, run with `--env-file=.env.local`):
 
 **Every open issue now has a "Execution context for a fresh Claude Code session"
 comment** with file pointers, approach and a verification step — a new session can
-pick any issue and run it. Recent work this cycle: real fix PRs (#3, done),
-scanner precision + auto-PR gate (#18, done), multi-user GitHub install (#14, done).
+pick any issue and run it. Recent work this cycle (all shipped, closed): #5
+Supabase read-only role, #7 Redis queue, #10 Stripe, #17 plan gating, #24
+consent v2, #25 cost accounting, #26 live-Anthropic verify. Multi-agent phase 2 +
+phase 3 both done — the moat is complete engine-side; the remaining gap is
+wiring it into the customer scan path (#27).
 
 Suggested order toward **production-ready, self-serve** (the current north star):
 
-1. **#1** rotate GitHub App secret + private key — security, blocking prod, small.
-2. **#2** make the GitHub App public + dedicated org — unblocks true multi-user
+1. **#27** wire multi-agent orchestrator into the customer scan path (dashboard
+   trigger + progress + findings render). This is the big one — turns everything
+   already shipped into product value. ~3-4h focused. **Do this next.**
+2. **#1** rotate GitHub App secret + private key — security, blocking prod, small.
+3. **#2** make the GitHub App public + dedicated org — unblocks true multi-user
    install (pairs with the closed #14).
-3. **#5** per-project read-only Supabase role (drop the account-level PAT) — the
-   DB-side twin of #14; least-privilege.
-4. **#15** findings resolve/regress on re-scan — closes the lifecycle loop.
-5. **#4** GitHub push webhook → auto re-scan — continuous scanning (paid value).
-6. **#7** Redis-backed queue — replace the poll loop before real load.
-7. **#13** Resend-grade design pass — do after the connect flow is final (#2/#5).
-8. **#10 + #17** Stripe billing + free-plan gating — the PLG money path.
-9. **#16** production deploy (Vercel + Railway/Fly) — after #1/#2/#7.
-10. **#9** real live BOLA tester — the third vuln class; strictly consent-gated.
+4. **#13** Resend-grade design pass — do after #27 (dashboard surface will change).
+5. **#16** production deploy (Vercel + Railway/Fly) — after #1/#2.
+6. **#19** parent tracker — closes automatically once #27 lands.
 
 ## 11z. Multi-agent pen-testing framework (post-#19 phase 1)
 
@@ -365,21 +396,27 @@ against the deliberately-vulnerable test target:
   · RLS-deep    → cross-account probe at the *table* level
   · Weak-crypto → Set-Cookie flag audit
 
-99/99 core tests green. All 7 `npm run verify:*-target -w @kelp/worker`
+121/121 core tests green. All 7 `npm run verify:*-target -w @kelp/worker`
 scripts exit 0 against the running test target, with zero false
 positives on any control endpoint.
 
-**Phase 3 remains** (see #19): consent v2 UI + migration (#24),
-per-specialist token cost accounting (#25), live Anthropic-driver
-verify variants (#26). Everything else — deployment (#16), Stripe
-(#10), the read-only Supabase role (#5) — is independent of the
-multi-agent roadmap and tracked separately.
+**Phase 3 complete** (issues #24, #25, #26 closed):
+  · Consent v2 shipped — `CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST` gates
+    multi-specialist campaigns; v1 acceptances still valid for BOLA only.
+    Copy + toggle live in `ActiveTestingConsentForm.tsx`.
+  · Cost accounting shipped — `packages/core/src/agent/pricing.ts` prices
+    every Anthropic call; orchestrator returns `SpecialistUsage` per
+    specialist + `totalUsage` per campaign; persisted in `scans.cost_cents`
+    (migration `0007`).
+  · Live-Anthropic verify shipped — one `verify-<name>-target-live.ts` per
+    specialist under `apps/worker/src/agent/`, shared harness in
+    `live-verify.ts`, all seven chained by `npm run verify:live`. Gated by
+    `KELP_ANTHROPIC_LIVE=1`.
 
-Left for phase 2 (see #19): add real specialists (auth-bypass, injection,
-SSRF, RLS-deep, exposure, weak-crypto), bump consent to v2 with the expanded
-copy, add cost accounting for Claude API tokens per specialist, and a
-`verify:*-target-live.ts` variant per specialist that uses the real Anthropic
-driver instead of the scripted driver used today.
+**What's left before the moat is customer-reachable:** #27 — wire
+`runActivePentest` into the dashboard scan path (trigger button, per-specialist
+progress rows, cost persisted, findings rendered). Everything the orchestrator
+needs is already shipped; #27 is pure integration work.
 
 ## 11a. Findings lifecycle (post-#15)
 

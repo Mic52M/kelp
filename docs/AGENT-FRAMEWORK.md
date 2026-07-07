@@ -5,10 +5,11 @@
 > Read this after `docs/HANDOFF.md` — that gives you the *product* context; this
 > one gives you the *engine*.
 >
-> **Status.** Phase 1 (framework) and Phase 2 (all seven planned specialists)
-> are shipped and verified end-to-end. Phase 3 (consent v2, cost accounting,
-> live-driver verify variants) is open — see the "What's next" section at the
-> bottom.
+> **Status.** Phases 1–3 all shipped and verified end-to-end: framework,
+> seven specialists, consent v2 (#24), per-specialist cost accounting (#25),
+> and live-Anthropic verify variants (#26). The remaining gap is *product
+> integration* — the engine is not yet reachable from the customer dashboard.
+> Tracked in #27; see the "What's next" section at the bottom.
 
 ---
 
@@ -128,6 +129,12 @@ The **executor** is where the load-bearing invariant lives. Every specialist's
 executor maintains a `confirmed` set keyed by the probe input, and every
 `report_finding` tool call is rejected unless the matching key is in that set.
 
+**Token & cost usage (issue #25).** An `LlmAgentDriver` may optionally implement
+`getUsage(): LlmUsage` — cumulative `{ inputTokens, outputTokens, model? }` since
+`start()`. The Anthropic driver populates it; scripted test drivers omit it (a
+missing `getUsage` is not an error — the orchestrator treats it as "cost
+accounting not available"). See §3.5 for how those numbers flow to the outcome.
+
 ### 3.3 Layer 3 — Orchestrator
 
 `runActivePentest` is the campaign entry point. Given a list of
@@ -158,8 +165,46 @@ Kelp test. It:
   BEFORE running the task.
 - Only then runs the campaign.
 
-The consent version is currently `"v1"` (BOLA-only wording). Phase 3 issue
-#24 bumps this to `"v2"` with the multi-specialist copy.
+Consent version — since #24, `packages/core/src/consent.ts` exports two
+constants:
+
+- `CONSENT_ACCEPTED_FOR_BOLA_ONLY = ["v1", "v2"]` — legacy BOLA-only path;
+  old v1 acceptances still valid.
+- `CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST = ["v2"]` — multi-specialist
+  campaigns MUST pass this via `acceptedVersions` on the campaign context,
+  so a v1-only project can never trigger a multi-specialist run.
+
+`runWithActiveTestConsent` takes an optional `{ acceptedVersions }` option: if
+present, the stored consent version must be in that list, otherwise
+`ConsentRequiredError` is thrown. `runActivePentest` forwards
+`ctx.acceptedVersions` — always set it to `CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST`
+from any multi-specialist call site.
+
+### 3.5 Cost accounting (issue #25)
+
+Every specialist runs its own Claude conversation, so a campaign's cost is
+non-trivial and needs to be visible + bounded before the model burns tokens.
+
+- **Pricing.** `packages/core/src/agent/pricing.ts` holds a prefix-keyed rate
+  table (Opus 4.7/4.8, Sonnet 5, Haiku 4.5 — USD per million tokens).
+  `estimateCostUsd(usage)` matches the longest key that the driver's `model` id
+  starts with, so versioned suffixes (e.g. `claude-haiku-4-5-20251001`) resolve
+  to the base rate without an entry per date. Unknown model → returns `0`
+  (fine for tests; production callers must cap explicitly).
+- **Attribution.** After each specialist finishes, `runActivePentest` calls
+  `collectUsage(driver)` and attaches a `SpecialistUsage` — `{ inputTokens,
+  outputTokens, estimatedCostUsd }` — to that outcome. Drivers with no
+  `getUsage` yield `usage: null` (scripted tests).
+- **Aggregation.** The campaign result carries `totalUsage: SpecialistUsage`
+  summed across every outcome that reported it. Callers persist this into
+  `scans.cost_cents` via `costUsdToCents` (migration `0007_scan_cost.sql`).
+- **Caps.** `MONTHLY_CAMPAIGN_CAP_CENTS: Record<PlanTier, number>` and
+  `assertUnderCap` throw a typed error the API layer maps to HTTP 402. Free
+  tier has a cap of `0` — active pen-testing is paid-only.
+- **Verify.** `npm run verify:cost-accounting -w @kelp/worker` exercises the
+  driver → outcome plumbing end-to-end against the test target with the
+  scripted driver (asserts usage nulls where expected + populated where the
+  driver reports it).
 
 ---
 
@@ -305,13 +350,43 @@ done
 Expected: each script prints a green ✓ for both the vulnerable and the control
 endpoint and exits 0.
 
+### 7.3.1 Live-Anthropic verify (issue #26)
+
+Every specialist has a sibling `verify-<name>-target-live.ts` that swaps the
+scripted driver for the real Anthropic driver — same target, same assertions,
+but the LLM actually plans the probes. Gated by `KELP_ANTHROPIC_LIVE=1` so a
+casual `verify:*` sweep can't burn tokens by accident; without the env var each
+live script prints why it skipped and exits 0.
+
+```bash
+# All seven, chained (test target must be running, valid ANTHROPIC_API_KEY):
+KELP_ANTHROPIC_LIVE=1 npm run verify:live --workspace @kelp/worker
+
+# One at a time follow the same naming — e.g.:
+KELP_ANTHROPIC_LIVE=1 npm run verify:bola-target-live --workspace @kelp/worker
+```
+
+Each live script prints tokens in/out and cost USD before exiting. Shared
+wiring is in `apps/worker/src/agent/live-verify.ts` (env gate, driver
+creation, cost printing) so each variant only declares WHAT to test.
+
+### 7.3.2 Cost-accounting verify (issue #25)
+
+```bash
+npm run verify:cost-accounting --workspace @kelp/worker
+```
+
+Runs a campaign through `runActivePentest` with mixed scripted + usage-emitting
+drivers and asserts `SpecialistUsage` attaches per outcome, `totalUsage`
+aggregates correctly, and `null` propagates when a driver has no `getUsage`.
+
 ### 7.4 Run the unit tests
 
 ```bash
 npm test   # from the repo root
 ```
 
-Expected: `ℹ tests 99` / `pass 99` / `fail 0`.
+Expected: `ℹ tests 121` / `pass 121` / `fail 0`.
 
 ### 7.5 Reading a verify script
 
@@ -366,11 +441,20 @@ target endpoint in mind):
    - Real `fetch` against the running target. Return only the evidence
      needed to prove the invariant — never bodies, values or PII.
 
-6. **Write the verify script + npm script.**
+6. **Write the (scripted) verify script + npm script.**
    - `apps/worker/src/agent/verify-<name>-target.ts` — copy the closest
      existing one.
    - Add `"verify:<name>-target": "node dist/agent/verify-<name>-target.js"`
      to `apps/worker/package.json`.
+
+6b. **Write the live-driver verify variant (issue #26).**
+   - `apps/worker/src/agent/verify-<name>-target-live.ts` — copy the closest
+     existing one (they're ~30 LOC each; the harness in `live-verify.ts` does
+     the wiring). Declare the specialist, `makeBackend`, and 1-2 assertions
+     against the confirmed findings.
+   - Add `"verify:<name>-target-live"` + append it to the `verify:live` chain
+     in `apps/worker/package.json`. The env gate (`KELP_ANTHROPIC_LIVE=1`) is
+     enforced by the harness — you don't wire it yourself.
 
 7. **Update the specialist index.**
    - Add `export * from "./agent/specialists/<name>.js";` to
@@ -432,10 +516,27 @@ packages/core/src/
       rls-deep.ts / .test.ts      Specialist 6
       weak-crypto.ts / .test.ts   Specialist 7
 
-apps/worker/src/agent/
-  anthropic-driver.ts             Real LlmAgentDriver against Anthropic API
-  test-target-<name>-backend.ts   Real HTTP probe backend, one per specialist
-  verify-<name>-target.ts         E2E validation script, one per specialist
+packages/core/src/
+  plans.ts                        Plan tiers + limits (#17) — feeds cost caps
+  agent/
+    pricing.ts / pricing.test.ts  Model rate table + estimateCostUsd (#25)
+
+apps/worker/src/
+  redis-queue.ts                  BullMQ scan queue (#7)
+  stripe.ts                       Checkout + webhook wiring (#10)
+  connectors/supabase-pg.ts       Per-project read-only Postgres role (#5)
+  agent/
+    anthropic-driver.ts           Real LlmAgentDriver against Anthropic API
+    test-target-<name>-backend.ts Real HTTP probe backend, one per specialist
+    verify-<name>-target.ts       Scripted-driver E2E, one per specialist
+    verify-<name>-target-live.ts  Live-Anthropic E2E, one per specialist (#26)
+    verify-cost-accounting.ts     Usage plumbing E2E (#25)
+    live-verify.ts                Shared harness for the *-live scripts (#26)
+
+apps/web/components/dashboard/
+  ActiveTestingConsentForm.tsx    Consent v2 UI (#24)
+  UpgradeButton.tsx               Stripe checkout entry (#10)
+  SupabaseReadonlyForm.tsx        Per-project read-only role setup (#5)
 
 apps/test-target/
   src/server.ts                   Express app with 7 vulnerable + 7 control pairs
@@ -446,6 +547,7 @@ packages/db/migrations/
   0004_vuln_class_injection.sql   ALTER TYPE for 'injection'
   0005_vuln_class_ssrf.sql        ALTER TYPE for 'ssrf'
   0006_vuln_class_exposure.sql    ALTER TYPE for 'exposure'
+  0007_scan_cost.sql              scans.cost_cents column (#25)
 
 docs/
   HANDOFF.md                      Product context (start here)
@@ -454,43 +556,51 @@ docs/
 
 ---
 
-## 11. What's next (phase 3)
+## 11. What's next — customer integration (#27)
 
-The moat is functionally alive. What separates it from being production-ready:
+Phase 3 is closed. Consent v2 (#24), cost accounting (#25), and live-Anthropic
+verify (#26) are all shipped. What separates the engine from actual product
+value is one thing: **it is not yet reachable from the customer dashboard.**
+Today the orchestrator only runs via `npm run verify:*-target[-live]` against
+the in-repo test target — a real customer connecting a real repo cannot
+trigger a campaign.
 
-- **#24 — Consent v2 (copy + migration + onboarding UI).** The consent
-  version is still `"v1"` (BOLA-only wording). Multi-specialist campaigns
-  need a copy that enumerates every enabled specialist, the concurrency
-  ceiling, and the data-hygiene guarantees, and a `"v2"` accept in the
-  Settings UI. Bumping the DB constant is the small part; getting the copy
-  right is the load-bearing part.
-- **#25 — Per-specialist Claude token cost accounting.** Every specialist
-  runs its own Claude conversation. With seven specialists in parallel per
-  campaign, cost visibility becomes a prerequisite for pricing and for
-  per-org rate limits. Plan: track `usage` on the Anthropic driver, plumb
-  it through `SpecialistOutcome`, add a `scans.cost_cents` column, refuse
-  campaigns projected over the plan cap.
-- **#26 — Live Anthropic-driver verify variants.** Every current verify
-  script uses a scripted driver — that's fine to validate the executor and
-  the backend, but doesn't validate the prompt. Before enabling multi-agent
-  in the customer path, each specialist needs a `verify-<name>-target-live.ts`
-  that uses the real Anthropic driver end-to-end. Gate on #25 so we have
-  cost ceilings.
+Tracked in **#27**. Scope, in short:
 
-Beyond phase 3, everything for a live customer path lives in the
-independent lanes: deployment (#16), Stripe billing + gating (#10 + #17),
-Supabase per-project read-only role (#5), Redis-backed queue (#7). None of
-those block the multi-agent framework — they block the *product* around it.
+- **Customer specialist backends** — a per-specialist `customer-backends/`
+  variant that discovers endpoints from the connected repo + Supabase and
+  probes the customer's deployed app (new `projects.app_base_url` column,
+  migration `0008`). Every data-hygiene rule in §9 must survive the port.
+- **Scan pipeline** — a new scan class (or `scans.mode`) that dispatches
+  through `runActivePentest`, loads consent v2 + plan tier + monthly spend,
+  and persists per-specialist findings + `scans.cost_cents`.
+- **Dashboard** — "Run active pen test" button (paid tiers only, gated by
+  #17), consent v2 re-check modal, per-specialist progress rows in
+  `ScanningView`, class-specific severity + icons on the findings page.
+- **Cost cap** — every campaign checks the projected cost against
+  `MONTHLY_CAMPAIGN_CAP_CENTS[plan]` BEFORE the first Claude call; over-cap
+  → calm "upgrade for more" banner, not a crash.
+- **`verify:campaign-e2e`** — new script that boots the target, seeds a
+  consent v2 row, and runs one campaign through the *full* scan-processor
+  path (not the direct orchestrator call). This is the gate for enabling
+  multi-agent in production.
+
+Everything else (deployment #16, GitHub App rotation #1, App public + org
+#2, design pass #13) is independent of the multi-agent roadmap.
 
 ---
 
 ## 12. Verified end-to-end today
 
-At the time this file is written, on `master`:
+At the time this file is written, on `master` (commit `2728570` or later):
 
-- **99/99** core unit tests green.
+- **121/121** core unit tests green (includes pricing + consent v2 coverage).
 - **7/7** `npm run verify:*-target -w @kelp/worker` scripts exit 0 against
-  the running test target.
+  the running test target (scripted driver).
+- **7/7** `npm run verify:*-target-live -w @kelp/worker` scripts exit 0 when
+  run with `KELP_ANTHROPIC_LIVE=1` + a valid `ANTHROPIC_API_KEY` (real
+  Anthropic driver).
+- **`verify:cost-accounting`** exits 0.
 - **Zero false positives** on any control endpoint across all seven
   specialists.
 
