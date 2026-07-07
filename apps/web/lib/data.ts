@@ -244,7 +244,10 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
         new Set(parsed.map((e) => friendlyScanIssue(e.vulnClass, e.message))),
       );
     } catch {
-      /* non-JSON error — ignore for display */
+      // Plain-string scan errors (e.g. the customer-backend preflight or the
+      // 20-min self-heal message) never get JSON-parsed — surface them
+      // verbatim, since they're already written for humans.
+      if (latestScan.status === "failed") scanIssues = [latestScan.error];
     }
   }
 
