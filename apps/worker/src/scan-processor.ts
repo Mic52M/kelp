@@ -268,7 +268,29 @@ async function executeScan(scan: {
     }
     return await executePassiveScan(scan);
   } catch (e) {
-    await finishScan(scan.scanId, "failed", e instanceof Error ? e.message : String(e));
+    const msg = e instanceof Error ? e.message : String(e);
+    try {
+      await finishScan(scan.scanId, "failed", msg);
+    } catch (finishErr) {
+      // Belt-and-braces: if finishScan itself blows up (e.g. a pending
+      // migration means one of the columns it writes to doesn't exist), we
+      // must NOT let the scan stay `running` forever. Fall back to the
+      // bare-minimum status flip so the self-heal + UI unstick immediately.
+      console.error(
+        "finishScan failed after scan error — falling back to bare status update:",
+        finishErr instanceof Error ? finishErr.message : finishErr,
+      );
+      await getPool()
+        .query(
+          `update scans set status = 'failed', finished_at = now(),
+                  error = coalesce(nullif($2, ''), 'Scan errored and finishScan write failed — check worker logs.')
+            where id = $1`,
+          [scan.scanId, `${msg} [finishScan: ${String(finishErr).slice(0, 160)}]`],
+        )
+        .catch((bare) => {
+          console.error("bare status update also failed:", bare instanceof Error ? bare.message : bare);
+        });
+    }
     throw e;
   }
 }
