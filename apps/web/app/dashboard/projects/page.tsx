@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader, PageHero } from "@/components/dashboard/PageHeader";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { loadProjects } from "@/lib/data";
-import { rescanAction } from "../actions";
+import { rescanAction, resetStuckScanAction } from "../actions";
 
 export default async function ProjectsPage() {
   const supabase = await getServerSupabase();
@@ -57,12 +57,25 @@ export default async function ProjectsPage() {
                   <span className="shrink-0 text-sm text-fog-400">
                     {p.activeFindings} {p.activeFindings === 1 ? "finding" : "findings"}
                   </span>
-                  <form action={rescanAction} className="shrink-0">
-                    <input type="hidden" name="projectId" value={p.id} />
-                    <Button type="submit" variant="secondary" size="sm" disabled={scanning}>
-                      {scanning ? "Scanning…" : "Re-scan"}
-                    </Button>
-                  </form>
+                  <div className="shrink-0 flex flex-col items-end gap-1">
+                    <form action={rescanAction}>
+                      <input type="hidden" name="projectId" value={p.id} />
+                      <Button type="submit" variant="secondary" size="sm" disabled={scanning}>
+                        {scanning ? "Scanning…" : "Re-scan"}
+                      </Button>
+                    </form>
+                    {scanning && (
+                      <form action={resetStuckScanAction}>
+                        <input type="hidden" name="projectId" value={p.id} />
+                        <button
+                          type="submit"
+                          className="text-[10.5px] text-fog-500 underline decoration-fog-700 underline-offset-2 transition-colors hover:text-fog-300"
+                        >
+                          Reset if stuck
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </div>
               );
             })}
