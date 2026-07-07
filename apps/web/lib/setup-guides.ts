@@ -36,7 +36,9 @@ export interface SetupGuideContent {
 // ─── Supabase read-only connection string ────────────────────────────────────
 
 export const SUPABASE_READONLY_ROLE_SQL = `-- Kelp read-only role — paste in Supabase → SQL Editor, replace the password,
--- then click Run. Copy the connection string on the last line back into Kelp.
+-- then click Run. After the role is created, grab the CONNECTION STRING from
+-- Supabase → Project Settings → Database → Connect → "Session pooler" (or
+-- "Transaction pooler"), then rewrite it as described below.
 
 create role kelp_readonly with login password 'CHANGE_ME_STRONG_PASSWORD';
 
@@ -51,9 +53,23 @@ grant select on information_schema.columns to kelp_readonly;
 
 alter default privileges in schema public revoke select on tables from kelp_readonly;
 
--- Connection string to paste back in Kelp (replace <ref> with your project ref
--- from Supabase → Project Settings → General):
---   postgres://kelp_readonly:CHANGE_ME_STRONG_PASSWORD@db.<ref>.supabase.co:6543/postgres`;
+-- ─── HOW TO BUILD THE CONNECTION STRING ────────────────────────────────────
+--
+-- Do NOT use the "Direct connection" URL (db.<ref>.supabase.co) — it is
+-- IPv6-only for new projects and most networks (including Vercel/Railway/
+-- most dev machines) cannot reach it, giving ENOTFOUND.
+--
+-- Use the POOLER URL from Supabase → Settings → Database → Connect:
+--   postgres://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:6543/postgres
+--
+-- Rewrite it for Kelp — two edits:
+--   1. Replace  postgres.<ref>          with  kelp_readonly.<ref>
+--      (the pooler uses "<db_user>.<projectref>" as the username, so a
+--       custom role slots in the same way as the default 'postgres' user)
+--   2. Replace  <pass>                  with  CHANGE_ME_STRONG_PASSWORD
+--
+-- Final shape you paste back in Kelp:
+--   postgres://kelp_readonly.<ref>:CHANGE_ME_STRONG_PASSWORD@aws-0-<region>.pooler.supabase.com:6543/postgres`;
 
 export const SUPABASE_READONLY_GUIDE: SetupGuideContent = {
   whatIsIt:
@@ -62,10 +78,10 @@ export const SUPABASE_READONLY_GUIDE: SetupGuideContent = {
     {
       platform: "Supabase",
       steps: [
-        "Open your project in Supabase and click SQL Editor in the left sidebar.",
-        "Paste the SQL below, replace CHANGE_ME_STRONG_PASSWORD with a real password (save it somewhere), then Run.",
-        "Grab your project ref from Project Settings → General (e.g. abcdefgh).",
-        "The last comment in the SQL shows the connection string — paste it back in the field above.",
+        "Open your project in Supabase → SQL Editor (left sidebar).",
+        "Paste the SQL below, replace CHANGE_ME_STRONG_PASSWORD with a real password (save it — it's not recoverable), then Run.",
+        "Grab the pooler URL from Project Settings → Database → Connect → Session pooler (or Transaction pooler). It looks like postgres://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:6543/postgres — do NOT use the Direct connection, it's IPv6-only and most networks reject it.",
+        "In that URL: replace postgres.<ref> with kelp_readonly.<ref>, and replace the password with the one you picked. Paste the result in the field above.",
       ],
       link: { label: "Open Supabase SQL Editor", href: "https://supabase.com/dashboard/project/_/sql/new" },
     },
