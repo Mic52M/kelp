@@ -53,6 +53,64 @@ const DEFAULT_MODEL = "claude-haiku-4-5";
 const DEFAULT_TARGET_OWNER_ID = "userB";
 const DEFAULT_TARGET_OWNED_IDS = ["ord_2001", "ord_2002"];
 
+/** Wall-clock cap for the preflight probe. Real /api/login should answer in
+ *  well under a second; a stalled SPA proxy would otherwise hang the campaign. */
+const PREFLIGHT_TIMEOUT_MS = 8000;
+
+/**
+ * Check that the target app looks like the shape the MVP customer backends
+ * understand (POST /api/login → JSON {token}). Throws a user-facing error
+ * that ends up in scans.error → the dashboard scan-issues banner when the
+ * target doesn't fit — the seven specialists share this same auth shape, so
+ * one preflight covers all of them.
+ */
+async function assertTargetMatchesTestShape(
+  baseUrl: string,
+  accountA: { email: string; password: string },
+): Promise<void> {
+  const url = `${baseUrl.replace(/\/$/, "")}/api/login`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: accountA.email, password: accountA.password }),
+      signal: AbortSignal.timeout(PREFLIGHT_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `Kelp couldn't reach POST ${url} within ${PREFLIGHT_TIMEOUT_MS / 1000}s (${msg}). ` +
+        `The active pen test's MVP customer path targets an /api/login endpoint that ` +
+        `returns JSON {token}. Real endpoint discovery from your repo is on the roadmap ` +
+        `(#27 follow-up) — until then, the campaign only works on apps that match this shape.`,
+    );
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(
+      `${url} answered ${res.status} with "${contentType || "unknown"}" instead of JSON. ` +
+        `Most Lovable / Vercel SPAs catch unknown paths with index.html — the active pen ` +
+        `test's MVP customer path needs a real POST /api/login endpoint that returns ` +
+        `JSON {token}. Real endpoint discovery from your repo is the planned follow-up (#27); ` +
+        `until it ships, active pen tests can only run against apps with this exact shape.`,
+    );
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `POST ${url} rejected the test account with HTTP ${res.status}. ` +
+        `Double-check the Test account A credentials on the Configuration page, or that ` +
+        `Kelp's IP isn't blocked by your app's auth layer.`,
+    );
+  }
+
+  // Consume the body so the connection is released; no need to keep it — the
+  // seven backends will re-login themselves during their factory phase.
+  await res.text();
+}
+
 /**
  * Build the full 7-specialist campaign for a customer project. Each entry
  * gets its own Anthropic driver instance — the orchestrator's per-specialist
@@ -64,6 +122,18 @@ export async function buildCustomerCampaignEntries(
   const model = cfg.model ?? DEFAULT_MODEL;
   const apiKey = cfg.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
+
+  // MVP compatibility preflight (issue #27 follow-up). The seven customer
+  // backends currently reuse the test-target endpoint shape (POST /api/login
+  // returning JSON {token}, then /api/orders/{id}, /api/profiles/{id} etc.).
+  // A real Lovable / Vercel SPA usually catches every unknown path with
+  // index.html + HTTP 200 — so the naive `res.json()` in each backend's
+  // login() would throw a cryptic SyntaxError, or worse, hang if the target
+  // stalls. Preflight once here: fail fast with an actionable message that
+  // surfaces to the dashboard scan-issues banner. Real endpoint discovery
+  // from the connected repo / Supabase schema is the follow-up that will
+  // remove this whole check.
+  await assertTargetMatchesTestShape(cfg.appBaseUrl, cfg.accountA);
 
   const client = new Anthropic({ apiKey });
   const driver = () => createAnthropicDriver(client, model);
