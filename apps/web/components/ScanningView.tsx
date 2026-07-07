@@ -16,20 +16,20 @@ const PASSIVE_PHASES = [
 ];
 
 // The seven multi-agent specialists (#27). Order = campaign dispatch order.
-// `pending` marks the four still waiting for repo-based HTTP endpoint
-// discovery (Stage B, #27 follow-up) — they run as no-op backends today.
+// Stage A (PostgREST + Auth) + Stage B (Supabase Edge Functions from the
+// connected repo) are both live.
 interface ActivePhase {
   label: string;
   pending?: boolean;
 }
 const ACTIVE_PHASES: ActivePhase[] = [
   { label: "BOLA — cross-account object access" },
-  { label: "Auth bypass — impersonation techniques", pending: true },
-  { label: "Injection — payload vs baseline diff", pending: true },
-  { label: "SSRF — out-of-band callback", pending: true },
+  { label: "Auth bypass — edge-function identity override" },
+  { label: "Injection — payload vs baseline diff" },
+  { label: "SSRF — out-of-band callback" },
   { label: "Exposure — response field-name audit" },
   { label: "RLS-deep — cross-account at the table level" },
-  { label: "Weak crypto — Set-Cookie flag audit", pending: true },
+  { label: "Weak crypto — Set-Cookie flag audit" },
 ];
 
 export function ScanningView({
@@ -50,10 +50,10 @@ export function ScanningView({
   const active = status === "queued" || status === "running";
   const passivePhases: ActivePhase[] = PASSIVE_PHASES.map((l) => ({ label: l }));
   const phases: ActivePhase[] = mode === "active_pentest" ? ACTIVE_PHASES : passivePhases;
-  // Stage A active pen test = 3 real specialists (BOLA, RLS-deep, Exposure)
-  // running in parallel — ~90–150s on Haiku 4.5 across a typical Supabase
-  // schema. Bumps once the four Stage-B specialists come online.
-  const eta = etaSeconds ?? (mode === "active_pentest" ? 150 : 30);
+  // Active pen test = up to 7 specialists (3 PostgREST + 4 edge-function)
+  // running in parallel on Haiku 4.5 — ~3–4 min across a typical Supabase
+  // schema plus a repo's edge functions.
+  const eta = etaSeconds ?? (mode === "active_pentest" ? 210 : 30);
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {

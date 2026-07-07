@@ -1,29 +1,35 @@
-// Build the seven SpecialistEntry values for a real customer campaign (#27).
+// Build the SpecialistEntry values for a real customer campaign (#27).
 //
-// Stage A (this file's current shape) — Supabase-native. Kelp assumes the
-// customer is on Supabase Auth + PostgREST (the vibe-coding stack: Lovable /
-// Bolt / Cursor / v0 on Supabase). Three specialists probe real customer
-// data through PostgREST with real signed-in JWTs; the other four are wired
-// with "Stage B pending" no-op backends so the checklist stays honest about
-// what's covered without crashing the campaign.
+// Supabase-native. Kelp assumes the customer is on the vibe-coding stack
+// (Lovable / Bolt / Cursor / v0 on Supabase). Two probe surfaces:
 //
-//   ✓ BOLA        — PostgREST cross-account row read (real)
-//   ✓ RLS-deep    — PostgREST owner-column mismatch check (real)
-//   ✓ Exposure    — PostgREST response field-name audit (real)
-//   ⧗ Auth-bypass — needs HTTP endpoint discovery from the customer's repo
-//   ⧗ Injection   — same
-//   ⧗ SSRF        — same
-//   ⧗ Weak-crypto — same (also needs a cookie-setting endpoint)
+//   Stage A — PostgREST + Supabase Auth (always available):
+//     ✓ BOLA        — cross-account row read by id
+//     ✓ RLS-deep    — owner-column mismatch check
+//     ✓ Exposure    — response field-name audit
 //
-// Stage B (planned): walk the connected GitHub tarball to discover the real
-// /api/* handlers (Next.js / Vercel functions / Express) and swap the four
-// stubs in below for real backends.
+//   Stage B — Supabase Edge Functions discovered from the connected repo
+//     (`supabase/functions/*/index.ts`), only when a repo is connected:
+//     ✓ Auth-bypass — does a function trust a client-supplied identity?
+//     ✓ Injection   — payload vs baseline on text params
+//     ✓ SSRF        — out-of-band callback on URL params
+//     ✓ Weak-crypto — Set-Cookie flag audit
+//
+// SAFETY: the edge backends only ever invoke functions the discovery step
+// classified NON-mutating — delete-account / create-payment-checkout / … are
+// discovered, reported, and never called. When no repo (hence no edge
+// functions) is connected, the four Stage-B specialists are simply omitted.
 
 import {
   bolaSpecialist,
   exposureSpecialist,
   rlsDeepSpecialist,
+  authBypassSpecialist,
+  injectionSpecialist,
+  ssrfSpecialist,
+  weakCryptoSpecialist,
   type SpecialistEntry,
+  type DiscoveredEdgeFunction,
 } from "@kelp/core";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAnthropicDriver } from "../anthropic-driver.js";
@@ -32,16 +38,12 @@ import { listPublicTables } from "../supabase-native/schema.js";
 import { createSupabaseBolaBackend } from "../supabase-native/bola-backend.js";
 import { createSupabaseRlsDeepBackend } from "../supabase-native/rls-deep-backend.js";
 import { createSupabaseExposureBackend } from "../supabase-native/exposure-backend.js";
-
-/** Names of specialists deliberately skipped at Stage A because they still
- *  need HTTP endpoint discovery from the customer's repo. The UI reads this
- *  to render "Stage B — coming" rows in the checklist / notes. */
-export const STAGE_B_PENDING_SPECIALISTS = [
-  "auth-bypass",
-  "injection",
-  "ssrf",
-  "weak-crypto",
-] as const;
+import {
+  createEdgeAuthBypassBackend,
+  createEdgeInjectionBackend,
+  createEdgeSsrfBackend,
+  createEdgeWeakCryptoBackend,
+} from "../supabase-native/edge-backends.js";
 
 export interface CustomerCampaignConfig {
   /** Supabase project ref (short id, e.g. "hebrhezulnxlhgrfbegt"). */
@@ -62,6 +64,9 @@ export interface CustomerCampaignConfig {
   /** The two real Supabase-Auth users the campaign impersonates. */
   accountA: { email: string; password: string };
   accountB: { email: string; password: string };
+  /** Edge functions discovered from the connected repo (Stage B). Empty/omitted
+   *  when no repo is connected — the four HTTP specialists are then skipped. */
+  edgeFunctions?: DiscoveredEdgeFunction[];
   /** Claude model — defaults to Haiku for cheap coverage. */
   model?: string;
   /** Anthropic API key; falls back to `ANTHROPIC_API_KEY` env. */
@@ -159,13 +164,26 @@ export async function buildCustomerCampaignEntries(
     ),
   ]);
 
-  // Only ship the three specialists that have real customer backends today —
-  // the four Stage-B-pending ones would otherwise waste Anthropic tokens for a
-  // guaranteed zero-finding outcome. The ScanningView renders them explicitly
-  // as "Stage B — coming" so the checklist stays honest.
-  return [
+  const entries: SpecialistEntry<unknown, unknown>[] = [
     { specialist: bolaSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: bola, driver: driver() },
     { specialist: exposureSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: exposure, driver: driver() },
     { specialist: rlsDeepSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: rlsDeep, driver: driver() },
   ];
+
+  // Stage B: add the four Edge-Function specialists when a repo was connected
+  // and at least one non-mutating function was discovered. The edge backends
+  // themselves enforce the read-only-only safety rule.
+  const edgeFunctions = cfg.edgeFunctions ?? [];
+  const probeableEdge = edgeFunctions.filter((f) => !f.mutating);
+  if (probeableEdge.length > 0) {
+    const edgeCfg = { ref: cfg.supabaseRef, anonKey, sessionA, sessionB, functions: edgeFunctions };
+    entries.push(
+      { specialist: authBypassSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: createEdgeAuthBypassBackend(edgeCfg), driver: driver() },
+      { specialist: injectionSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: createEdgeInjectionBackend(edgeCfg), driver: driver() },
+      { specialist: ssrfSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: createEdgeSsrfBackend(edgeCfg), driver: driver() },
+      { specialist: weakCryptoSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: createEdgeWeakCryptoBackend(edgeCfg), driver: driver() },
+    );
+  }
+
+  return entries;
 }

@@ -458,12 +458,40 @@ an explicit `supabase_anon_key` credential or is auto-fetched via the
 Management PAT and cached back through `putCredential`. `app_base_url` is
 now optional — no longer gates the campaign.
 
-**Stage B (still open under #27):** the four HTTP-endpoint specialists —
-auth-bypass, injection, SSRF, weak-crypto — are skipped from the campaign
-entries entirely to avoid burning Anthropic tokens on guaranteed-empty runs.
-`ScanningView` renders their rows explicitly as "Stage B — coming". Bringing
-them online needs endpoint discovery from the connected GitHub repo
-(Next.js `app/api/**/route.ts`, Vercel functions, Express) — the follow-up.
+**Stage B shipped (Supabase Edge Functions).** The four HTTP-endpoint
+specialists now probe the customer's Supabase Edge Functions, discovered
+from the connected repo. For the vibe-coding stack this is the right
+surface: the app is a static SPA that talks to Supabase directly, and the
+hand-written backend logic lives in `supabase/functions/*/index.ts`
+(deployed at `https://<ref>.supabase.co/functions/v1/<name>`) — that's where
+the real auth-bypass / injection bugs are.
+
+  · `packages/core/src/agent/edge-functions.ts` — `discoverEdgeFunctions`
+    parses the repo's source files into `DiscoveredEdgeFunction[]`: name,
+    body/query params, capability hints (identity/url params), and a
+    **read-only vs mutating** classification. Conservative: mutating unless
+    clearly safe (7 unit tests).
+  · `apps/worker/src/agent/supabase-native/edge-backends.ts` — the four
+    backends. **SAFETY: they only ever invoke NON-mutating functions** —
+    delete-account / create-payment-checkout / add-user-role are discovered,
+    reported, and never called. auth-bypass (does a function trust a client-
+    supplied identity vs the JWT?) and injection (payload vs baseline) are the
+    high-value classes for this stack; SSRF needs a public callback host (not
+    yet) and weak-crypto is ~N/A (edge functions return JSON, not cookies).
+  · scan-processor discovers edge functions via the GitHub connector (best-
+    effort; a repo-read failure doesn't sink Stage A) and passes them to
+    `buildCustomerCampaignEntries`, which appends the four specialists when
+    ≥1 non-mutating function exists. `ScanningView` shows all 7 rows active.
+  · `npm run verify:edge-backends -w @kelp/worker` — mock host with a
+    deliberately-vulnerable `leaky-profile` (honors body userId) + `sqli-search`
+    (500s on a quote) vs secure controls; asserts the backends flag the vulns
+    and clear the controls. Verified live on luneai: 32 functions discovered,
+    9 non-mutating probed, full 7-specialist campaign in ~26s / ~$0.06, zero
+    false positives (luneai's functions correctly derive identity from the JWT).
+
+**Remaining Stage B polish (open):** SSRF needs a publicly-reachable callback
+canary to confirm out-of-band fetches from Supabase's cloud; a non-Supabase
+(Next.js/Vercel/Express) discovery path for apps that aren't pure-SPA-on-Supabase.
 
 ## 11a. Findings lifecycle (post-#15)
 

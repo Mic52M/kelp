@@ -10,6 +10,7 @@ import {
   MONTHLY_CAMPAIGN_CAP_CENTS,
   PlanLimitError,
   assertActivePentestAvailable,
+  discoverEdgeFunctions,
   runActivePentest,
   runScan,
   type ActiveTestConsent,
@@ -18,6 +19,7 @@ import {
   type ScanMode,
   type SpecialistContext,
   type VulnClass,
+  type DiscoveredEdgeFunction,
 } from "@kelp/core";
 import {
   claimQueuedScan,
@@ -204,6 +206,25 @@ async function executeActivePentestScan(scan: {
     getCredential(scan.projectId, "supabase_service_role"),
   ]);
 
+  // Stage B: if a GitHub repo is connected, discover the Supabase Edge
+  // Functions so the four HTTP specialists have real endpoints to probe.
+  // Best-effort — a repo read failure must not sink the whole campaign
+  // (Stage A still runs), so we swallow and log.
+  let edgeFunctions: DiscoveredEdgeFunction[] = [];
+  if (project.repoFullName && project.installationId != null) {
+    try {
+      const github = createGitHubConnector({
+        appId: requireEnv("GITHUB_APP_ID"),
+        privateKey: Buffer.from(requireEnv("GITHUB_APP_PRIVATE_KEY_BASE64"), "base64").toString("utf8"),
+        installationId: project.installationId,
+      });
+      const files = await github.listSourceFiles(project.repoFullName);
+      edgeFunctions = discoverEdgeFunctions(files);
+    } catch (e) {
+      console.warn("edge-function discovery failed:", e instanceof Error ? e.message : e);
+    }
+  }
+
   const entries = await buildCustomerCampaignEntries({
     supabaseRef: project.supabaseRef,
     supabaseReadonlyConnString: readonlyConnString,
@@ -218,6 +239,7 @@ async function executeActivePentestScan(scan: {
     },
     accountA,
     accountB,
+    edgeFunctions,
   });
 
   const ctx: SpecialistContext = {

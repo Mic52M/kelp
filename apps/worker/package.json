@@ -23,6 +23,7 @@
     "verify:exposure-target": "node dist/agent/verify-exposure-target.js",
     "verify:rls-deep-target": "node dist/agent/verify-rls-deep-target.js",
     "verify:weak-crypto-target": "node dist/agent/verify-weak-crypto-target.js",
+    "verify:edge-backends": "node dist/agent/verify-edge-backends.js",
     "verify:cost-accounting": "node dist/agent/verify-cost-accounting.js",
     "verify:bola-target-live": "node dist/agent/verify-bola-target-live.js",
     "verify:auth-bypass-target-live": "node dist/agent/verify-auth-bypass-target-live.js",
