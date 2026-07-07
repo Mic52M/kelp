@@ -17,7 +17,24 @@ export function getPool(): pg.Pool {
   if (!pool) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL is not set");
-    pool = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
+    // Cap the pool. Supabase's *session* pooler allows a small, fixed number of
+    // server connections (pool_size 15 on small tiers), and Kelp runs TWO
+    // processes against it in dev (the Next web server + the worker poll loop),
+    // each with its own pg.Pool. pg's default max is 10 → 10+10 > 15 →
+    // "EMAXCONNSESSION max clients reached in session mode". Keeping each pool
+    // small (default 5) leaves headroom for both processes plus any psql/other
+    // client. idle connections are released quickly so we don't hoard them.
+    // Prefer the *transaction* pooler (port 6543) for DATABASE_URL in prod — it
+    // scales to far more connections — but capping keeps the session pooler
+    // working out of the box. Override with KELP_DB_POOL_MAX if needed.
+    const max = Number(process.env.KELP_DB_POOL_MAX ?? 5);
+    pool = new pg.Pool({
+      connectionString: url,
+      ssl: { rejectUnauthorized: false },
+      max: Number.isFinite(max) && max > 0 ? max : 5,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
+    });
   }
   return pool;
 }
