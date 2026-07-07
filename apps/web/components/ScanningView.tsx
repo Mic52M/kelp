@@ -29,20 +29,30 @@ const ACTIVE_PHASES = [
 export function ScanningView({
   status,
   mode = "passive",
+  etaSeconds,
 }: {
   status: string | null;
   mode?: "passive" | "active_pentest" | null;
+  /** Optional caller override for the expected duration in seconds. Falls
+   *  back to a mode-based default (passive ~30s, active_pentest ~5min). We
+   *  use this both for the human-readable ETA line and to time the phase
+   *  checklist so it doesn't sprint through the steps in 20 seconds while
+   *  the real campaign takes 5 minutes. */
+  etaSeconds?: number;
 }) {
   const router = useRouter();
   const active = status === "queued" || status === "running";
   const phases = mode === "active_pentest" ? ACTIVE_PHASES : PASSIVE_PHASES;
+  const eta = etaSeconds ?? (mode === "active_pentest" ? 300 : 30);
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
     if (!active) return;
-    // Active-pentest campaigns take longer per specialist — slow the pace so
-    // the checklist doesn't run out ahead of the real work.
-    const advanceMs = mode === "active_pentest" ? 3500 : 1300;
+    // Spread the checklist across the expected duration so the UI doesn't run
+    // out of phases before the campaign finishes. Divide by phases.length + 1
+    // so the final phase stays visibly in-progress until the server signals
+    // done (page refresh flips to results).
+    const advanceMs = Math.max(800, Math.floor((eta * 1000) / (phases.length + 1)));
     const poll = setInterval(() => router.refresh(), 2000);
     const advance = setInterval(
       () => setPhase((p) => Math.min(p + 1, phases.length - 1)),
@@ -52,16 +62,17 @@ export function ScanningView({
       clearInterval(poll);
       clearInterval(advance);
     };
-  }, [active, router, mode, phases.length]);
+  }, [active, router, eta, phases.length]);
 
   if (!active) return null;
 
   const title =
     mode === "active_pentest" ? "Running the multi-agent pen test" : "Scanning your project";
+  const etaLabel = formatEta(eta);
   const subtitle =
     mode === "active_pentest"
-      ? "Seven specialists probe your app in parallel — a full run takes a few minutes."
-      : "This usually takes a few seconds.";
+      ? `Seven specialists probe your app in parallel — usually about ${etaLabel}.`
+      : `Usually about ${etaLabel} for a typical repository.`;
 
   return (
     <div className="mt-8 flex flex-col items-center rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-16 text-center">
@@ -106,4 +117,11 @@ export function ScanningView({
       </div>
     </div>
   );
+}
+
+/** Format an ETA in seconds as "45s", "3 min", "5–6 minutes" style copy. */
+function formatEta(seconds: number): string {
+  if (seconds < 90) return `${Math.round(seconds)} seconds`;
+  const min = Math.round(seconds / 60);
+  return min === 1 ? "1 minute" : `${min} minutes`;
 }

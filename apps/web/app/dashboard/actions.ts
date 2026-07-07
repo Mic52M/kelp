@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { PlanLimitError } from "@kelp/core";
-import { enqueueScanForProject, drainScans } from "@kelp/worker";
+import { enqueueScanForProject, drainScans, expireStuckScans } from "@kelp/worker";
 
 /** Re-run the scan for a project the signed-in user owns. */
 export async function rescanAction(formData: FormData): Promise<void> {
@@ -80,4 +80,30 @@ export async function startActivePentestAction(
   after(() => drainScans().catch((err) => console.error("active-pentest run failed:", err)));
   revalidatePath("/dashboard");
   return { ok: true, message: "Active pen test started — findings will appear as specialists finish." };
+}
+
+/**
+ * Manual reset for a scan the user believes is stuck (#8). Aggressive TTL (0
+ * minutes) — the user only sees this control when the automatic self-heal
+ * (loadDashboard → expireStuckScans 20m) hasn't kicked in yet, so we trust
+ * their call. Idempotent: no-op when no in-flight scan exists.
+ */
+export async function resetStuckScanAction(formData: FormData): Promise<void> {
+  const projectId = String(formData.get("projectId") ?? "");
+  if (!projectId) return;
+
+  const supabase = await getServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return;
+
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!project) return;
+
+  await expireStuckScans(projectId, 0);
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/projects");
 }

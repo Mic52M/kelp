@@ -1,83 +1,17 @@
+// Post-#7 refactor: Settings is now account-only. Everything project-scoped
+// (Supabase read-only credentials, Management API token, active-testing
+// consent, deployed app URL + test accounts) moved to /dashboard/configuration
+// so the tester finds "the pentest inputs" in a page that actually says so.
+
+import Link from "next/link";
 import { PageHeader, PageHero } from "@/components/dashboard/PageHeader";
-import { ReconnectForm } from "@/components/dashboard/ReconnectForm";
-import { SupabaseReadonlyForm } from "@/components/dashboard/SupabaseReadonlyForm";
-import {
-  ActiveTestingConsentForm,
-  type ProjectConsent,
-} from "@/components/dashboard/ActiveTestingConsentForm";
-import {
-  ActivePentestConfigForm,
-  type ProjectPentestConfig,
-} from "@/components/dashboard/ActivePentestConfigForm";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { loadProjects } from "@/lib/data";
-import { CONSENT_V3_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
-import {
-  loadActiveTestConsent,
-  findUserEmail,
-  findOrgName,
-  getProjectConfigStatus,
-} from "@kelp/worker";
 
 export default async function SettingsPage() {
   const supabase = await getServerSupabase();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const allProjects = await loadProjects();
-  const projects = allProjects.filter((p) => p.supabaseRef);
-
-  // Consent status per project — small N (projects per org), so sequential is fine.
-  const consents: ProjectConsent[] = [];
-  for (const p of allProjects) {
-    const row = await loadActiveTestConsent(p.id);
-    let consentedByEmail: string | null = null;
-    let orgName: string | null = null;
-    if (row) {
-      // Resolve the signer + org lazily so unsigned projects don't pay for the join.
-      [consentedByEmail, orgName] = await Promise.all([
-        findUserEmail(row.consentedBy),
-        findOrgName(row.orgId),
-      ]);
-    }
-    consents.push({
-      projectId: p.id,
-      projectName: p.name,
-      status: row ? "granted" : "none",
-      version: row?.consentVersion ?? null,
-      consentedAt: row?.consentedAt.toISOString() ?? null,
-      consentedByEmail,
-      orgName,
-    });
-  }
-
-  // Per-project config status (#3 #5): booleans for secrets (tokens, passwords)
-  // we never re-render, plaintext for values the user pasted themselves and
-  // expects to see (app URL, test-account emails). RLS keeps loadProjects
-  // scoped to the user's org, so iterating is safe.
-  const statuses = await Promise.all(allProjects.map((p) => getProjectConfigStatus(p.id)));
-  const statusById = new Map(statuses.map((s) => [s.projectId, s]));
-  const pentestConfigs: ProjectPentestConfig[] = allProjects.map((p) => {
-    const s = statusById.get(p.id)!;
-    return {
-      projectId: p.id,
-      projectName: p.name,
-      appBaseUrl: s.appBaseUrl,
-      hasAccountA: s.testAccountAEmail !== null,
-      hasAccountB: s.testAccountBEmail !== null,
-      testAccountAEmail: s.testAccountAEmail,
-      testAccountBEmail: s.testAccountBEmail,
-    };
-  });
-  const supabaseFormProjects = projects.map((p) => {
-    const s = statusById.get(p.id)!;
-    return {
-      id: p.id,
-      name: p.name,
-      hasManagement: s.hasSupabaseManagement,
-      hasReadonly: s.hasSupabaseReadonly,
-    };
-  });
 
   return (
     <>
@@ -86,7 +20,7 @@ export default async function SettingsPage() {
         <PageHero
           label="Workspace"
           title="Settings"
-          description="Manage your account and reconnect data sources when tokens rotate."
+          description="Account-level details. Looking for pentest inputs (Supabase, consent, app URL, test accounts)? Those live under Configuration."
         />
 
         <div className="mt-12 space-y-8">
@@ -98,39 +32,16 @@ export default async function SettingsPage() {
           </Section>
 
           <Section
-            label="Data sources"
-            title="Supabase — read-only role (recommended)"
-            description="Least-privilege: a per-project Postgres role scoped to pg_catalog + information_schema. Kelp cannot read your application data through this credential."
+            label="Per project"
+            title="Configure a project"
+            description="Data sources, consent, app URL, and test accounts are per-project — configure them from the Configuration route."
           >
-            <SupabaseReadonlyForm projects={supabaseFormProjects} />
-          </Section>
-
-          <Section
-            label="Data sources"
-            title="Supabase — Management API token (legacy)"
-            description="Only if you can't create a Postgres role. This is an account-level token — prefer the read-only role above."
-          >
-            <ReconnectForm projects={supabaseFormProjects} />
-          </Section>
-
-          <Section
-            label="Active testing"
-            title="Consent for the multi-agent pen test"
-            description="Kelp only runs live security probes against a project after you grant consent for that specific project. Revoke any time — new campaigns will refuse immediately."
-          >
-            <ActiveTestingConsentForm
-              consents={consents}
-              copy={CONSENT_V3_TEXT}
-              version={CONSENT_VERSION_LATEST}
-            />
-          </Section>
-
-          <Section
-            label="Active testing"
-            title="Where to probe"
-            description="The active pen test needs a deployed URL to send requests to, plus two test-account credentials it can use as identity A and identity B for cross-account probes. Credentials are stored encrypted; only their presence is shown here."
-          >
-            <ActivePentestConfigForm projects={pentestConfigs} />
+            <Link
+              href="/dashboard/configuration"
+              className="inline-flex items-center gap-2 rounded-lg border border-line/70 bg-ink-900/40 px-4 py-2.5 text-sm text-fog-100 transition-colors hover:border-aqua-600/50"
+            >
+              Open Configuration <span aria-hidden>→</span>
+            </Link>
           </Section>
         </div>
       </main>

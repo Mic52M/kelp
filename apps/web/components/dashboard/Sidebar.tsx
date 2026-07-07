@@ -9,6 +9,7 @@ const NAV = [
   { label: "Overview", href: "/dashboard" },
   { label: "Findings", href: "/dashboard/findings" },
   { label: "Projects", href: "/dashboard/projects" },
+  { label: "Configuration", href: "/dashboard/configuration" },
   { label: "Settings", href: "/dashboard/settings" },
 ];
 
@@ -20,7 +21,9 @@ export function Sidebar() {
   const searchParams = useSearchParams();
   const projectParam = searchParams.get("project");
   const carriesProject = (href: string) =>
-    href === "/dashboard" || href === "/dashboard/findings";
+    href === "/dashboard" ||
+    href === "/dashboard/findings" ||
+    href === "/dashboard/configuration";
   const hrefWithProject = (href: string) =>
     projectParam && carriesProject(href) ? `${href}?project=${projectParam}` : href;
 

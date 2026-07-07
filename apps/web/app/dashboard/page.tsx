@@ -8,7 +8,7 @@ import { ScanningView } from "@/components/ScanningView";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { loadDashboard } from "@/lib/data";
-import { rescanAction } from "./actions";
+import { rescanAction, resetStuckScanAction } from "./actions";
 
 export default async function Dashboard({
   searchParams,
@@ -79,40 +79,64 @@ export default async function Dashboard({
           Overview
         </div>
 
-        {/* Hero — big title with accent gradient, one-line context */}
-        <h1 className="text-4xl font-semibold tracking-tight sm:text-[42px]">
-          Security posture
-        </h1>
-        <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-fog-300">
-          {!project
-            ? "Connect a project to run your first scan."
-            : summary.critical > 0
-              ? `${summary.critical} critical ${summary.critical === 1 ? "issue needs" : "issues need"} your attention right now.`
-              : findings.length > 0
-                ? "No critical issues — nice work. Review the items below."
-                : "Nothing found in the last scan. You're clear."}
-        </p>
-
-        {/* Score + stats: one open surface, not four boxed cards */}
-        <div className="mt-10 flex flex-col items-start gap-10 sm:flex-row sm:items-center sm:gap-16">
-          <ScoreRing score={summary.score} />
-          <div className="grid w-full grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-4 sm:gap-x-14">
-            <Stat label="Critical" value={summary.critical} color="var(--color-crit)" />
-            <Stat label="High" value={summary.high} color="var(--color-high)" />
-            <Stat label="Medium" value={summary.medium} color="var(--color-med)" />
-            <Stat label="Resolved" value={summary.resolved} color="var(--color-ok)" />
-          </div>
-        </div>
-
-        {/* Subtle rule separating hero from list — Resend uses these a lot */}
-        <div className="mt-14 h-px w-full bg-gradient-to-r from-transparent via-line to-transparent" />
-
         {scanning ? (
-          <div className="mt-10">
-            <ScanningView status={scanStatus} mode={scanMode} />
-          </div>
+          <>
+            {/* Full-space scanning takeover (#7 tail): the old ScoreRing/stats
+                and Findings list are hidden while a scan runs so the user's
+                attention is on progress, not stale numbers. */}
+            <h1 className="text-4xl font-semibold tracking-tight sm:text-[42px]">
+              {scanMode === "active_pentest" ? "Running the pen test" : "Scanning your project"}
+            </h1>
+            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-fog-300">
+              We'll refresh this page automatically the moment the scan finishes.
+            </p>
+            <div className="mt-10">
+              <ScanningView status={scanStatus} mode={scanMode} />
+              {project && (
+                <div className="mt-8 text-center">
+                  <form action={resetStuckScanAction} className="inline-block">
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <button
+                      type="submit"
+                      className="text-[12px] text-fog-500 underline decoration-fog-700 underline-offset-2 transition-colors hover:text-fog-300"
+                    >
+                      Scan feels stuck? Reset it
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          </>
         ) : (
           <>
+            {/* Hero — big title with accent gradient, one-line context */}
+            <h1 className="text-4xl font-semibold tracking-tight sm:text-[42px]">
+              Security posture
+            </h1>
+            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-fog-300">
+              {!project
+                ? "Connect a project to run your first scan."
+                : summary.critical > 0
+                  ? `${summary.critical} critical ${summary.critical === 1 ? "issue needs" : "issues need"} your attention right now.`
+                  : findings.length > 0
+                    ? "No critical issues — nice work. Review the items below."
+                    : "Nothing found in the last scan. You're clear."}
+            </p>
+
+            {/* Score + stats: one open surface, not four boxed cards */}
+            <div className="mt-10 flex flex-col items-start gap-10 sm:flex-row sm:items-center sm:gap-16">
+              <ScoreRing score={summary.score} />
+              <div className="grid w-full grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-4 sm:gap-x-14">
+                <Stat label="Critical" value={summary.critical} color="var(--color-crit)" />
+                <Stat label="High" value={summary.high} color="var(--color-high)" />
+                <Stat label="Medium" value={summary.medium} color="var(--color-med)" />
+                <Stat label="Resolved" value={summary.resolved} color="var(--color-ok)" />
+              </div>
+            </div>
+
+            {/* Subtle rule separating hero from list — Resend uses these a lot */}
+            <div className="mt-14 h-px w-full bg-gradient-to-r from-transparent via-line to-transparent" />
+
             {scanIssues.length > 0 && (
               <div className="mt-10 space-y-2">
                 {scanIssues.map((issue) => (

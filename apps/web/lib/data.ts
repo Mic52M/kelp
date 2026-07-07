@@ -3,12 +3,13 @@ import {
   fixPromptForRls,
   fixPromptForSecret,
   PLANS,
+  CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST,
   type PlanTier,
   type RlsFinding,
   type SecretFinding,
 } from "@kelp/core";
 import { getServerSupabase } from "./supabase/server";
-import { loadActiveTestConsent } from "@kelp/worker";
+import { loadActiveTestConsent, getProjectConfigStatus, expireStuckScans } from "@kelp/worker";
 import type { Finding, FindingStatus, Project, Severity, VulnClass } from "./types";
 
 // Loads the signed-in org's project + findings from the DB. Queries run through
@@ -96,11 +97,15 @@ export interface DashboardData {
   activePentest: {
     /** plan.activePentestEnabled — paid tiers only */
     planAllowed: boolean;
-    /** valid non-revoked v2 consent for the selected project */
+    /** valid non-revoked latest-version consent for the selected project */
     consentGranted: boolean;
     /** projects.app_base_url is set */
     appBaseUrlSet: boolean;
-    /** all three above true → button clickable */
+    /** test account A credential is stored */
+    accountASet: boolean;
+    /** test account B credential is stored */
+    accountBSet: boolean;
+    /** all preconditions above true → button clickable */
     ready: boolean;
     /** the org's current plan tier (for upgrade CTAs) */
     plan: PlanTier;
@@ -141,6 +146,9 @@ export async function loadProjects(): Promise<ProjectSummary[]> {
 
   const out: ProjectSummary[] = [];
   for (const p of projects ?? []) {
+    // Self-heal any orphaned queued/running scan for this project before
+    // reading its status (#8). Cheap: only touches rows past the TTL.
+    await expireStuckScans(p.id, 20).catch(() => {});
     const { count } = await supabase
       .from("findings")
       .select("id", { count: "exact", head: true })
@@ -206,6 +214,14 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
       }
     : null;
 
+  // Self-heal orphaned scans (#8): if the previous scan is still 'running' or
+  // 'queued' well past the campaign TTL (a next-server `after()` was killed
+  // mid-scan, or Redis went away between enqueue and consume), flip it to
+  // 'failed' so the dashboard un-sticks itself. TTL is generous — active-
+  // pentest campaigns legitimately take a few minutes.
+  if (p) {
+    await expireStuckScans(p.id, 20).catch(() => {});
+  }
   const { data: scanRows } = p
     ? await supabase
         .from("scans")
@@ -281,12 +297,17 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
   }>).map((r) => ({ id: r.id, name: r.name, repo: r.github_repo_full_name }));
 
   // Active-pentest gate state (#27). Plan is scoped to the project's org;
-  // consent + app_base_url are per-project. Free tier → planAllowed=false and
-  // the CTA renders as "Upgrade" instead of "Run".
+  // consent + app_base_url + test-account credentials are per-project. Free
+  // tier → planAllowed=false and the CTA renders as "Upgrade" instead of
+  // "Run". consentGranted uses the whitelist of versions the campaign accepts
+  // (CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST) so bumping the copy version
+  // doesn't silently disable the button.
   let planAllowed = false;
   let plan: PlanTier = "free";
   let consentGranted = false;
   const appBaseUrlSet = !!p?.app_base_url;
+  let accountASet = false;
+  let accountBSet = false;
   if (p) {
     const { data: orgRow } = await supabase
       .from("orgs")
@@ -295,9 +316,17 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
       .maybeSingle();
     plan = ((orgRow?.plan as PlanTier | undefined) ?? "free") as PlanTier;
     planAllowed = PLANS[plan].activePentestEnabled;
-    const consent = await loadActiveTestConsent(p.id);
+    const [consent, status] = await Promise.all([
+      loadActiveTestConsent(p.id),
+      getProjectConfigStatus(p.id),
+    ]);
     consentGranted =
-      !!consent && consent.consented && consent.revokedAt === null && consent.consentVersion === "v2";
+      !!consent &&
+      consent.consented &&
+      consent.revokedAt === null &&
+      (CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST as readonly string[]).includes(consent.consentVersion);
+    accountASet = status.testAccountAEmail !== null;
+    accountBSet = status.testAccountBEmail !== null;
   }
 
   return {
@@ -318,7 +347,9 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
       planAllowed,
       consentGranted,
       appBaseUrlSet,
-      ready: planAllowed && consentGranted && appBaseUrlSet,
+      accountASet,
+      accountBSet,
+      ready: planAllowed && consentGranted && appBaseUrlSet && accountASet && accountBSet,
       plan,
     },
   };

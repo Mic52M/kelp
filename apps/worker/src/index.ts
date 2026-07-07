@@ -29,6 +29,7 @@ export {
   setAppBaseUrl,
   findUserEmail,
   findOrgName,
+  expireStuckScans,
 } from "./db.js";
 export type { StoredActiveTestConsent } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";

@@ -278,6 +278,34 @@ export async function resolveMissingFindings(
   return rowCount ?? 0;
 }
 
+/**
+ * Fail any scan for `projectId` that's been queued or running longer than the
+ * given TTL — orphaned by an interrupted next-server `after()`, a crashed
+ * worker, or a Redis outage. Returns how many rows were flipped so the UI can
+ * flash a one-time banner. The error message names the reason so support can
+ * triage. Called from loadDashboard (self-heal) and from the manual reset
+ * server action (user-initiated).
+ */
+export async function expireStuckScans(
+  projectId: string,
+  ttlMinutes = 15,
+): Promise<number> {
+  const { rowCount } = await getPool().query(
+    `update scans
+        set status = 'failed',
+            finished_at = now(),
+            error = coalesce(nullif(error, ''), 'Scan timed out (orphaned worker) — retry.')
+      where project_id = $1
+        and status in ('queued', 'running')
+        and (
+          (status = 'queued'  and queued_at  < now() - ($2 || ' minutes')::interval) or
+          (status = 'running' and started_at < now() - ($2 || ' minutes')::interval)
+        )`,
+    [projectId, String(ttlMinutes)],
+  );
+  return rowCount ?? 0;
+}
+
 export async function finishScan(
   scanId: string,
   status: "succeeded" | "failed",
