@@ -46,10 +46,23 @@ export async function listPublicTables(connString: string): Promise<DiscoveredTa
     );
     if (tableRows.length === 0) return [];
 
+    // IMPORTANT: read columns from pg_catalog.pg_attribute, NOT
+    // information_schema.columns. The latter is privilege-filtered — it only
+    // returns columns for tables the current role has SOME privilege on. Our
+    // kelp_readonly role deliberately has NO table privileges (it never reads
+    // your data), so information_schema.columns comes back EMPTY for every
+    // table, which silently blinds every schema-driven specialist. pg_attribute
+    // is a raw catalog and is not privilege-filtered.
     const { rows: colRows } = await client.query<{ table_name: string; column_name: string }>(
-      `select table_name, column_name
-         from information_schema.columns
-        where table_schema = 'public'`,
+      `select c.relname as table_name, a.attname as column_name
+         from pg_attribute a
+         join pg_class c on c.oid = a.attrelid
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public'
+          and c.relkind in ('r', 'p')
+          and a.attnum > 0
+          and not a.attisdropped
+        order by c.relname, a.attnum`,
     );
     const colsByTable = new Map<string, string[]>();
     for (const c of colRows) {

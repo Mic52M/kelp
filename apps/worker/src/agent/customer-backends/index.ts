@@ -145,6 +145,7 @@ export async function buildCustomerCampaignEntries(
         ref: cfg.supabaseRef,
         anonKey,
         sessionA,
+        sessionB,
         tables,
       }),
     ),

@@ -41,10 +41,22 @@ const TABLES_SQL = `
   where n.nspname = 'public' and c.relkind in ('r','v','m','p')
   order by c.relname;`;
 
+// Read columns from pg_catalog, NOT information_schema.columns: the latter is
+// privilege-filtered and returns NOTHING for the least-privilege kelp_readonly
+// role (which has no table privileges by design). pg_attribute + pg_type give
+// the same name + type without needing any grant on the tables themselves.
 const COLUMNS_SQL = `
-  select table_name, column_name, data_type
-  from information_schema.columns
-  where table_schema = 'public';`;
+  select c.relname as table_name,
+         a.attname as column_name,
+         format_type(a.atttypid, a.atttypmod) as data_type
+  from pg_attribute a
+  join pg_class c on c.oid = a.attrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+    and c.relkind in ('r', 'v', 'm', 'p')
+    and a.attnum > 0
+    and not a.attisdropped
+  order by c.relname, a.attnum;`;
 
 const POLICIES_SQL = `
   select tablename, policyname, cmd, qual, with_check, roles

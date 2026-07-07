@@ -27,10 +27,14 @@ export interface PostgrestGet {
   rowCount: number | null;
   /** true when the response body was a JSON array with at least one row. */
   hasRows: boolean;
-  /** The parsed first row, minus values, for owner-column checks. Only the
-   *  columns the caller lists in `keepValuesFor` are actually copied in —
-   *  used by BOLA / RLS-deep to check "does this row belong to A or B?". */
+  /** number of rows actually returned in the body (capped by `limit`). */
+  rowsReturned: number;
+  /** Owner-column values for the FIRST row (back-compat convenience). */
   ownerValues: Record<string, string | null>;
+  /** Owner-column values for EVERY returned row — used by RLS-deep to catch a
+   *  leak that isn't in row[0]. Same keys as `keepValuesFor`; values only,
+   *  never full row payloads. */
+  ownerValuesRows: Record<string, string | null>[];
 }
 
 export interface PostgrestGetOptions {
@@ -42,6 +46,9 @@ export interface PostgrestGetOptions {
   /** Extra query string bits appended raw (e.g. `id=eq.42`). Caller is
    *  responsible for URL-encoding values. */
   rawQuery?: string;
+  /** Row cap. Defaults to 3; RLS-deep bumps it so a leak in a later row is
+   *  still visible. Hard-capped at 25 to keep responses small. */
+  limit?: number;
 }
 
 /**
@@ -57,9 +64,10 @@ export async function postgrestGet(input: {
 }): Promise<PostgrestGet> {
   const opts = input.options ?? {};
   const params = new URLSearchParams();
-  // Cap at 3 rows even when the caller doesn't ask — we only need presence
-  // + owner-column values, never bulk data.
-  params.set("limit", "3");
+  // Default 3 rows (presence + shape); RLS-deep bumps it so a leak that isn't
+  // in the first row is still caught. Hard-capped so we never pull bulk data.
+  const limit = Math.min(Math.max(1, opts.limit ?? 3), 25);
+  params.set("limit", String(limit));
   if (opts.rawQuery) {
     // Merge raw query bits. Values may legitimately contain "=" (PostgREST
     // filters like "id=eq.a=b" are legal), so we split only on the FIRST "="
@@ -95,7 +103,12 @@ export async function postgrestGet(input: {
   const raw = await res.text().catch(() => "");
   let firstRowFields: string[] = [];
   let hasRows = false;
+  let rowsReturned = 0;
   const ownerValues: Record<string, string | null> = {};
+  const ownerValuesRows: Record<string, string | null>[] = [];
+  const keep = opts.keepValuesFor ?? [];
+  const toScalar = (v: unknown): string | null =>
+    typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? String(v) : null;
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
@@ -103,12 +116,12 @@ export async function postgrestGet(input: {
         const first = parsed[0] as Record<string, unknown>;
         firstRowFields = Object.keys(first);
         hasRows = true;
-        for (const col of opts.keepValuesFor ?? []) {
-          const v = first[col];
-          ownerValues[col] =
-            typeof v === "string" || typeof v === "number" || typeof v === "boolean"
-              ? String(v)
-              : null;
+        rowsReturned = parsed.length;
+        for (const col of keep) ownerValues[col] = toScalar(first[col]);
+        for (const row of parsed as Record<string, unknown>[]) {
+          const rowOwners: Record<string, string | null> = {};
+          for (const col of keep) rowOwners[col] = toScalar(row[col]);
+          ownerValuesRows.push(rowOwners);
         }
       }
     } catch {
@@ -128,5 +141,5 @@ export async function postgrestGet(input: {
     }
   }
 
-  return { status: res.status, firstRowFields, rowCount, hasRows, ownerValues };
+  return { status: res.status, firstRowFields, rowCount, hasRows, rowsReturned, ownerValues, ownerValuesRows };
 }

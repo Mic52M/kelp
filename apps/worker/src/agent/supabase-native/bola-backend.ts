@@ -1,26 +1,28 @@
 // BOLA specialist backend, real customer variant (#27 follow-up, Stage A).
 //
 // Cross-account probe over PostgREST. Two Supabase-Auth sessions (accounts A
-// and B). At init:
+// and B). At init, for each user-scoped table (one that has BOTH an id column
+// AND an owner column — a public lookup table like "sports" has no owner and
+// is correctly skipped):
 //
-//   1. Discover which public tables PostgREST exposes + their id column.
-//   2. As account B, GET a couple of ids per table (limit=2). These are our
-//      "B-owned resource ids" — the exact same slot the test-target backend
-//      passed in as `bOwnedIds`.
+//   1. As account B, fetch one row B genuinely owns (owner column == B) and
+//      remember its id.
 //
-// At probe time, as account A, replay each candidate id — if any row comes
-// back, A can read B's rows across the trust boundary → BOLA confirmed.
+// At probe time, as account A, fetch that id back. If a row returns, A read a
+// specific object owned by B across the trust boundary → BOLA confirmed.
 //
-// The load-bearing invariant is unchanged: only ids (already known to B)
-// are copied; A's / B's row bodies are never returned or logged.
+// Requiring an owner column (and confirming B actually owns the sample row)
+// eliminates the false positive where both accounts can read the same row of a
+// legitimately-public reference table. The load-bearing invariant is unchanged:
+// only ids (already known to B) and owner references are inspected; row bodies
+// are never returned or logged.
 
 import type { BolaProbeBackend } from "@kelp/core";
 import type { DiscoveredTable } from "./schema.js";
 import type { SupabaseSession } from "./auth.js";
 import { postgrestGet } from "./postgrest.js";
 
-/** ids we already know belong to account B, per table. Populated once at
- *  backend construction so probes don't do extra round-trips. */
+/** ids we confirmed belong to account B, per table. */
 type BOwnedIds = Map<string, string[]>;
 
 async function collectBOwnedIds(cfg: {
@@ -32,13 +34,20 @@ async function collectBOwnedIds(cfg: {
   const out: BOwnedIds = new Map();
   await Promise.all(
     cfg.tables.map(async (t) => {
-      if (!t.idColumn) return;
+      if (!t.idColumn || t.ownerColumns.length === 0) return;
+      const ownerCol = t.ownerColumns[0]!;
+      // Ask specifically for a row B owns, so the id we probe with is genuinely
+      // B's private object — not shared/reference data.
       const res = await postgrestGet({
         ref: cfg.ref,
         anonKey: cfg.anonKey,
         accessToken: cfg.sessionB.accessToken,
         table: t.name,
-        options: { keepValuesFor: [t.idColumn] },
+        options: {
+          keepValuesFor: [t.idColumn],
+          rawQuery: `${ownerCol}=eq.${encodeURIComponent(cfg.sessionB.userId)}`,
+          limit: 1,
+        },
       }).catch(() => null);
       if (!res || !res.hasRows) return;
       const id = res.ownerValues[t.idColumn];
@@ -60,12 +69,11 @@ export async function createSupabaseBolaBackend(cfg: {
 
   return {
     async listEndpoints() {
-      // Only tables we found (a) an id column for and (b) at least one B-owned
-      // id in — probing anything else can't distinguish "no policy" from
-      // "genuinely nothing there".
+      // Only user-scoped tables (id + owner column) where we actually found a
+      // B-owned sample id — anything else can't produce a meaningful probe.
       const out: { endpoint: string; resourceKind: string; idParameter: string }[] = [];
       for (const t of cfg.tables) {
-        if (!t.idColumn) continue;
+        if (!t.idColumn || t.ownerColumns.length === 0) continue;
         if (!bOwned.has(t.name)) continue;
         out.push({
           endpoint: `/rest/v1/${t.name}?${t.idColumn}=eq.{id}`,
@@ -81,7 +89,10 @@ export async function createSupabaseBolaBackend(cfg: {
       if (!table) return { crossAccountAccess: false };
       const t = tablesByName.get(table);
       const candidates = bOwned.get(table) ?? [];
-      if (!t?.idColumn || candidates.length === 0) return { crossAccountAccess: false };
+      if (!t?.idColumn || t.ownerColumns.length === 0 || candidates.length === 0) {
+        return { crossAccountAccess: false };
+      }
+      const ownerCol = t.ownerColumns[0]!;
 
       for (const id of candidates) {
         const encoded = encodeURIComponent(id);
@@ -90,9 +101,13 @@ export async function createSupabaseBolaBackend(cfg: {
           anonKey: cfg.anonKey,
           accessToken: cfg.sessionA.accessToken,
           table,
-          options: { rawQuery: `${t.idColumn}=eq.${encoded}` },
+          options: { rawQuery: `${t.idColumn}=eq.${encoded}`, keepValuesFor: [ownerCol], limit: 1 },
         }).catch(() => null);
-        if (res?.hasRows) return { crossAccountAccess: true };
+        if (!res?.hasRows) continue;
+        // A got B's object back. Confirm the row's owner is NOT A (it should be
+        // B) — belt-and-braces against a table where id collides with A's own.
+        const owner = res.ownerValues[ownerCol];
+        if (owner !== cfg.sessionA.userId) return { crossAccountAccess: true };
       }
       return { crossAccountAccess: false };
     },

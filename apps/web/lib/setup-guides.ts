@@ -57,8 +57,8 @@ grant usage on schema pg_catalog to kelp_readonly;
 grant select on pg_catalog.pg_class      to kelp_readonly;
 grant select on pg_catalog.pg_namespace  to kelp_readonly;
 grant select on pg_catalog.pg_policies   to kelp_readonly;
-grant usage on schema information_schema to kelp_readonly;
-grant select on information_schema.columns to kelp_readonly;
+grant select on pg_catalog.pg_attribute  to kelp_readonly;
+grant select on pg_catalog.pg_type       to kelp_readonly;
 
 -- Explicit "no reads on any of your data" — Kelp only needs catalog metadata.
 alter default privileges in schema public revoke select on tables from kelp_readonly;
@@ -91,8 +91,8 @@ outside this chat.
      grant select on pg_catalog.pg_class      to kelp_readonly;
      grant select on pg_catalog.pg_namespace  to kelp_readonly;
      grant select on pg_catalog.pg_policies   to kelp_readonly;
-     grant usage on schema information_schema to kelp_readonly;
-     grant select on information_schema.columns to kelp_readonly;
+     grant select on pg_catalog.pg_attribute  to kelp_readonly;
+     grant select on pg_catalog.pg_type       to kelp_readonly;
      alter default privileges in schema public revoke select on tables from kelp_readonly;
      grant kelp_readonly to postgres;
 

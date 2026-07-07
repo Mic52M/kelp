@@ -40,14 +40,15 @@ grant usage on schema public to kelp_readonly;
 -- 3. Read the Postgres catalog. This is the source of truth for the RLS
 --    analyzer: it enumerates tables/views/materialized views, their columns,
 --    whether RLS is enabled, and every policy attached.
+--    NOTE we read COLUMNS from pg_attribute, NOT information_schema.columns —
+--    the latter is privilege-filtered and returns nothing for a role with no
+--    table privileges (which is exactly what kelp_readonly is by design).
 grant usage on schema pg_catalog to kelp_readonly;
 grant select on pg_catalog.pg_class      to kelp_readonly;
 grant select on pg_catalog.pg_namespace  to kelp_readonly;
 grant select on pg_catalog.pg_policies   to kelp_readonly;
-
--- 4. Read information_schema (used for the columns query).
-grant usage on schema information_schema to kelp_readonly;
-grant select on information_schema.columns to kelp_readonly;
+grant select on pg_catalog.pg_attribute  to kelp_readonly;
+grant select on pg_catalog.pg_type       to kelp_readonly;
 
 -- ── Explicitly deny what Kelp doesn't need ──────────────────────────────────
 -- Belt-and-braces: revoke default privileges so a future public-schema
