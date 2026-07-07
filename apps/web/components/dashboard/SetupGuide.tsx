@@ -1,0 +1,99 @@
+"use client";
+
+// Inline "How do I get this?" collapsible shown under each Settings input.
+// Three zones — what it is, where to get it (per platform tabs), or a
+// paste-ready AI prompt. Zero JS for the open/close (uses <details>), just
+// a small state for the platform tab selector.
+
+import { useState } from "react";
+import { CopyBlock } from "./CopyBlock";
+import type { SetupGuideContent } from "@/lib/setup-guides";
+
+export function SetupGuide({
+  title = "How do I get this?",
+  content,
+}: {
+  title?: string;
+  content: SetupGuideContent;
+}) {
+  const [platform, setPlatform] = useState(content.platforms[0]?.platform);
+  const active = content.platforms.find((p) => p.platform === platform) ?? content.platforms[0];
+
+  return (
+    <details className="group mt-2 rounded-lg border border-line/60 bg-ink-900/30 open:border-line/80">
+      <summary className="cursor-pointer list-none px-3.5 py-2 text-[12px] text-fog-400 transition-colors hover:text-fog-200">
+        <span className="mr-1.5 inline-block text-fog-600 transition-transform group-open:rotate-90">
+          ▸
+        </span>
+        {title}
+      </summary>
+
+      <div className="border-t border-line/50 px-4 pb-4 pt-3 text-sm leading-relaxed text-fog-300">
+        <p className="text-[13px] text-fog-200">{content.whatIsIt}</p>
+
+        <div className="mt-4">
+          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+            Where to get it
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {content.platforms.map((p) => {
+              const on = p.platform === (active?.platform ?? content.platforms[0]?.platform);
+              return (
+                <button
+                  key={p.platform}
+                  type="button"
+                  onClick={() => setPlatform(p.platform)}
+                  className={`rounded-full px-3 py-1 text-[11px] transition-colors ${
+                    on
+                      ? "bg-aqua-500/15 text-aqua-300"
+                      : "border border-line/70 bg-ink-900/60 text-fog-400 hover:text-fog-200"
+                  }`}
+                >
+                  {p.platform}
+                </button>
+              );
+            })}
+          </div>
+          {active && (
+            <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[13px] text-fog-300">
+              {active.steps.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ol>
+          )}
+          {active?.link && (
+            <a
+              href={active.link.href}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-flex items-center gap-1 text-[12px] text-aqua-400 hover:text-aqua-300"
+            >
+              {active.link.label} <span aria-hidden>↗</span>
+            </a>
+          )}
+        </div>
+
+        {content.prompt && (
+          <div className="mt-5">
+            <div className="mb-1.5 flex items-baseline justify-between">
+              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+                Or paste this into {content.prompt.target}
+              </div>
+            </div>
+            <CopyBlock
+              label={`Paste into ${content.prompt.target}`}
+              body={content.prompt.body}
+              language={content.prompt.target.includes("SQL") ? "sql" : "prompt"}
+            />
+          </div>
+        )}
+
+        {content.caveat && (
+          <p className="mt-4 border-l-2 border-line/60 pl-3 text-[12px] text-fog-500">
+            {content.caveat}
+          </p>
+        )}
+      </div>
+    </details>
+  );
+}

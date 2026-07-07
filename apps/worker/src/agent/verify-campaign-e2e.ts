@@ -27,7 +27,7 @@
 
 import { getPool, putCredential, saveActiveTestConsent, setAppBaseUrl } from "../db.js";
 import { runScanForProject } from "../scan-processor.js";
-import { CONSENT_V2_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
+import { CONSENT_V3_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
 
 const BASE_URL = process.env.KELP_TEST_TARGET_URL ?? "http://localhost:4400";
 
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
     await saveActiveTestConsent({
       orgId,
       projectId,
-      consentText: CONSENT_V2_TEXT,
+      consentText: CONSENT_V3_TEXT,
       consentVersion: CONSENT_VERSION_LATEST,
       consentedBy: userId,
     });

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
-import { CONSENT_V2_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
+import { CONSENT_V3_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
 import {
   listSupabaseProjects,
   validateSupabaseReadonlyConnString,
@@ -108,7 +108,7 @@ export type ConsentActionState = { ok: boolean; message: string } | null;
 /**
  * Grant v2 active-testing consent for a project (issue #24). The multi-specialist
  * campaign refuses to run without a non-revoked v2 row for the project. The
- * verbatim CONSENT_V2_TEXT is stored on the row for audit — if we change the
+ * verbatim CONSENT_V3_TEXT is stored on the row for audit — if we change the
  * copy we bump the version and re-prompt.
  */
 export async function acceptV2ConsentAction(
@@ -134,7 +134,7 @@ export async function acceptV2ConsentAction(
   await saveActiveTestConsent({
     orgId,
     projectId,
-    consentText: CONSENT_V2_TEXT,
+    consentText: CONSENT_V3_TEXT,
     consentVersion: CONSENT_VERSION_LATEST,
     consentedBy: user.id,
   });

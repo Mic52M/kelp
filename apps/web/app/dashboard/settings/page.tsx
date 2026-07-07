@@ -11,8 +11,8 @@ import {
 } from "@/components/dashboard/ActivePentestConfigForm";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { loadProjects } from "@/lib/data";
-import { CONSENT_V2_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
-import { loadActiveTestConsent } from "@kelp/worker";
+import { CONSENT_V3_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
+import { loadActiveTestConsent, findUserEmail, findOrgName } from "@kelp/worker";
 
 export default async function SettingsPage() {
   const supabase = await getServerSupabase();
@@ -26,12 +26,23 @@ export default async function SettingsPage() {
   const consents: ProjectConsent[] = [];
   for (const p of allProjects) {
     const row = await loadActiveTestConsent(p.id);
+    let consentedByEmail: string | null = null;
+    let orgName: string | null = null;
+    if (row) {
+      // Resolve the signer + org lazily so unsigned projects don't pay for the join.
+      [consentedByEmail, orgName] = await Promise.all([
+        findUserEmail(row.consentedBy),
+        findOrgName(row.orgId),
+      ]);
+    }
     consents.push({
       projectId: p.id,
       projectName: p.name,
       status: row ? "granted" : "none",
       version: row?.consentVersion ?? null,
       consentedAt: row?.consentedAt.toISOString() ?? null,
+      consentedByEmail,
+      orgName,
     });
   }
 
@@ -104,7 +115,7 @@ export default async function SettingsPage() {
           >
             <ActiveTestingConsentForm
               consents={consents}
-              copy={CONSENT_V2_TEXT}
+              copy={CONSENT_V3_TEXT}
               version={CONSENT_VERSION_LATEST}
             />
           </Section>

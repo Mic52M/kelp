@@ -169,13 +169,16 @@ Kelp test. It:
 - Only then runs the campaign.
 
 Consent version — since #24, `packages/core/src/consent.ts` exports two
-constants:
+constants (bumped to v3 in the setup-UX pass):
 
-- `CONSENT_ACCEPTED_FOR_BOLA_ONLY = ["v1", "v2"]` — legacy BOLA-only path;
-  old v1 acceptances still valid.
-- `CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST = ["v2"]` — multi-specialist
+- `CONSENT_ACCEPTED_FOR_BOLA_ONLY = ["v1", "v2", "v3"]` — legacy BOLA-only
+  path; old v1/v2 acceptances still valid for the single-class run.
+- `CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST = ["v3"]` — multi-specialist
   campaigns MUST pass this via `acceptedVersions` on the campaign context,
-  so a v1-only project can never trigger a multi-specialist run.
+  so a v1/v2-only project can never trigger a multi-specialist run.
+  v3 adds a Representations block, limitation-of-liability, and governing-
+  terms language; any project on v2 must re-accept the new copy in
+  Settings before the "Run active pen test" button unlocks.
 
 `runWithActiveTestConsent` takes an optional `{ acceptedVersions }` option: if
 present, the stored consent version must be in that list, otherwise

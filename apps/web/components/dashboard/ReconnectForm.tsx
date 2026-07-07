@@ -3,6 +3,8 @@
 import { useActionState } from "react";
 import { Button } from "@/components/Button";
 import { reconnectSupabaseAction, type ReconnectState } from "@/app/dashboard/settings/actions";
+import { SetupGuide } from "./SetupGuide";
+import { SUPABASE_MGMT_TOKEN_GUIDE } from "@/lib/setup-guides";
 
 export function ReconnectForm({
   projects,
@@ -58,6 +60,7 @@ export function ReconnectForm({
           placeholder="sbp_…"
           className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm outline-none focus:border-aqua-600/60"
         />
+        <SetupGuide content={SUPABASE_MGMT_TOKEN_GUIDE} />
       </div>
 
       {state && (

@@ -408,7 +408,10 @@ positives on any control endpoint.
 **Phase 3 complete** (issues #24, #25, #26 closed):
   · Consent v2 shipped — `CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST` gates
     multi-specialist campaigns; v1 acceptances still valid for BOLA only.
-    Copy + toggle live in `ActiveTestingConsentForm.tsx`.
+    Copy + toggle live in `ActiveTestingConsentForm.tsx`. **Bumped to v3**
+    with representations + limitation-of-liability + governing terms;
+    multi-specialist now requires v3, existing v2 acceptances must
+    re-accept. Settings shows a signed-record card + `.txt` download.
   · Cost accounting shipped — `packages/core/src/agent/pricing.ts` prices
     every Anthropic call; orchestrator returns `SpecialistUsage` per
     specialist + `totalUsage` per campaign; persisted in `scans.cost_cents`

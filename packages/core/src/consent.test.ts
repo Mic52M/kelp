@@ -80,10 +80,11 @@ test("runWithActiveTestConsent never runs the task without consent", async () =>
   assert.equal(audit.calls.length, 0, "no audit entry when blocked");
 });
 
-// ─── Consent versioning (#24) ────────────────────────────────────────────────
+// ─── Consent versioning (#24, bumped to v3) ──────────────────────────────────
 
 const v1: ActiveTestConsent = { ...valid, consentVersion: "v1" };
 const v2: ActiveTestConsent = { ...valid, consentVersion: "v2" };
+const v3: ActiveTestConsent = { ...valid, consentVersion: "v3" };
 
 test("multi-specialist campaign rejects a v1 (BOLA-only) consent", async () => {
   await assert.rejects(
@@ -95,22 +96,36 @@ test("multi-specialist campaign rejects a v1 (BOLA-only) consent", async () => {
   );
 });
 
-test("multi-specialist campaign accepts a v2 consent", async () => {
-  const c = await assertActiveTestConsent(storeReturning(v2), "p1", {
-    acceptedVersions: CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST,
-  });
-  assert.equal(c.consentVersion, "v2");
+test("multi-specialist campaign rejects a v2 consent (v3 required)", async () => {
+  await assert.rejects(
+    () =>
+      assertActiveTestConsent(storeReturning(v2), "p1", {
+        acceptedVersions: CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST,
+      }),
+    (e) => e instanceof ConsentRequiredError && /not accepted/.test((e as Error).message),
+  );
 });
 
-test("BOLA-only campaign accepts either v1 or v2 (v2 is a superset)", async () => {
+test("multi-specialist campaign accepts a v3 consent", async () => {
+  const c = await assertActiveTestConsent(storeReturning(v3), "p1", {
+    acceptedVersions: CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST,
+  });
+  assert.equal(c.consentVersion, "v3");
+});
+
+test("BOLA-only campaign accepts v1, v2, or v3 (v3 is a superset)", async () => {
   const a = await assertActiveTestConsent(storeReturning(v1), "p1", {
     acceptedVersions: CONSENT_ACCEPTED_FOR_BOLA_ONLY,
   });
   const b = await assertActiveTestConsent(storeReturning(v2), "p1", {
     acceptedVersions: CONSENT_ACCEPTED_FOR_BOLA_ONLY,
   });
+  const c = await assertActiveTestConsent(storeReturning(v3), "p1", {
+    acceptedVersions: CONSENT_ACCEPTED_FOR_BOLA_ONLY,
+  });
   assert.equal(a.consentVersion, "v1");
   assert.equal(b.consentVersion, "v2");
+  assert.equal(c.consentVersion, "v3");
 });
 
 test("runWithActiveTestConsent runs the task and audits when consented", async () => {

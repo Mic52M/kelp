@@ -84,7 +84,7 @@ const validConsent: ConsentStore = {
     projectId,
     orgId: "o1",
     consented: true,
-    consentVersion: "v2",
+    consentVersion: "v3",
     consentedBy: "u1",
     consentedAt: new Date(),
     revokedAt: null,

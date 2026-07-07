@@ -10,6 +10,8 @@ import {
   reconnectSupabaseReadonlyAction,
   type ReconnectState,
 } from "@/app/dashboard/settings/actions";
+import { SetupGuide } from "./SetupGuide";
+import { SUPABASE_READONLY_GUIDE } from "@/lib/setup-guides";
 
 export function SupabaseReadonlyForm({
   projects,
@@ -65,12 +67,7 @@ export function SupabaseReadonlyForm({
           placeholder="postgres://kelp_readonly:…@db.<ref>.supabase.co:6543/postgres"
           className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm font-mono outline-none transition-colors focus:border-aqua-600/60"
         />
-        <p className="mt-2 text-xs text-fog-500">
-          Create the <code className="rounded bg-ink-800 px-1">kelp_readonly</code> role with
-          the SQL snippet in{" "}
-          <code className="rounded bg-ink-800 px-1">docs/supabase-readonly-role.sql</code>. Kelp
-          validates the connection before storing it.
-        </p>
+        <SetupGuide content={SUPABASE_READONLY_GUIDE} />
       </div>
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={pending}>

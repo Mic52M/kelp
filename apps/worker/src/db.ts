@@ -347,6 +347,9 @@ export interface StoredActiveTestConsent {
   consentVersion: string;
   consentedAt: Date;
   revokedAt: Date | null;
+  consentedBy: string;
+  /** Verbatim text stored when the row was inserted (audit-of-record). */
+  consentText: string;
 }
 
 /** Current (non-revoked) consent for a project, or null. */
@@ -354,7 +357,8 @@ export async function loadActiveTestConsent(
   projectId: string,
 ): Promise<StoredActiveTestConsent | null> {
   const { rows } = await getPool().query(
-    `select id, project_id, org_id, consented, consent_version, consented_at, revoked_at
+    `select id, project_id, org_id, consented, consent_version, consented_at,
+            revoked_at, consented_by, consent_text
        from active_test_consents
       where project_id = $1 and revoked_at is null
       limit 1`,
@@ -370,7 +374,25 @@ export async function loadActiveTestConsent(
     consentVersion: r.consent_version,
     consentedAt: new Date(r.consented_at),
     revokedAt: r.revoked_at === null ? null : new Date(r.revoked_at),
+    consentedBy: r.consented_by,
+    consentText: r.consent_text,
   };
+}
+
+/**
+ * Resolve a user id to email (used to render the signed-consent record —
+ * we display the human email, not the opaque uuid). Returns null when the
+ * user has been deleted.
+ */
+export async function findUserEmail(userId: string): Promise<string | null> {
+  const { rows } = await getPool().query(`select email from users where id = $1`, [userId]);
+  return rows[0]?.email ?? null;
+}
+
+/** Human-readable org name for the signed-consent record. */
+export async function findOrgName(orgId: string): Promise<string | null> {
+  const { rows } = await getPool().query(`select name from orgs where id = $1`, [orgId]);
+  return rows[0]?.name ?? null;
 }
 
 /**
