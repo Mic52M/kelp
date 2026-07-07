@@ -93,6 +93,8 @@ export default async function ConfigurationPage({
       appBaseUrl: status.appBaseUrl,
       hasAccountA: status.testAccountAEmail !== null,
       hasAccountB: status.testAccountBEmail !== null,
+      hasSupabaseAnonKey: status.hasSupabaseAnonKey,
+      hasSupabaseManagement: status.hasSupabaseManagement,
       testAccountAEmail: status.testAccountAEmail,
       testAccountBEmail: status.testAccountBEmail,
     },
@@ -181,7 +183,7 @@ export default async function ConfigurationPage({
           <Section
             label="Active testing"
             title="Where to probe"
-            description="The active pen test needs a deployed URL to send requests to, plus two test-account credentials it can use as identity A and identity B for cross-account probes. Emails are shown after saving; passwords are stored encrypted and never re-rendered."
+            description="The active pen test signs in to your Supabase as two test accounts (A + B) and probes cross-account reads through PostgREST. The deployed app URL is optional today — it'll be used once the four Stage-B specialists (auth-bypass, injection, SSRF, weak-crypto) come online with real endpoint discovery."
           >
             <ActivePentestConfigForm projects={pentestConfigs} />
           </Section>

@@ -29,6 +29,7 @@ import {
   loadOrgPlan,
   loadProject,
   monthToDateCampaignCostCents,
+  putCredential,
   resolveMissingFindings,
   upsertFindings,
   writeAudit,
@@ -165,8 +166,11 @@ async function executeActivePentestScan(scan: {
 }): Promise<ScanOutcome> {
   const project = await loadProject(scan.projectId);
   if (!project) throw new Error(`project ${scan.projectId} not found`);
-  if (!project.appBaseUrl) {
-    throw new Error("active-pentest requires an app_base_url on the project (set in Settings)");
+  if (!project.supabaseRef) {
+    throw new Error(
+      "The active pen test targets a Supabase-backed project — connect a " +
+        "Supabase database from Onboarding first.",
+    );
   }
 
   const plan = await loadOrgPlan(scan.orgId);
@@ -183,8 +187,30 @@ async function executeActivePentestScan(scan: {
   }
 
   const { accountA, accountB } = await loadCustomerTestAccounts(scan.projectId);
+
+  // Post-#27 Stage A: the customer campaign runs against real Supabase
+  // (PostgREST + Auth), so app_base_url is no longer required — it's only
+  // relevant once the Stage-B HTTP-endpoint specialists come online.
+  const readonlyConnString = await getCredential(scan.projectId, "supabase_readonly_connstring");
+  if (!readonlyConnString) {
+    throw new Error(
+      "The active pen test needs the Supabase read-only connection string " +
+        "(Configuration → Supabase — read-only role) to enumerate tables.",
+    );
+  }
+  const [anonKey, managementPat] = await Promise.all([
+    getCredential(scan.projectId, "supabase_anon_key"),
+    getCredential(scan.projectId, "supabase_management"),
+  ]);
+
   const entries = await buildCustomerCampaignEntries({
-    appBaseUrl: project.appBaseUrl,
+    supabaseRef: project.supabaseRef,
+    supabaseReadonlyConnString: readonlyConnString,
+    supabaseAnonKey: anonKey,
+    supabaseManagementPat: managementPat,
+    onDiscoveredAnonKey: async (k) => {
+      await putCredential(scan.orgId, scan.projectId, "supabase_anon_key", k);
+    },
     accountA,
     accountB,
   });

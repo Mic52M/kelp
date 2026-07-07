@@ -99,8 +99,10 @@ export interface DashboardData {
     planAllowed: boolean;
     /** valid non-revoked latest-version consent for the selected project */
     consentGranted: boolean;
-    /** projects.app_base_url is set */
-    appBaseUrlSet: boolean;
+    /** Supabase read-only connection string is stored (schema discovery) */
+    supabaseReadonlySet: boolean;
+    /** anon key stored, OR management PAT stored (auto-fetch fallback) */
+    supabaseAnonReady: boolean;
     /** test account A credential is stored */
     accountASet: boolean;
     /** test account B credential is stored */
@@ -308,7 +310,8 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
   let planAllowed = false;
   let plan: PlanTier = "free";
   let consentGranted = false;
-  const appBaseUrlSet = !!p?.app_base_url;
+  let supabaseReadonlySet = false;
+  let supabaseAnonReady = false;
   let accountASet = false;
   let accountBSet = false;
   if (p) {
@@ -328,6 +331,8 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
       consent.consented &&
       consent.revokedAt === null &&
       (CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST as readonly string[]).includes(consent.consentVersion);
+    supabaseReadonlySet = status.hasSupabaseReadonly;
+    supabaseAnonReady = status.hasSupabaseAnonKey || status.hasSupabaseManagement;
     accountASet = status.testAccountAEmail !== null;
     accountBSet = status.testAccountBEmail !== null;
   }
@@ -349,10 +354,17 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
     activePentest: {
       planAllowed,
       consentGranted,
-      appBaseUrlSet,
+      supabaseReadonlySet,
+      supabaseAnonReady,
       accountASet,
       accountBSet,
-      ready: planAllowed && consentGranted && appBaseUrlSet && accountASet && accountBSet,
+      ready:
+        planAllowed &&
+        consentGranted &&
+        supabaseReadonlySet &&
+        supabaseAnonReady &&
+        accountASet &&
+        accountBSet,
       plan,
     },
   };

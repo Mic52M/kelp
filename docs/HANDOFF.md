@@ -440,11 +440,30 @@ from the dashboard:
     findings written + `cost_cents` populated. Gated by
     `KELP_ANTHROPIC_LIVE=1`.
 
-**Follow-up (still open under #27):** the MVP customer backends re-use the
-in-repo test-target endpoint shape parameterized by `app_base_url`, so a
-customer whose deployed app matches that shape gets real findings today
-and everyone else gets zero. Real endpoint discovery from the connected
-repo (via `listSourceFiles`) + Supabase schema is the follow-up.
+**Stage A shipped (#27 follow-up, first pass — Supabase-native).** The three
+specialists whose backends can be expressed purely against Supabase now run
+against the customer's real project — no repo-based endpoint discovery needed:
+
+  · **BOLA** — logs in as accounts A + B via `POST /auth/v1/token`, discovers
+    B-owned row ids via PostgREST (`/rest/v1/<table>?limit=2` as B), then as
+    A replays those ids per table (`?id=eq.<val>`). Any hit = cross-account.
+  · **RLS-deep** — as A, `GET /rest/v1/<table>?limit=3` and check whether any
+    returned row's owner column (`user_id` / `owner_id` / …) is NOT A.
+  · **Exposure** — as A, GET one row per table and hand ONLY field names to
+    the executor, which cross-references against the sensitive-terms dict.
+
+Table + owner-column discovery uses the existing `kelp_readonly` connection
+(same read-only role the RLS static analyzer uses). Anon key comes from either
+an explicit `supabase_anon_key` credential or is auto-fetched via the
+Management PAT and cached back through `putCredential`. `app_base_url` is
+now optional — no longer gates the campaign.
+
+**Stage B (still open under #27):** the four HTTP-endpoint specialists —
+auth-bypass, injection, SSRF, weak-crypto — are skipped from the campaign
+entries entirely to avoid burning Anthropic tokens on guaranteed-empty runs.
+`ScanningView` renders their rows explicitly as "Stage B — coming". Bringing
+them online needs endpoint discovery from the connected GitHub repo
+(Next.js `app/api/**/route.ts`, Vercel functions, Express) — the follow-up.
 
 ## 11a. Findings lifecycle (post-#15)
 

@@ -16,14 +16,20 @@ const PASSIVE_PHASES = [
 ];
 
 // The seven multi-agent specialists (#27). Order = campaign dispatch order.
-const ACTIVE_PHASES = [
-  "BOLA — cross-account object access",
-  "Auth bypass — impersonation techniques",
-  "Injection — payload vs baseline diff",
-  "SSRF — out-of-band callback",
-  "Exposure — response field-name audit",
-  "RLS-deep — cross-account at the table level",
-  "Weak crypto — Set-Cookie flag audit",
+// `pending` marks the four still waiting for repo-based HTTP endpoint
+// discovery (Stage B, #27 follow-up) — they run as no-op backends today.
+interface ActivePhase {
+  label: string;
+  pending?: boolean;
+}
+const ACTIVE_PHASES: ActivePhase[] = [
+  { label: "BOLA — cross-account object access" },
+  { label: "Auth bypass — impersonation techniques", pending: true },
+  { label: "Injection — payload vs baseline diff", pending: true },
+  { label: "SSRF — out-of-band callback", pending: true },
+  { label: "Exposure — response field-name audit" },
+  { label: "RLS-deep — cross-account at the table level" },
+  { label: "Weak crypto — Set-Cookie flag audit", pending: true },
 ];
 
 export function ScanningView({
@@ -42,8 +48,12 @@ export function ScanningView({
 }) {
   const router = useRouter();
   const active = status === "queued" || status === "running";
-  const phases = mode === "active_pentest" ? ACTIVE_PHASES : PASSIVE_PHASES;
-  const eta = etaSeconds ?? (mode === "active_pentest" ? 300 : 30);
+  const passivePhases: ActivePhase[] = PASSIVE_PHASES.map((l) => ({ label: l }));
+  const phases: ActivePhase[] = mode === "active_pentest" ? ACTIVE_PHASES : passivePhases;
+  // Stage A active pen test = 3 real specialists (BOLA, RLS-deep, Exposure)
+  // running in parallel — ~90–150s on Haiku 4.5 across a typical Supabase
+  // schema. Bumps once the four Stage-B specialists come online.
+  const eta = etaSeconds ?? (mode === "active_pentest" ? 150 : 30);
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
@@ -86,27 +96,46 @@ export function ScanningView({
       <p className="mt-1.5 text-sm text-fog-400">{subtitle}</p>
 
       <ul className="mt-9 w-full max-w-md space-y-3 text-left">
-        {phases.map((label, i) => {
-          const done = i < phase;
-          const current = i === phase;
+        {phases.map((p, i) => {
+          const done = i < phase && !p.pending;
+          const current = i === phase && !p.pending;
           return (
-            <li key={label} className="flex items-center gap-3 text-sm">
+            <li key={p.label} className="flex items-center gap-3 text-sm">
               <span
                 className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] transition-colors ${
-                  done
-                    ? "bg-aqua-500/20 text-aqua-400"
-                    : current
-                      ? "border border-aqua-500/60"
-                      : "border border-line"
+                  p.pending
+                    ? "border border-dashed border-line/70 text-fog-600"
+                    : done
+                      ? "bg-aqua-500/20 text-aqua-400"
+                      : current
+                        ? "border border-aqua-500/60"
+                        : "border border-line"
                 }`}
               >
-                {done ? (
+                {p.pending ? (
+                  "⧗"
+                ) : done ? (
                   "✓"
                 ) : current ? (
                   <span className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-aqua-400" />
                 ) : null}
               </span>
-              <span className={done || current ? "text-fog-200" : "text-fog-600"}>{label}</span>
+              <span
+                className={
+                  p.pending
+                    ? "text-fog-500"
+                    : done || current
+                      ? "text-fog-200"
+                      : "text-fog-600"
+                }
+              >
+                {p.label}
+                {p.pending && (
+                  <span className="ml-2 text-[10.5px] uppercase tracking-wider text-fog-500">
+                    Stage B — coming
+                  </span>
+                )}
+              </span>
             </li>
           );
         })}

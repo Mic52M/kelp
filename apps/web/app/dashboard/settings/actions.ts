@@ -159,6 +159,7 @@ export async function configureActivePentestAction(
 ): Promise<ActivePentestConfigState> {
   const projectId = String(formData.get("projectId") ?? "");
   const appBaseUrl = String(formData.get("appBaseUrl") ?? "").trim();
+  const anonKey = String(formData.get("supabaseAnonKey") ?? "").trim();
   const aEmail = String(formData.get("accountAEmail") ?? "").trim();
   const aPassword = String(formData.get("accountAPassword") ?? "");
   const bEmail = String(formData.get("accountBEmail") ?? "").trim();
@@ -167,6 +168,12 @@ export async function configureActivePentestAction(
   if (!projectId) return { ok: false, message: "Pick a project." };
   if (appBaseUrl && !/^https?:\/\//i.test(appBaseUrl)) {
     return { ok: false, message: "App URL must start with http:// or https://." };
+  }
+  if (anonKey && !/^ey[A-Za-z0-9._-]{20,}$/.test(anonKey) && !/^sb[a-z0-9_]+_/.test(anonKey)) {
+    // Supabase anon keys are always long strings — either legacy JWTs (start
+    // with "eyJ...") or the new sb_publishable_… format. Refuse obvious typos
+    // early so we don't burn a scan on a bad key.
+    return { ok: false, message: "That doesn't look like a Supabase anon key (JWT or sb_publishable_…)." };
   }
 
   const supabase = await getServerSupabase();
@@ -196,6 +203,9 @@ export async function configureActivePentestAction(
 
   const { orgId } = await ensureTenant({ id: user.id, email: user.email });
   await setAppBaseUrl(projectId, appBaseUrl || null);
+  if (anonKey) {
+    await putCredential(orgId, projectId, "supabase_anon_key", anonKey);
+  }
   await mergeAndStoreTestAccount(orgId, projectId, "app_test_account_a", aEmail, aPassword);
   await mergeAndStoreTestAccount(orgId, projectId, "app_test_account_b", bEmail, bPassword);
 

@@ -161,6 +161,9 @@ export interface ProjectConfigStatus {
   projectId: string;
   hasSupabaseManagement: boolean;
   hasSupabaseReadonly: boolean;
+  /** Whether an explicit anon key is stored. The scan can also auto-fetch
+   *  via the Management PAT when this is false — see resolveAnonKey. */
+  hasSupabaseAnonKey: boolean;
   appBaseUrl: string | null;
   /** Email of the stored test account A (never the password). Null if unset. */
   testAccountAEmail: string | null;
@@ -174,9 +177,10 @@ export interface ProjectConfigStatus {
  * account emails). Passwords for A/B are deliberately never returned.
  */
 export async function getProjectConfigStatus(projectId: string): Promise<ProjectConfigStatus> {
-  const [mgmt, ro, appRow, credA, credB] = await Promise.all([
+  const [mgmt, ro, anon, appRow, credA, credB] = await Promise.all([
     getCredential(projectId, "supabase_management"),
     getCredential(projectId, "supabase_readonly_connstring"),
+    getCredential(projectId, "supabase_anon_key"),
     getPool().query<{ app_base_url: string | null }>(
       `select app_base_url from projects where id = $1`,
       [projectId],
@@ -197,6 +201,7 @@ export async function getProjectConfigStatus(projectId: string): Promise<Project
     projectId,
     hasSupabaseManagement: mgmt !== null,
     hasSupabaseReadonly: ro !== null,
+    hasSupabaseAnonKey: anon !== null,
     appBaseUrl: appRow.rows[0]?.app_base_url ?? null,
     testAccountAEmail: emailFromJson(credA),
     testAccountBEmail: emailFromJson(credB),

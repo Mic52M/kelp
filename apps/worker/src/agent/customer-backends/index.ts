@@ -1,48 +1,63 @@
 // Build the seven SpecialistEntry values for a real customer campaign (#27).
 //
-// MVP scope (issue #27, first pass): each backend re-uses the existing
-// test-target-*-backend.ts factory, which already accepts a `baseUrl` +
-// two test-account credentials. That means a customer whose deployed app
-// happens to follow the shape of our in-repo test target (POST /api/login,
-// GET /api/orders/:id, ...) will get real findings today; a customer whose
-// endpoints look different will get zero findings (the specialist crashes
-// on login and its outcome carries `error`, but the campaign continues).
+// Stage A (this file's current shape) — Supabase-native. Kelp assumes the
+// customer is on Supabase Auth + PostgREST (the vibe-coding stack: Lovable /
+// Bolt / Cursor / v0 on Supabase). Three specialists probe real customer
+// data through PostgREST with real signed-in JWTs; the other four are wired
+// with "Stage B pending" no-op backends so the checklist stays honest about
+// what's covered without crashing the campaign.
 //
-// Endpoint discovery from the connected repo + Supabase schema is the
-// planned follow-up — see the "What's next" section in AGENT-FRAMEWORK.md.
+//   ✓ BOLA        — PostgREST cross-account row read (real)
+//   ✓ RLS-deep    — PostgREST owner-column mismatch check (real)
+//   ✓ Exposure    — PostgREST response field-name audit (real)
+//   ⧗ Auth-bypass — needs HTTP endpoint discovery from the customer's repo
+//   ⧗ Injection   — same
+//   ⧗ SSRF        — same
+//   ⧗ Weak-crypto — same (also needs a cookie-setting endpoint)
+//
+// Stage B (planned): walk the connected GitHub tarball to discover the real
+// /api/* handlers (Next.js / Vercel functions / Express) and swap the four
+// stubs in below for real backends.
 
 import {
-  authBypassSpecialist,
   bolaSpecialist,
   exposureSpecialist,
-  injectionSpecialist,
   rlsDeepSpecialist,
-  ssrfSpecialist,
-  weakCryptoSpecialist,
   type SpecialistEntry,
 } from "@kelp/core";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAnthropicDriver } from "../anthropic-driver.js";
-import { createTestTargetBolaBackend } from "../test-target-backend.js";
-import { createTestTargetAuthBypassBackend } from "../test-target-auth-bypass-backend.js";
-import { createTestTargetInjectionBackend } from "../test-target-injection-backend.js";
-import { createTestTargetSsrfBackend } from "../test-target-ssrf-backend.js";
-import { createTestTargetExposureBackend } from "../test-target-exposure-backend.js";
-import { createTestTargetRlsDeepBackend } from "../test-target-rls-deep-backend.js";
-import { createTestTargetWeakCryptoBackend } from "../test-target-weak-crypto-backend.js";
+import { loginSupabaseUser, resolveAnonKey } from "../supabase-native/auth.js";
+import { listPublicTables } from "../supabase-native/schema.js";
+import { createSupabaseBolaBackend } from "../supabase-native/bola-backend.js";
+import { createSupabaseRlsDeepBackend } from "../supabase-native/rls-deep-backend.js";
+import { createSupabaseExposureBackend } from "../supabase-native/exposure-backend.js";
+
+/** Names of specialists deliberately skipped at Stage A because they still
+ *  need HTTP endpoint discovery from the customer's repo. The UI reads this
+ *  to render "Stage B — coming" rows in the checklist / notes. */
+export const STAGE_B_PENDING_SPECIALISTS = [
+  "auth-bypass",
+  "injection",
+  "ssrf",
+  "weak-crypto",
+] as const;
 
 export interface CustomerCampaignConfig {
-  appBaseUrl: string;
+  /** Supabase project ref (short id, e.g. "hebrhezulnxlhgrfbegt"). */
+  supabaseRef: string;
+  /** Read-only Postgres connection string — feeds table discovery. */
+  supabaseReadonlyConnString: string;
+  /** Anon key path #1: explicit paste from Configuration. */
+  supabaseAnonKey: string | null;
+  /** Anon key path #2: fetched via Management PAT when path #1 is empty. */
+  supabaseManagementPat: string | null;
+  /** Callback so a discovered anon key can be cached back via putCredential —
+   *  the next scan skips the Management-API round-trip. */
+  onDiscoveredAnonKey?: (anonKey: string) => Promise<void>;
+  /** The two real Supabase-Auth users the campaign impersonates. */
   accountA: { email: string; password: string };
   accountB: { email: string; password: string };
-  /**
-   * The target-user identity account A tries to reach cross-account. For BOLA
-   * and RLS-deep we use `targetOwnedIds` (resource ids owned by B) and
-   * `targetOwnerId` (B's user id). MVP ships the test-target seeds; the real
-   * customer flow will discover them per project.
-   */
-  targetOwnerId?: string;
-  targetOwnedIds?: string[];
   /** Claude model — defaults to Haiku for cheap coverage. */
   model?: string;
   /** Anthropic API key; falls back to `ANTHROPIC_API_KEY` env. */
@@ -50,71 +65,12 @@ export interface CustomerCampaignConfig {
 }
 
 const DEFAULT_MODEL = "claude-haiku-4-5";
-const DEFAULT_TARGET_OWNER_ID = "userB";
-const DEFAULT_TARGET_OWNED_IDS = ["ord_2001", "ord_2002"];
-
-/** Wall-clock cap for the preflight probe. Real /api/login should answer in
- *  well under a second; a stalled SPA proxy would otherwise hang the campaign. */
-const PREFLIGHT_TIMEOUT_MS = 8000;
 
 /**
- * Check that the target app looks like the shape the MVP customer backends
- * understand (POST /api/login → JSON {token}). Throws a user-facing error
- * that ends up in scans.error → the dashboard scan-issues banner when the
- * target doesn't fit — the seven specialists share this same auth shape, so
- * one preflight covers all of them.
- */
-async function assertTargetMatchesTestShape(
-  baseUrl: string,
-  accountA: { email: string; password: string },
-): Promise<void> {
-  const url = `${baseUrl.replace(/\/$/, "")}/api/login`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: accountA.email, password: accountA.password }),
-      signal: AbortSignal.timeout(PREFLIGHT_TIMEOUT_MS),
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(
-      `Kelp couldn't reach POST ${url} within ${PREFLIGHT_TIMEOUT_MS / 1000}s (${msg}). ` +
-        `The active pen test's MVP customer path targets an /api/login endpoint that ` +
-        `returns JSON {token}. Real endpoint discovery from your repo is on the roadmap ` +
-        `(#27 follow-up) — until then, the campaign only works on apps that match this shape.`,
-    );
-  }
-
-  const contentType = res.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    throw new Error(
-      `${url} answered ${res.status} with "${contentType || "unknown"}" instead of JSON. ` +
-        `Most Lovable / Vercel SPAs catch unknown paths with index.html — the active pen ` +
-        `test's MVP customer path needs a real POST /api/login endpoint that returns ` +
-        `JSON {token}. Real endpoint discovery from your repo is the planned follow-up (#27); ` +
-        `until it ships, active pen tests can only run against apps with this exact shape.`,
-    );
-  }
-
-  if (!res.ok) {
-    throw new Error(
-      `POST ${url} rejected the test account with HTTP ${res.status}. ` +
-        `Double-check the Test account A credentials on the Configuration page, or that ` +
-        `Kelp's IP isn't blocked by your app's auth layer.`,
-    );
-  }
-
-  // Consume the body so the connection is released; no need to keep it — the
-  // seven backends will re-login themselves during their factory phase.
-  await res.text();
-}
-
-/**
- * Build the full 7-specialist campaign for a customer project. Each entry
- * gets its own Anthropic driver instance — the orchestrator's per-specialist
- * usage accounting relies on that isolation.
+ * Build the full 7-specialist campaign for a real customer project. Three
+ * entries carry Supabase-native backends; four carry Stage-B-pending stubs
+ * that immediately return "no endpoints yet" so the specialist finishes
+ * cleanly and the campaign report notes what's coming.
  */
 export async function buildCustomerCampaignEntries(
   cfg: CustomerCampaignConfig,
@@ -123,54 +79,79 @@ export async function buildCustomerCampaignEntries(
   const apiKey = cfg.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
 
-  // MVP compatibility preflight (issue #27 follow-up). The seven customer
-  // backends currently reuse the test-target endpoint shape (POST /api/login
-  // returning JSON {token}, then /api/orders/{id}, /api/profiles/{id} etc.).
-  // A real Lovable / Vercel SPA usually catches every unknown path with
-  // index.html + HTTP 200 — so the naive `res.json()` in each backend's
-  // login() would throw a cryptic SyntaxError, or worse, hang if the target
-  // stalls. Preflight once here: fail fast with an actionable message that
-  // surfaces to the dashboard scan-issues banner. Real endpoint discovery
-  // from the connected repo / Supabase schema is the follow-up that will
-  // remove this whole check.
-  await assertTargetMatchesTestShape(cfg.appBaseUrl, cfg.accountA);
+  // ── Resolve the anon key + log in both test accounts. Runs in sequence
+  // ── because the anon key gates both logins.
+  const anonKey = await resolveAnonKey({
+    projectRef: cfg.supabaseRef,
+    explicitAnonKey: cfg.supabaseAnonKey,
+    managementPat: cfg.supabaseManagementPat,
+    onDiscovered: cfg.onDiscoveredAnonKey,
+  });
+  const [sessionA, sessionB, tables] = await Promise.all([
+    loginSupabaseUser({
+      ref: cfg.supabaseRef,
+      anonKey,
+      email: cfg.accountA.email,
+      password: cfg.accountA.password,
+    }),
+    loginSupabaseUser({
+      ref: cfg.supabaseRef,
+      anonKey,
+      email: cfg.accountB.email,
+      password: cfg.accountB.password,
+    }),
+    listPublicTables(cfg.supabaseReadonlyConnString),
+  ]);
+  if (sessionA.userId === sessionB.userId) {
+    throw new Error(
+      `Test accounts A and B resolved to the SAME Supabase user id — the ` +
+        `cross-account probe would be meaningless. Use two distinct accounts.`,
+    );
+  }
+  if (tables.length === 0) {
+    throw new Error(
+      "Kelp couldn't see any public tables via the read-only Postgres role. " +
+        "Check that kelp_readonly has usage on schema public and that the " +
+        "project actually has tables under the public schema.",
+    );
+  }
 
   const client = new Anthropic({ apiKey });
   const driver = () => createAnthropicDriver(client, model);
-  const targetOwnerId = cfg.targetOwnerId ?? DEFAULT_TARGET_OWNER_ID;
-  const targetOwnedIds = cfg.targetOwnedIds ?? DEFAULT_TARGET_OWNED_IDS;
 
-  const [bola, authBypass, injection, ssrf, exposure, rlsDeep, weakCrypto] = await Promise.all([
-    createTestTargetBolaBackend({
-      baseUrl: cfg.appBaseUrl,
-      accountA: cfg.accountA,
-      accountB: cfg.accountB,
-      bOwnedIds: targetOwnedIds,
+  const [bola, rlsDeep, exposure] = await Promise.all([
+    createSupabaseBolaBackend({
+      ref: cfg.supabaseRef,
+      anonKey,
+      sessionA,
+      sessionB,
+      tables,
     }),
-    createTestTargetAuthBypassBackend({
-      baseUrl: cfg.appBaseUrl,
-      accountA: cfg.accountA,
-      targetUserId: targetOwnerId,
-      targetOwnedIds,
-    }),
-    createTestTargetInjectionBackend({ baseUrl: cfg.appBaseUrl, accountA: cfg.accountA }),
-    createTestTargetSsrfBackend({ baseUrl: cfg.appBaseUrl, accountA: cfg.accountA }),
-    createTestTargetExposureBackend({ baseUrl: cfg.appBaseUrl, accountA: cfg.accountA }),
-    createTestTargetRlsDeepBackend({
-      baseUrl: cfg.appBaseUrl,
-      accountA: cfg.accountA,
-      targetOwnerId,
-    }),
-    createTestTargetWeakCryptoBackend({ baseUrl: cfg.appBaseUrl, accountA: cfg.accountA }),
+    Promise.resolve(
+      createSupabaseRlsDeepBackend({
+        ref: cfg.supabaseRef,
+        anonKey,
+        sessionA,
+        tables,
+      }),
+    ),
+    Promise.resolve(
+      createSupabaseExposureBackend({
+        ref: cfg.supabaseRef,
+        anonKey,
+        sessionA,
+        tables,
+      }),
+    ),
   ]);
 
+  // Only ship the three specialists that have real customer backends today —
+  // the four Stage-B-pending ones would otherwise waste Anthropic tokens for a
+  // guaranteed zero-finding outcome. The ScanningView renders them explicitly
+  // as "Stage B — coming" so the checklist stays honest.
   return [
     { specialist: bolaSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: bola, driver: driver() },
-    { specialist: authBypassSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: authBypass, driver: driver() },
-    { specialist: injectionSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: injection, driver: driver() },
-    { specialist: ssrfSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: ssrf, driver: driver() },
     { specialist: exposureSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: exposure, driver: driver() },
     { specialist: rlsDeepSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: rlsDeep, driver: driver() },
-    { specialist: weakCryptoSpecialist as SpecialistEntry<unknown, unknown>["specialist"], backend: weakCrypto, driver: driver() },
   ];
 }
