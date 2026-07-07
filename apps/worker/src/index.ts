@@ -37,6 +37,15 @@ export {
   redisEnabled,
 } from "./redis-queue.js";
 export { processScanById } from "./scan-processor.js";
+export {
+  startCheckoutForOrg,
+  verifyWebhookSignature as verifyStripeWebhookSignature,
+  handleWebhookEvent as handleStripeWebhookEvent,
+  stripeConfigured,
+  StripeNotConfiguredError,
+  tierForPrice,
+} from "./stripe.js";
+export type { CheckoutInput } from "./stripe.js";
 
 async function pollLoop() {
   const { processOneScan } = await import("./scan-processor.js");
