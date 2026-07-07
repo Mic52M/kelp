@@ -3,7 +3,15 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { VulnClass } from "@kelp/core";
-import { getPool, putCredential, listOrgInstallationIds, saveGithubInstallation } from "./db.js";
+import { assertCanCreateProject, assertCanTriggerRescan } from "@kelp/core";
+import {
+  countProjectsForOrg,
+  getPool,
+  listOrgInstallationIds,
+  loadOrgPlan,
+  putCredential,
+  saveGithubInstallation,
+} from "./db.js";
 import { createGitHubApp, createGitHubConnector } from "./connectors/github.js";
 import { enqueueScanJob } from "./redis-queue.js";
 
@@ -151,13 +159,27 @@ export interface ConnectInput {
   classes: VulnClass[];
 }
 
-/** Enqueue a scan for a project. The worker poll loop picks it up. */
+/**
+ * Enqueue a scan for a project. Refuses when the org's plan doesn't allow the
+ * given trigger (issue #17) — e.g. a free-tier org can't be re-scanned by a
+ * `webhook_push`. `initial` is never gated: the first-scan aha-moment must
+ * always work.
+ *
+ * The worker poll loop picks the scan up, or (if REDIS_URL is set) BullMQ does.
+ */
 export async function enqueueScanForProject(input: {
   orgId: string;
   projectId: string;
   classes: VulnClass[];
   trigger?: "initial" | "manual" | "webhook_push";
 }): Promise<{ scanId: string }> {
+  const trigger = input.trigger ?? "manual";
+  // The very first scan of a project is `initial` — always allowed. Everything
+  // else is checked against the org's plan.
+  if (trigger !== "initial") {
+    const plan = await loadOrgPlan(input.orgId);
+    assertCanTriggerRescan(plan, trigger);
+  }
   const { rows } = await getPool().query(
     `insert into scans (org_id, project_id, status, trigger, classes)
      values ($1, $2, 'queued', $3, $4::vuln_class[]) returning id`,
@@ -170,7 +192,12 @@ export async function enqueueScanForProject(input: {
   return { scanId };
 }
 
-/** Create the project (+ encrypted creds) and enqueue its first scan. */
+/**
+ * Create the project (+ encrypted creds) and enqueue its first scan.
+ * Refuses if the org has reached its plan's project cap (issue #17), but
+ * *never* refuses on an already-existing project (the connect flow is
+ * idempotent — clicking "Connect" again on a repo you already have is fine).
+ */
 export async function createProjectAndEnqueueScan(
   input: ConnectInput,
 ): Promise<{ projectId: string; scanId: string }> {
@@ -200,6 +227,15 @@ export async function createProjectAndEnqueueScan(
   }
 
   if (!projectId) {
+    // Plan gate (issue #17): we're about to insert a new project, so the org
+    // must be under its cap. Idempotent re-connects don't hit this — projectId
+    // is already non-null in that branch.
+    const [plan, current] = await Promise.all([
+      loadOrgPlan(input.orgId),
+      countProjectsForOrg(input.orgId),
+    ]);
+    assertCanCreateProject(plan, current);
+
     const { rows } = await getPool().query(
       `insert into projects
          (org_id, name, github_repo_full_name, github_installation_id, db_provider, supabase_project_ref)

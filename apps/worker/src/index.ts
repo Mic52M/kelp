@@ -21,6 +21,8 @@ export {
   saveActiveTestConsent,
   revokeActiveTestConsent,
   monthToDateCampaignCostCents,
+  loadOrgPlan,
+  countProjectsForOrg,
 } from "./db.js";
 export type { StoredActiveTestConsent } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";

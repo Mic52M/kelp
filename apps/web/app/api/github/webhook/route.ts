@@ -57,12 +57,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const project = await findProjectByRepo(repoFullName, installationId);
   if (!project) return NextResponse.json({ ignored: "no matching project" });
 
-  const { scanId } = await enqueueScanForProject({
-    orgId: project.orgId,
-    projectId: project.id,
-    classes: ["secret"],
-    trigger: "webhook_push",
-  });
+  let scanId: string;
+  try {
+    ({ scanId } = await enqueueScanForProject({
+      orgId: project.orgId,
+      projectId: project.id,
+      classes: ["secret"],
+      trigger: "webhook_push",
+    }));
+  } catch (e) {
+    // Free-tier orgs don't get webhook re-scans (issue #17). Return 200 so
+    // GitHub doesn't retry — the org needs to upgrade, not our webhook to fix.
+    if (e instanceof Error && e.name === "PlanLimitError") {
+      return NextResponse.json({ ignored: "plan does not allow webhook rescans" });
+    }
+    throw e;
+  }
 
   // Kick the local drain so scans run without a separate worker in dev; in prod
   // the poll loop / queue worker picks it up anyway.

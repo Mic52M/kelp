@@ -94,7 +94,13 @@ export async function connectAndScanAction(input: {
       classes,
     });
   } catch (e) {
-    error = friendlyError(e instanceof Error ? e.message : "The scan could not be started.");
+    // PlanLimitError is a friendly upgrade prompt, not a crash — surface its
+    // own message verbatim instead of running it through friendlyError.
+    if (e instanceof Error && e.name === "PlanLimitError") {
+      error = e.message;
+    } else {
+      error = friendlyError(e instanceof Error ? e.message : "The scan could not be started.");
+    }
   }
   if (error) return { ok: false, error };
 

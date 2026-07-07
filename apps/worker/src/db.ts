@@ -3,7 +3,7 @@
 // decrypted here with the app encryption key; plaintext never leaves the worker.
 
 import pg from "pg";
-import { openSecret, sealSecret, type DetectedFinding, type VulnClass } from "@kelp/core";
+import { openSecret, sealSecret, type DetectedFinding, type PlanTier, type VulnClass } from "@kelp/core";
 
 let pool: pg.Pool | null = null;
 export function getPool(): pg.Pool {
@@ -281,6 +281,27 @@ export async function monthToDateCampaignCostCents(orgId: string): Promise<numbe
     [orgId],
   );
   return rows[0]?.total ?? 0;
+}
+
+// ─── Plan lookup + project count (issue #17) ─────────────────────────────────
+
+/** Read the org's current plan tier (feeds every plan-gate check). */
+export async function loadOrgPlan(orgId: string): Promise<PlanTier> {
+  const { rows } = await getPool().query(
+    `select plan from orgs where id = $1`,
+    [orgId],
+  );
+  if (rows.length === 0) throw new Error(`org ${orgId} not found`);
+  return rows[0].plan as PlanTier;
+}
+
+/** How many projects the org has connected right now (for the max-projects gate). */
+export async function countProjectsForOrg(orgId: string): Promise<number> {
+  const { rows } = await getPool().query(
+    `select count(*)::int as n from projects where org_id = $1`,
+    [orgId],
+  );
+  return rows[0]?.n ?? 0;
 }
 
 // ─── Active-test consent (issue #24) ─────────────────────────────────────────

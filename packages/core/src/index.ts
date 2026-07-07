@@ -1,4 +1,5 @@
 export * from "./types.js";
+export * from "./plans.js";
 export * from "./consent.js";
 export * from "./crypto.js";
 export * from "./fingerprint.js";
