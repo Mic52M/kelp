@@ -17,6 +17,7 @@ import {
 } from "./db.js";
 import { createGitHubConnector } from "./connectors/github.js";
 import { createSupabaseConnector } from "./connectors/supabase.js";
+import { createSupabasePgConnector } from "./connectors/supabase-pg.js";
 
 const noConsent: ConsentStore = { getActiveTestConsent: async () => null };
 
@@ -53,8 +54,16 @@ async function executeScan(scan: {
       });
     }
     if (project.supabaseRef) {
-      const token = await getCredential(scan.projectId, "supabase_management");
-      if (token) deps.supabase = createSupabaseConnector({ managementToken: token });
+      // Prefer the per-project read-only Postgres role (issue #5). Only fall
+      // back to the account-level Management API PAT if no connection string
+      // is stored — dev/legacy support.
+      const connString = await getCredential(scan.projectId, "supabase_readonly_connstring");
+      if (connString) {
+        deps.supabase = createSupabasePgConnector({ connectionString: connString });
+      } else {
+        const token = await getCredential(scan.projectId, "supabase_management");
+        if (token) deps.supabase = createSupabaseConnector({ managementToken: token });
+      }
     }
 
     const { findings, errors } = await runScan(

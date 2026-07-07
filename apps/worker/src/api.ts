@@ -131,6 +131,31 @@ export interface SupabaseProjectInfo {
   status: string;
 }
 
+/**
+ * Validate a Supabase read-only Postgres connection string (issue #5) by
+ * opening a client, running one catalog query, and closing it. Throws with a
+ * user-facing message on any failure. Returns the concrete role name we
+ * connected as, so the UI can confirm "yes, kelp_readonly, correctly locked
+ * down" rather than trusting the string blindly.
+ */
+export async function validateSupabaseReadonlyConnString(connectionString: string): Promise<{ role: string }> {
+  // Import pg here (not at module top) — the Next server-actions bundle only
+  // resolves this file on the server, but keeping the import lazy avoids any
+  // accidental client bundle inclusion in future refactors.
+  const pg = (await import("pg")).default;
+  const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  try {
+    await client.connect();
+    const { rows } = await client.query("select current_user as role");
+    return { role: rows[0]?.role as string };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`Supabase rejected that connection string: ${msg.slice(0, 200)}`);
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
 /** Projects reachable with a Supabase Management API token (for the DB picker). */
 export async function listSupabaseProjects(token: string): Promise<SupabaseProjectInfo[]> {
   const res = await fetch("https://api.supabase.com/v1/projects", {

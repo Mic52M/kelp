@@ -1,5 +1,6 @@
 import { PageHeader, PageHero } from "@/components/dashboard/PageHeader";
 import { ReconnectForm } from "@/components/dashboard/ReconnectForm";
+import { SupabaseReadonlyForm } from "@/components/dashboard/SupabaseReadonlyForm";
 import {
   ActiveTestingConsentForm,
   type ProjectConsent,
@@ -50,8 +51,16 @@ export default async function SettingsPage() {
 
           <Section
             label="Data sources"
-            title="Reconnect Supabase"
-            description="Rotated or revoked your token? Paste a fresh Management API token to restore the RLS scan for a project."
+            title="Supabase — read-only role (recommended)"
+            description="Least-privilege: a per-project Postgres role scoped to pg_catalog + information_schema. Kelp cannot read your application data through this credential."
+          >
+            <SupabaseReadonlyForm projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
+          </Section>
+
+          <Section
+            label="Data sources"
+            title="Supabase — Management API token (legacy)"
+            description="Only if you can't create a Postgres role. This is an account-level token — prefer the read-only role above."
           >
             <ReconnectForm projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
           </Section>

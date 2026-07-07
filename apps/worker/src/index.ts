@@ -8,6 +8,7 @@ export { processOneScan, drainScans, runScanForProject } from "./scan-processor.
 export {
   listReposForOrg,
   listSupabaseProjects,
+  validateSupabaseReadonlyConnString,
   createProjectAndEnqueueScan,
   enqueueScanForProject,
   getGithubInstallUrl,

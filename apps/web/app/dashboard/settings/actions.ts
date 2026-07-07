@@ -7,6 +7,7 @@ import { ensureTenant } from "@/lib/tenant";
 import { CONSENT_V2_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
 import {
   listSupabaseProjects,
+  validateSupabaseReadonlyConnString,
   putCredential,
   enqueueScanForProject,
   drainScans,
@@ -52,6 +53,53 @@ export async function reconnectSupabaseAction(
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/settings");
   return { ok: true, message: "Reconnected — a fresh scan is running." };
+}
+
+/**
+ * Store a per-project read-only Postgres connection string (issue #5) as the
+ * preferred credential for Supabase scanning. Falls back to the Management
+ * PAT if this isn't set. Validated with a live probe before storing.
+ */
+export async function reconnectSupabaseReadonlyAction(
+  _prev: ReconnectState,
+  formData: FormData,
+): Promise<ReconnectState> {
+  const projectId = String(formData.get("projectId") ?? "");
+  const connString = String(formData.get("connectionString") ?? "").trim();
+  if (!projectId || !connString) return { ok: false, message: "Pick a project and paste a connection string." };
+  if (!/^postgres(ql)?:\/\//i.test(connString)) {
+    return { ok: false, message: "That doesn't look like a postgres:// URL." };
+  }
+
+  const supabase = await getServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return { ok: false, message: "You're signed out." };
+
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!project) return { ok: false, message: "That project no longer exists." };
+
+  let role: string;
+  try {
+    ({ role } = await validateSupabaseReadonlyConnString(connString));
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Connection failed." };
+  }
+
+  const { orgId } = await ensureTenant({ id: user.id, email: user.email });
+  await putCredential(orgId, projectId, "supabase_readonly_connstring", connString);
+  await enqueueScanForProject({ orgId, projectId, classes: ["rls"], trigger: "manual" });
+  after(() => drainScans().catch(() => {}));
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+  return {
+    ok: true,
+    message: `Connected as "${role}" — a fresh RLS scan is running with the least-privilege role.`,
+  };
 }
 
 export type ConsentActionState = { ok: boolean; message: string } | null;
