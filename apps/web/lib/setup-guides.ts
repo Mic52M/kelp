@@ -29,16 +29,25 @@ export interface SetupGuideContent {
   platforms: PlatformStep[];
   /** Optional AI prompt block — omit when it doesn't make sense (e.g. tokens). */
   prompt?: AiPrompt;
+  /** Optional secondary block (e.g. raw SQL for a DB editor) shown after the
+   *  AI prompt so vibe-coders get the copy-into-chat version FIRST. */
+  secondary?: AiPrompt;
   /** Optional short warning shown above the prompt (e.g. rotate on suspicion). */
   caveat?: string;
 }
 
 // ─── Supabase read-only connection string ────────────────────────────────────
 
-export const SUPABASE_READONLY_ROLE_SQL = `-- Kelp read-only role — paste in Supabase → SQL Editor, replace the password,
--- then click Run. After the role is created, grab the CONNECTION STRING from
--- Supabase → Project Settings → Database → Connect → "Session pooler" (or
--- "Transaction pooler"), then rewrite it as described below.
+/**
+ * Raw SQL for the DB editor. NOTE: no rewrite instructions in the SQL comment
+ * itself — item #1 taught us that Supavisor won't route custom "<role>.<ref>"
+ * usernames for new projects (ENOTFOUND). So the flow is now: create the role,
+ * paste the STANDARD Session-pooler URL as-is, and Kelp SET ROLE at session
+ * start (see connectors/supabase-pg.ts:connectAsReadonly).
+ */
+export const SUPABASE_READONLY_ROLE_SQL = `-- Kelp read-only role — paste in Supabase → SQL Editor and click Run.
+-- Replace the password with something random before running (save it once —
+-- Supabase does not show it again).
 
 create role kelp_readonly with login password 'CHANGE_ME_STRONG_PASSWORD';
 
@@ -51,68 +60,107 @@ grant select on pg_catalog.pg_policies   to kelp_readonly;
 grant usage on schema information_schema to kelp_readonly;
 grant select on information_schema.columns to kelp_readonly;
 
+-- Explicit "no reads on any of your data" — Kelp only needs catalog metadata.
 alter default privileges in schema public revoke select on tables from kelp_readonly;
 
--- ─── HOW TO BUILD THE CONNECTION STRING ────────────────────────────────────
---
--- Do NOT use the "Direct connection" URL (db.<ref>.supabase.co) — it is
--- IPv6-only for new projects and most networks (including Vercel/Railway/
--- most dev machines) cannot reach it, giving ENOTFOUND.
---
--- Use the POOLER URL from Supabase → Settings → Database → Connect:
---   postgres://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:6543/postgres
---
--- Rewrite it for Kelp — two edits:
---   1. Replace  postgres.<ref>          with  kelp_readonly.<ref>
---      (the pooler uses "<db_user>.<projectref>" as the username, so a
---       custom role slots in the same way as the default 'postgres' user)
---   2. Replace  <pass>                  with  CHANGE_ME_STRONG_PASSWORD
---
--- Final shape you paste back in Kelp:
---   postgres://kelp_readonly.<ref>:CHANGE_ME_STRONG_PASSWORD@aws-0-<region>.pooler.supabase.com:6543/postgres`;
+-- The current 'postgres' role is allowed to switch to this least-privilege
+-- role at session start (that's how Kelp connects — see the setup guide).
+grant kelp_readonly to postgres;`;
+
+/**
+ * Paste-into-Lovable/Bolt/Cursor prompt. Written as one continuous request a
+ * vibe-coder can drop straight into their AI IDE chat — no manual SQL editing,
+ * no rewrites, no clarifications needed. The AI runs the SQL for them, then
+ * hands back both artifacts Kelp needs.
+ */
+export const SUPABASE_READONLY_AI_PROMPT = `I'm connecting my app to Kelp (a security scanner) and it needs a
+least-privilege Postgres role on my Supabase project. Please do this end-to-end
+for me and reply with two things at the end. Do NOT expose the password
+outside this chat.
+
+1. Pick a strong random password (16+ chars) for a new Postgres role named
+   \`kelp_readonly\`. Remember it — I'll need it below.
+
+2. Open my Supabase project's SQL editor and RUN exactly this SQL, replacing
+   CHANGE_ME_STRONG_PASSWORD with the password you picked in step 1:
+
+     create role kelp_readonly with login password 'CHANGE_ME_STRONG_PASSWORD';
+     grant connect on database postgres to kelp_readonly;
+     grant usage on schema public to kelp_readonly;
+     grant usage on schema pg_catalog to kelp_readonly;
+     grant select on pg_catalog.pg_class      to kelp_readonly;
+     grant select on pg_catalog.pg_namespace  to kelp_readonly;
+     grant select on pg_catalog.pg_policies   to kelp_readonly;
+     grant usage on schema information_schema to kelp_readonly;
+     grant select on information_schema.columns to kelp_readonly;
+     alter default privileges in schema public revoke select on tables from kelp_readonly;
+     grant kelp_readonly to postgres;
+
+3. Grab the Session-pooler connection string from Supabase →
+   Project Settings → Database → Connect → "Session pooler". It looks like:
+     postgres://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:5432/postgres
+   Do NOT use the "Direct connection" URL — it is IPv6-only and most
+   networks (including Vercel/Railway) can't reach it.
+   Do NOT rewrite the username. Kelp handles the role switch itself; the
+   URL must stay with \`postgres.<ref>\` as the user.
+
+4. Reply with:
+     (a) the Session-pooler URL from step 3, with the real password in place
+         (this is the value I paste into Kelp), and
+     (b) confirmation that the SQL from step 2 ran without errors.
+   Do not commit the URL anywhere.`;
 
 export const SUPABASE_READONLY_GUIDE: SetupGuideContent = {
   whatIsIt:
     "A least-privilege Postgres role Kelp uses to read your schema and RLS policies — never your application data.",
   platforms: [
     {
-      platform: "Supabase",
-      steps: [
-        "Open your project in Supabase → SQL Editor (left sidebar).",
-        "Paste the SQL below, replace CHANGE_ME_STRONG_PASSWORD with a real password (save it — it's not recoverable), then Run.",
-        "Grab the pooler URL from Project Settings → Database → Connect → Session pooler (or Transaction pooler). It looks like postgres://postgres.<ref>:<pass>@aws-0-<region>.pooler.supabase.com:6543/postgres — do NOT use the Direct connection, it's IPv6-only and most networks reject it.",
-        "In that URL: replace postgres.<ref> with kelp_readonly.<ref>, and replace the password with the one you picked. Paste the result in the field above.",
-      ],
-      link: { label: "Open Supabase SQL Editor", href: "https://supabase.com/dashboard/project/_/sql/new" },
-    },
-    {
-      platform: "Vercel",
-      steps: [
-        "Supabase runs the SQL, not Vercel — but if you keep a `DATABASE_URL` in Vercel it's usually the pooled one already.",
-        "Even so, don't paste your `DATABASE_URL` here: it likely has admin privileges. Create the read-only role above instead.",
-      ],
-    },
-    {
       platform: "Lovable",
       steps: [
-        "Lovable talks to Supabase directly — this is a Supabase operation.",
-        "In your Lovable project → click the Supabase icon → open the Supabase dashboard, then follow the Supabase steps.",
+        "In your Lovable chat, paste the AI prompt below.",
+        "Lovable runs the SQL in your linked Supabase project and replies with the Session-pooler connection string.",
+        "Paste that URL into the field above and click Save — Kelp verifies it before storing.",
       ],
     },
     {
       platform: "Bolt",
       steps: [
-        "Bolt.new stores its Supabase config under Integrations → Supabase.",
-        "Click through to your Supabase project and follow the Supabase steps.",
+        "In your Bolt chat, paste the AI prompt below (Bolt has your Supabase project connected under Integrations).",
+        "Bolt runs the SQL and returns the Session-pooler URL.",
+        "Paste it into the field above.",
+      ],
+    },
+    {
+      platform: "Supabase",
+      steps: [
+        "Prefer the AI prompt below if you're using Lovable / Bolt / Cursor. If you'd rather do it yourself:",
+        "Open Supabase → SQL Editor, paste the SQL from the \"Or paste this into Supabase → SQL Editor\" block, replace CHANGE_ME_STRONG_PASSWORD, and Run.",
+        "Copy the URL from Project Settings → Database → Connect → \"Session pooler\" (not \"Direct connection\").",
+        "Paste that URL AS-IS into the field above — Kelp switches to the read-only role automatically at session start.",
+      ],
+      link: {
+        label: "Open Supabase SQL Editor",
+        href: "https://supabase.com/dashboard/project/_/sql/new",
+      },
+    },
+    {
+      platform: "Vercel",
+      steps: [
+        "Supabase runs the SQL, not Vercel — but if you keep a DATABASE_URL in Vercel it's usually the pooled one already.",
+        "Even so, don't paste your DATABASE_URL here: it likely has admin privileges. Create the read-only role first.",
       ],
     },
   ],
   prompt: {
+    target: "your AI IDE (Lovable / Bolt / Cursor)",
+    body: SUPABASE_READONLY_AI_PROMPT,
+  },
+  secondary: {
     target: "Supabase → SQL Editor",
     body: SUPABASE_READONLY_ROLE_SQL,
   },
   caveat:
-    "Kelp validates the connection before saving it. If Postgres rejects the role, the SQL didn't run cleanly — check for a typo in the password.",
+    "Kelp verifies the URL by opening a connection and switching to the kelp_readonly role before storing anything. If verification fails, the SQL didn't run cleanly — check for typos in the password.",
 };
 
 // ─── Supabase Management API token ───────────────────────────────────────────

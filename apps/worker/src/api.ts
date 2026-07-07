@@ -6,6 +6,7 @@ import type { VulnClass } from "@kelp/core";
 import { assertCanCreateProject, assertCanTriggerRescan } from "@kelp/core";
 import {
   countProjectsForOrg,
+  getCredential,
   getPool,
   listOrgInstallationIds,
   loadOrgPlan,
@@ -13,6 +14,7 @@ import {
   saveGithubInstallation,
 } from "./db.js";
 import { createGitHubApp, createGitHubConnector } from "./connectors/github.js";
+import { connectAsReadonly, KELP_READONLY_ROLE } from "./connectors/supabase-pg.js";
 import { enqueueScanJob } from "./redis-queue.js";
 
 function requireEnv(name: string): string {
@@ -132,28 +134,73 @@ export interface SupabaseProjectInfo {
 }
 
 /**
- * Validate a Supabase read-only Postgres connection string (issue #5) by
- * opening a client, running one catalog query, and closing it. Throws with a
- * user-facing message on any failure. Returns the concrete role name we
- * connected as, so the UI can confirm "yes, kelp_readonly, correctly locked
- * down" rather than trusting the string blindly.
+ * Validate a Supabase Postgres connection string (issue #5, revised per item #1).
+ * The customer pastes the standard Session-pooler URL as-is — we connect and
+ * SET ROLE kelp_readonly. Returns the role we ended up as; on any failure,
+ * throws with a user-facing message the UI can surface unchanged.
  */
 export async function validateSupabaseReadonlyConnString(connectionString: string): Promise<{ role: string }> {
-  // Import pg here (not at module top) — the Next server-actions bundle only
-  // resolves this file on the server, but keeping the import lazy avoids any
-  // accidental client bundle inclusion in future refactors.
-  const pg = (await import("pg")).default;
-  const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  let client: Awaited<ReturnType<typeof connectAsReadonly>> | null = null;
   try {
-    await client.connect();
+    client = await connectAsReadonly(connectionString);
     const { rows } = await client.query("select current_user as role");
-    return { role: rows[0]?.role as string };
+    return { role: (rows[0]?.role as string) ?? KELP_READONLY_ROLE };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new Error(`Supabase rejected that connection string: ${msg.slice(0, 200)}`);
+    // connectAsReadonly already wraps SET ROLE failures with a helpful message.
+    // Anything else here (bad host, wrong password, network) gets the generic
+    // "Supabase rejected …" wrapper so callers can display it verbatim.
+    const raw = e instanceof Error ? e.message : String(e);
+    if (raw.startsWith("Kelp connected but couldn't switch")) throw e;
+    throw new Error(`Supabase rejected that connection string: ${raw.slice(0, 200)}`);
   } finally {
-    await client.end().catch(() => {});
+    if (client) await client.end().catch(() => {});
   }
+}
+
+export interface ProjectConfigStatus {
+  projectId: string;
+  hasSupabaseManagement: boolean;
+  hasSupabaseReadonly: boolean;
+  appBaseUrl: string | null;
+  /** Email of the stored test account A (never the password). Null if unset. */
+  testAccountAEmail: string | null;
+  testAccountBEmail: string | null;
+}
+
+/**
+ * Load per-project configuration status for Settings/Configuration UI.
+ * Booleans for credentials we never re-render (tokens, passwords); plaintext
+ * for values the user pasted themselves and expects to see (app URL, test
+ * account emails). Passwords for A/B are deliberately never returned.
+ */
+export async function getProjectConfigStatus(projectId: string): Promise<ProjectConfigStatus> {
+  const [mgmt, ro, appRow, credA, credB] = await Promise.all([
+    getCredential(projectId, "supabase_management"),
+    getCredential(projectId, "supabase_readonly_connstring"),
+    getPool().query<{ app_base_url: string | null }>(
+      `select app_base_url from projects where id = $1`,
+      [projectId],
+    ),
+    getCredential(projectId, "app_test_account_a"),
+    getCredential(projectId, "app_test_account_b"),
+  ]);
+  const emailFromJson = (raw: string | null): string | null => {
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as { email?: unknown };
+      return typeof parsed.email === "string" ? parsed.email : null;
+    } catch {
+      return null;
+    }
+  };
+  return {
+    projectId,
+    hasSupabaseManagement: mgmt !== null,
+    hasSupabaseReadonly: ro !== null,
+    appBaseUrl: appRow.rows[0]?.app_base_url ?? null,
+    testAccountAEmail: emailFromJson(credA),
+    testAccountBEmail: emailFromJson(credB),
+  };
 }
 
 /** Projects reachable with a Supabase Management API token (for the DB picker). */

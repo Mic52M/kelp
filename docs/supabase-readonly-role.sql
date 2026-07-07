@@ -7,11 +7,18 @@
 -- application data.
 --
 -- After running this you'll be prompted in Kelp Settings for a connection
--- string. Use:
+-- string. Paste the **Session pooler** URL from Supabase → Project Settings →
+-- Database → Connect → "Session pooler", AS-IS (no manual rewrites):
 --
---   postgres://kelp_readonly:<the password you picked>@db.<project-ref>.supabase.co:6543/postgres
+--   postgres://postgres.<project-ref>:<db-password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 --
--- (port 6543 = Supavisor pooler — direct 5432 works too but is being deprecated.)
+-- Kelp connects as postgres and then issues `SET ROLE kelp_readonly` at
+-- session start, so the URL keeps the standard `postgres.<ref>` username
+-- Supavisor knows how to route.
+--
+-- DO NOT use the "Direct connection" (db.<ref>.supabase.co) URL — it's
+-- IPv6-only for new projects and most networks (Vercel/Railway/dev machines)
+-- reject it with ENOTFOUND.
 --
 -- Rotate: `alter role kelp_readonly with password '<new-password>';` and
 -- reconnect from Kelp Settings.
@@ -46,5 +53,10 @@ grant select on information_schema.columns to kelp_readonly;
 -- Belt-and-braces: revoke default privileges so a future public-schema
 -- migration doesn't accidentally grant kelp_readonly access to a new table.
 alter default privileges in schema public revoke select on tables from kelp_readonly;
+
+-- ── Let the standard 'postgres' user switch to this role at session start ──
+-- The customer's Session-pooler URL authenticates as `postgres`. Kelp then
+-- issues `SET ROLE kelp_readonly` — that requires postgres to be a member.
+grant kelp_readonly to postgres;
 
 -- Nothing else. No CREATE, no INSERT/UPDATE/DELETE anywhere.

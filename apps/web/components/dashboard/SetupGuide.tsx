@@ -88,6 +88,19 @@ export function SetupGuide({
           </div>
         )}
 
+        {content.secondary && (
+          <div className="mt-4">
+            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+              Doing it by hand? Paste this into {content.secondary.target}
+            </div>
+            <CopyBlock
+              label={`Paste into ${content.secondary.target}`}
+              body={content.secondary.body}
+              language={content.secondary.target.includes("SQL") ? "sql" : "prompt"}
+            />
+          </div>
+        )}
+
         {content.caveat && (
           <p className="mt-4 border-l-2 border-line/60 pl-3 text-[12px] text-fog-500">
             {content.caveat}

@@ -12,7 +12,12 @@ import {
 import { getServerSupabase } from "@/lib/supabase/server";
 import { loadProjects } from "@/lib/data";
 import { CONSENT_V3_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
-import { loadActiveTestConsent, findUserEmail, findOrgName } from "@kelp/worker";
+import {
+  loadActiveTestConsent,
+  findUserEmail,
+  findOrgName,
+  getProjectConfigStatus,
+} from "@kelp/worker";
 
 export default async function SettingsPage() {
   const supabase = await getServerSupabase();
@@ -46,33 +51,33 @@ export default async function SettingsPage() {
     });
   }
 
-  // Active-pentest config (#27): app_base_url + presence of the two encrypted
-  // test-account credentials. We only surface whether they're set (never the
-  // values). RLS keeps this scoped to the user's org.
-  const { data: rawProjectRows } = await supabase
-    .from("projects")
-    .select("id, name, app_base_url");
-  const projectAppRows =
-    ((rawProjectRows ?? []) as Array<{ id: string; name: string; app_base_url: string | null }>);
-  const { data: rawCredRows } = await supabase
-    .from("project_credentials")
-    .select("project_id, token_kind")
-    .in("token_kind", ["app_test_account_a", "app_test_account_b"]);
-  const credRows =
-    ((rawCredRows ?? []) as Array<{ project_id: string; token_kind: string }>);
-  const hasA = new Set(
-    credRows.filter((c) => c.token_kind === "app_test_account_a").map((c) => c.project_id),
-  );
-  const hasB = new Set(
-    credRows.filter((c) => c.token_kind === "app_test_account_b").map((c) => c.project_id),
-  );
-  const pentestConfigs: ProjectPentestConfig[] = projectAppRows.map((r) => ({
-    projectId: r.id,
-    projectName: r.name,
-    appBaseUrl: r.app_base_url,
-    hasAccountA: hasA.has(r.id),
-    hasAccountB: hasB.has(r.id),
-  }));
+  // Per-project config status (#3 #5): booleans for secrets (tokens, passwords)
+  // we never re-render, plaintext for values the user pasted themselves and
+  // expects to see (app URL, test-account emails). RLS keeps loadProjects
+  // scoped to the user's org, so iterating is safe.
+  const statuses = await Promise.all(allProjects.map((p) => getProjectConfigStatus(p.id)));
+  const statusById = new Map(statuses.map((s) => [s.projectId, s]));
+  const pentestConfigs: ProjectPentestConfig[] = allProjects.map((p) => {
+    const s = statusById.get(p.id)!;
+    return {
+      projectId: p.id,
+      projectName: p.name,
+      appBaseUrl: s.appBaseUrl,
+      hasAccountA: s.testAccountAEmail !== null,
+      hasAccountB: s.testAccountBEmail !== null,
+      testAccountAEmail: s.testAccountAEmail,
+      testAccountBEmail: s.testAccountBEmail,
+    };
+  });
+  const supabaseFormProjects = projects.map((p) => {
+    const s = statusById.get(p.id)!;
+    return {
+      id: p.id,
+      name: p.name,
+      hasManagement: s.hasSupabaseManagement,
+      hasReadonly: s.hasSupabaseReadonly,
+    };
+  });
 
   return (
     <>
@@ -97,7 +102,7 @@ export default async function SettingsPage() {
             title="Supabase — read-only role (recommended)"
             description="Least-privilege: a per-project Postgres role scoped to pg_catalog + information_schema. Kelp cannot read your application data through this credential."
           >
-            <SupabaseReadonlyForm projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
+            <SupabaseReadonlyForm projects={supabaseFormProjects} />
           </Section>
 
           <Section
@@ -105,7 +110,7 @@ export default async function SettingsPage() {
             title="Supabase — Management API token (legacy)"
             description="Only if you can't create a Postgres role. This is an account-level token — prefer the read-only role above."
           >
-            <ReconnectForm projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
+            <ReconnectForm projects={supabaseFormProjects} />
           </Section>
 
           <Section

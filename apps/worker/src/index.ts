@@ -9,6 +9,7 @@ export {
   listReposForOrg,
   listSupabaseProjects,
   validateSupabaseReadonlyConnString,
+  getProjectConfigStatus,
   createProjectAndEnqueueScan,
   enqueueScanForProject,
   getGithubInstallUrl,
@@ -17,6 +18,7 @@ export {
 } from "./api.js";
 export {
   putCredential,
+  getCredential,
   findProjectByRepo,
   loadActiveTestConsent,
   saveActiveTestConsent,
@@ -31,7 +33,7 @@ export {
 export type { StoredActiveTestConsent } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";
 export type { SecretFixPrResult } from "./fix-pr.js";
-export type { SupabaseProjectInfo, ConnectInput, RepoOption } from "./api.js";
+export type { SupabaseProjectInfo, ConnectInput, RepoOption, ProjectConfigStatus } from "./api.js";
 export { InMemoryQueue } from "./queue.js";
 export type { ScanJob, ScanQueue } from "./queue.js";
 export {

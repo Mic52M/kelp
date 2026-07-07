@@ -1,19 +1,25 @@
 "use client";
 
-import { useActionState } from "react";
+import { useMemo, useState, useActionState } from "react";
 import { Button } from "@/components/Button";
 import { reconnectSupabaseAction, type ReconnectState } from "@/app/dashboard/settings/actions";
 import { SetupGuide } from "./SetupGuide";
 import { SUPABASE_MGMT_TOKEN_GUIDE } from "@/lib/setup-guides";
+import type { SupabaseFormProject } from "./SupabaseReadonlyForm";
 
 export function ReconnectForm({
   projects,
 }: {
-  projects: { id: string; name: string }[];
+  projects: SupabaseFormProject[];
 }) {
   const [state, action, pending] = useActionState<ReconnectState, FormData>(
     reconnectSupabaseAction,
     null,
+  );
+  const [selected, setSelected] = useState(projects[0]?.id ?? "");
+  const current = useMemo(
+    () => projects.find((p) => p.id === selected) ?? projects[0],
+    [projects, selected],
   );
 
   if (projects.length === 0) {
@@ -27,12 +33,14 @@ export function ReconnectForm({
         <div className="relative">
           <select
             name="projectId"
-            defaultValue={projects[0]?.id}
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
             className="w-full appearance-none rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 pr-9 text-sm outline-none transition-colors focus:border-aqua-600/60"
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
+                {p.hasManagement ? "  ·  stored" : ""}
               </option>
             ))}
           </select>
@@ -51,13 +59,24 @@ export function ReconnectForm({
         </div>
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-medium text-fog-400">
-          New Supabase Management API token
-        </label>
+        <div className="mb-1.5 flex items-baseline justify-between">
+          <label className="block text-xs font-medium text-fog-400">
+            Supabase Management API token
+          </label>
+          {current?.hasManagement && (
+            <span className="rounded-full bg-aqua-500/10 px-2 py-0.5 text-[10.5px] font-medium text-aqua-300">
+              Stored
+            </span>
+          )}
+        </div>
         <input
           name="token"
           type="password"
-          placeholder="sbp_…"
+          placeholder={
+            current?.hasManagement
+              ? "•••••• (stored — paste a new one to replace)"
+              : "sbp_…"
+          }
           className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm outline-none focus:border-aqua-600/60"
         />
         <SetupGuide content={SUPABASE_MGMT_TOKEN_GUIDE} />
@@ -76,7 +95,7 @@ export function ReconnectForm({
       )}
 
       <Button type="submit" size="lg" disabled={pending}>
-        {pending ? "Reconnecting…" : "Reconnect & re-scan"}
+        {pending ? "Saving…" : "Save token"}
       </Button>
     </form>
   );

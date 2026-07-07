@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { CONSENT_V3_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
@@ -9,11 +8,11 @@ import {
   listSupabaseProjects,
   validateSupabaseReadonlyConnString,
   putCredential,
-  enqueueScanForProject,
-  drainScans,
   saveActiveTestConsent,
   revokeActiveTestConsent,
   setAppBaseUrl,
+  getProjectConfigStatus,
+  getCredential,
 } from "@kelp/worker";
 
 export type ReconnectState = { ok: boolean; message: string } | null;
@@ -48,12 +47,14 @@ export async function reconnectSupabaseAction(
 
   const { orgId } = await ensureTenant({ id: user.id, email: user.email });
   await putCredential(orgId, projectId, "supabase_management", token);
-  await enqueueScanForProject({ orgId, projectId, classes: ["secret", "rls"], trigger: "manual" });
-  after(() => drainScans().catch(() => {}));
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/settings");
-  return { ok: true, message: "Reconnected — a fresh scan is running." };
+  revalidatePath("/dashboard/configuration");
+  return {
+    ok: true,
+    message: "Management token saved. Open Overview to run a scan when you're ready.",
+  };
 }
 
 /**
@@ -92,14 +93,13 @@ export async function reconnectSupabaseReadonlyAction(
 
   const { orgId } = await ensureTenant({ id: user.id, email: user.email });
   await putCredential(orgId, projectId, "supabase_readonly_connstring", connString);
-  await enqueueScanForProject({ orgId, projectId, classes: ["rls"], trigger: "manual" });
-  after(() => drainScans().catch(() => {}));
 
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/configuration");
   revalidatePath("/dashboard");
   return {
     ok: true,
-    message: `Connected as "${role}" — a fresh RLS scan is running with the least-privilege role.`,
+    message: `Saved — connected as "${role}". Open Overview to run a scan when you're ready.`,
   };
 }
 
@@ -140,6 +140,7 @@ export async function acceptV2ConsentAction(
   });
 
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/configuration");
   return { ok: true, message: "Active-testing consent granted." };
 }
 
@@ -167,11 +168,6 @@ export async function configureActivePentestAction(
   if (appBaseUrl && !/^https?:\/\//i.test(appBaseUrl)) {
     return { ok: false, message: "App URL must start with http:// or https://." };
   }
-  const partialA = Boolean(aEmail) !== Boolean(aPassword);
-  const partialB = Boolean(bEmail) !== Boolean(bPassword);
-  if (partialA || partialB) {
-    return { ok: false, message: "Each test account needs both email and password." };
-  }
 
   const supabase = await getServerSupabase();
   const { data: { user } } = await supabase.auth.getUser();
@@ -184,26 +180,27 @@ export async function configureActivePentestAction(
     .maybeSingle();
   if (!project) return { ok: false, message: "That project no longer exists." };
 
-  const { orgId } = await ensureTenant({ id: user.id, email: user.email });
-  await setAppBaseUrl(projectId, appBaseUrl || null);
-  if (aEmail && aPassword) {
-    await putCredential(
-      orgId,
-      projectId,
-      "app_test_account_a",
-      JSON.stringify({ email: aEmail, password: aPassword }),
-    );
-  }
-  if (bEmail && bPassword) {
-    await putCredential(
-      orgId,
-      projectId,
-      "app_test_account_b",
-      JSON.stringify({ email: bEmail, password: bPassword }),
-    );
+  const status = await getProjectConfigStatus(projectId);
+  // Allow email-only or password-only edits when the credential already exists
+  // ("leave blank to keep" UX). First-time creation still requires both.
+  const partialA = Boolean(aEmail) !== Boolean(aPassword);
+  const partialB = Boolean(bEmail) !== Boolean(bPassword);
+  const canPartialA = partialA && status.testAccountAEmail !== null;
+  const canPartialB = partialB && status.testAccountBEmail !== null;
+  if ((partialA && !canPartialA) || (partialB && !canPartialB)) {
+    return {
+      ok: false,
+      message: "New test accounts need both email and password (updates can leave one blank).",
+    };
   }
 
+  const { orgId } = await ensureTenant({ id: user.id, email: user.email });
+  await setAppBaseUrl(projectId, appBaseUrl || null);
+  await mergeAndStoreTestAccount(orgId, projectId, "app_test_account_a", aEmail, aPassword);
+  await mergeAndStoreTestAccount(orgId, projectId, "app_test_account_b", bEmail, bPassword);
+
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/configuration");
   revalidatePath("/dashboard");
   return { ok: true, message: "Active-pentest configuration saved." };
 }
@@ -231,5 +228,37 @@ export async function revokeV2ConsentAction(
   await revokeActiveTestConsent({ projectId, revokedBy: user.id });
 
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/configuration");
   return { ok: true, message: "Active-testing consent revoked." };
+}
+
+/**
+ * Store a test-account credential merging with what's already there so the
+ * user can update just the email OR just the password ("leave blank to keep").
+ * Skips write when both fields are blank (nothing to change).
+ */
+async function mergeAndStoreTestAccount(
+  orgId: string,
+  projectId: string,
+  kind: "app_test_account_a" | "app_test_account_b",
+  email: string,
+  password: string,
+): Promise<void> {
+  if (!email && !password) return;
+  let currentEmail = "";
+  let currentPassword = "";
+  const existing = await getCredential(projectId, kind);
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing) as { email?: unknown; password?: unknown };
+      if (typeof parsed.email === "string") currentEmail = parsed.email;
+      if (typeof parsed.password === "string") currentPassword = parsed.password;
+    } catch {
+      // Fall through — corrupted row will be replaced by the new values below.
+    }
+  }
+  const nextEmail = email || currentEmail;
+  const nextPassword = password || currentPassword;
+  if (!nextEmail || !nextPassword) return;
+  await putCredential(orgId, projectId, kind, JSON.stringify({ email: nextEmail, password: nextPassword }));
 }
