@@ -18,6 +18,11 @@ export type FindingStatus =
 
 export type ScanStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
 export type ScanTrigger = "initial" | "manual" | "webhook_push" | "scheduled";
+/**
+ * Distinguishes deterministic scans (regex/schema/static analysis) from
+ * multi-specialist Claude-driven campaigns. Persisted on scans.mode (#27).
+ */
+export type ScanMode = "passive" | "active_pentest";
 
 export type RemediationKind = "rls_migration" | "secret_pr" | "bola_review";
 export type RemediationStatus =
@@ -34,6 +39,8 @@ export interface Project {
   githubRepoFullName: string | null;
   githubInstallationId: number | null;
   supabaseProjectRef: string | null;
+  /** Customer's deployed app URL; required for active_pentest scans (#27). */
+  appBaseUrl: string | null;
 }
 
 /** Current active-test consent for a project (see active_test_consents). */

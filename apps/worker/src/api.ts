@@ -197,18 +197,27 @@ export async function enqueueScanForProject(input: {
   projectId: string;
   classes: VulnClass[];
   trigger?: "initial" | "manual" | "webhook_push";
+  /** 'passive' (default) or 'active_pentest' (#27) — multi-agent campaign. */
+  mode?: "passive" | "active_pentest";
 }): Promise<{ scanId: string }> {
   const trigger = input.trigger ?? "manual";
+  const mode = input.mode ?? "passive";
   // The very first scan of a project is `initial` — always allowed. Everything
-  // else is checked against the org's plan.
+  // else is checked against the org's plan. Active pen-testing has its own gate
+  // (assertActivePentestAvailable) enforced here so the web action doesn't need
+  // to duplicate the plan lookup.
   if (trigger !== "initial") {
     const plan = await loadOrgPlan(input.orgId);
     assertCanTriggerRescan(plan, trigger);
+    if (mode === "active_pentest") {
+      const { assertActivePentestAvailable } = await import("@kelp/core");
+      assertActivePentestAvailable(plan);
+    }
   }
   const { rows } = await getPool().query(
-    `insert into scans (org_id, project_id, status, trigger, classes)
-     values ($1, $2, 'queued', $3, $4::vuln_class[]) returning id`,
-    [input.orgId, input.projectId, input.trigger ?? "manual", input.classes],
+    `insert into scans (org_id, project_id, status, trigger, classes, mode)
+     values ($1, $2, 'queued', $3, $4::vuln_class[], $5) returning id`,
+    [input.orgId, input.projectId, trigger, input.classes, mode],
   );
   const scanId = rows[0].id as string;
   // If Redis is configured, hand the job to the durable queue (#7); otherwise

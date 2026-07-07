@@ -34,8 +34,14 @@ export interface DetectedFinding {
   explanation: string;
   location: string | null;
   fixable: boolean;
-  /** class-specific payload (secret preview, rls issue, bola report). */
-  raw: SecretFinding | RlsFinding | BolaReport;
+  /**
+   * Class-specific payload persisted as jsonb. Historically SecretFinding /
+   * RlsFinding / BolaReport; widened for #27 to also carry the multi-agent
+   * specialist Report shapes (auth-bypass, injection, ssrf, exposure,
+   * rls-deep, weak-crypto) — the DB column is jsonb so shape widening is a
+   * type-only change.
+   */
+  raw: SecretFinding | RlsFinding | BolaReport | Record<string, unknown>;
 }
 
 export interface ScanInput {

@@ -5,6 +5,10 @@ import {
   ActiveTestingConsentForm,
   type ProjectConsent,
 } from "@/components/dashboard/ActiveTestingConsentForm";
+import {
+  ActivePentestConfigForm,
+  type ProjectPentestConfig,
+} from "@/components/dashboard/ActivePentestConfigForm";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { loadProjects } from "@/lib/data";
 import { CONSENT_V2_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
@@ -30,6 +34,34 @@ export default async function SettingsPage() {
       consentedAt: row?.consentedAt.toISOString() ?? null,
     });
   }
+
+  // Active-pentest config (#27): app_base_url + presence of the two encrypted
+  // test-account credentials. We only surface whether they're set (never the
+  // values). RLS keeps this scoped to the user's org.
+  const { data: rawProjectRows } = await supabase
+    .from("projects")
+    .select("id, name, app_base_url");
+  const projectAppRows =
+    ((rawProjectRows ?? []) as Array<{ id: string; name: string; app_base_url: string | null }>);
+  const { data: rawCredRows } = await supabase
+    .from("project_credentials")
+    .select("project_id, token_kind")
+    .in("token_kind", ["app_test_account_a", "app_test_account_b"]);
+  const credRows =
+    ((rawCredRows ?? []) as Array<{ project_id: string; token_kind: string }>);
+  const hasA = new Set(
+    credRows.filter((c) => c.token_kind === "app_test_account_a").map((c) => c.project_id),
+  );
+  const hasB = new Set(
+    credRows.filter((c) => c.token_kind === "app_test_account_b").map((c) => c.project_id),
+  );
+  const pentestConfigs: ProjectPentestConfig[] = projectAppRows.map((r) => ({
+    projectId: r.id,
+    projectName: r.name,
+    appBaseUrl: r.app_base_url,
+    hasAccountA: hasA.has(r.id),
+    hasAccountB: hasB.has(r.id),
+  }));
 
   return (
     <>
@@ -75,6 +107,14 @@ export default async function SettingsPage() {
               copy={CONSENT_V2_TEXT}
               version={CONSENT_VERSION_LATEST}
             />
+          </Section>
+
+          <Section
+            label="Active testing"
+            title="Where to probe"
+            description="The active pen test needs a deployed URL to send requests to, plus two test-account credentials it can use as identity A and identity B for cross-account probes. Credentials are stored encrypted; only their presence is shown here."
+          >
+            <ActivePentestConfigForm projects={pentestConfigs} />
           </Section>
         </div>
       </main>

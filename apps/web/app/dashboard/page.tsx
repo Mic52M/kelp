@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button, buttonClasses } from "@/components/Button";
 import { ProjectSwitcher } from "@/components/dashboard/ProjectSwitcher";
+import { ActivePentestButton } from "@/components/dashboard/ActivePentestButton";
 import { FindingCard } from "@/components/FindingCard";
 import { ScoreRing } from "@/components/ScoreRing";
 import { ScanningView } from "@/components/ScanningView";
@@ -23,7 +24,8 @@ export default async function Dashboard({
   }
 
   const params = (await searchParams) ?? {};
-  const { project, projectOptions, findings, summary, scanStatus, scanIssues } = await loadDashboard(params.project);
+  const { project, projectOptions, findings, summary, scanStatus, scanMode, scanIssues, activePentest } =
+    await loadDashboard(params.project);
   const scanning = scanStatus === "queued" || scanStatus === "running";
   const active = findings.filter((f) => f.status !== "resolved");
   const resolved = findings.filter((f) => f.status === "resolved");
@@ -46,12 +48,19 @@ export default async function Dashboard({
         {project && <span className="text-xs text-fog-500">Last scan {project.lastScan}</span>}
         <div className="ml-auto flex items-center gap-3">
           {project ? (
-            <form action={rescanAction}>
-              <input type="hidden" name="projectId" value={project.id} />
-              <Button type="submit" variant="secondary" disabled={scanning}>
-                {scanning ? "Scanning…" : "Re-scan"}
-              </Button>
-            </form>
+            <>
+              <ActivePentestButton
+                projectId={project.id}
+                gate={activePentest}
+                scanning={scanning}
+              />
+              <form action={rescanAction}>
+                <input type="hidden" name="projectId" value={project.id} />
+                <Button type="submit" variant="secondary" disabled={scanning}>
+                  {scanning ? "Scanning…" : "Re-scan"}
+                </Button>
+              </form>
+            </>
           ) : (
             <Link href="/onboarding" className={buttonClasses("primary")}>
               Connect a project
@@ -100,7 +109,7 @@ export default async function Dashboard({
 
         {scanning ? (
           <div className="mt-10">
-            <ScanningView status={scanStatus} />
+            <ScanningView status={scanStatus} mode={scanMode} />
           </div>
         ) : (
           <>

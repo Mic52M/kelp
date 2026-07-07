@@ -24,6 +24,7 @@ export {
   monthToDateCampaignCostCents,
   loadOrgPlan,
   countProjectsForOrg,
+  setAppBaseUrl,
 } from "./db.js";
 export type { StoredActiveTestConsent } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";

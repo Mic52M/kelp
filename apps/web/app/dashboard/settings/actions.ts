@@ -13,6 +13,7 @@ import {
   drainScans,
   saveActiveTestConsent,
   revokeActiveTestConsent,
+  setAppBaseUrl,
 } from "@kelp/worker";
 
 export type ReconnectState = { ok: boolean; message: string } | null;
@@ -140,6 +141,71 @@ export async function acceptV2ConsentAction(
 
   revalidatePath("/dashboard/settings");
   return { ok: true, message: "Active-testing consent granted." };
+}
+
+export type ActivePentestConfigState = { ok: boolean; message: string } | null;
+
+/**
+ * Configure the two things a project needs before an active-pentest campaign
+ * can run (#27): the deployed app's base URL, and two test-account credentials
+ * (email + password) stored encrypted. Called from Settings. Empty
+ * `appBaseUrl` clears it (useful for temporarily disabling active-pentest on a
+ * project without revoking consent).
+ */
+export async function configureActivePentestAction(
+  _prev: ActivePentestConfigState,
+  formData: FormData,
+): Promise<ActivePentestConfigState> {
+  const projectId = String(formData.get("projectId") ?? "");
+  const appBaseUrl = String(formData.get("appBaseUrl") ?? "").trim();
+  const aEmail = String(formData.get("accountAEmail") ?? "").trim();
+  const aPassword = String(formData.get("accountAPassword") ?? "");
+  const bEmail = String(formData.get("accountBEmail") ?? "").trim();
+  const bPassword = String(formData.get("accountBPassword") ?? "");
+
+  if (!projectId) return { ok: false, message: "Pick a project." };
+  if (appBaseUrl && !/^https?:\/\//i.test(appBaseUrl)) {
+    return { ok: false, message: "App URL must start with http:// or https://." };
+  }
+  const partialA = Boolean(aEmail) !== Boolean(aPassword);
+  const partialB = Boolean(bEmail) !== Boolean(bPassword);
+  if (partialA || partialB) {
+    return { ok: false, message: "Each test account needs both email and password." };
+  }
+
+  const supabase = await getServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return { ok: false, message: "You're signed out." };
+
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!project) return { ok: false, message: "That project no longer exists." };
+
+  const { orgId } = await ensureTenant({ id: user.id, email: user.email });
+  await setAppBaseUrl(projectId, appBaseUrl || null);
+  if (aEmail && aPassword) {
+    await putCredential(
+      orgId,
+      projectId,
+      "app_test_account_a",
+      JSON.stringify({ email: aEmail, password: aPassword }),
+    );
+  }
+  if (bEmail && bPassword) {
+    await putCredential(
+      orgId,
+      projectId,
+      "app_test_account_b",
+      JSON.stringify({ email: bEmail, password: bPassword }),
+    );
+  }
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+  return { ok: true, message: "Active-pentest configuration saved." };
 }
 
 /** Revoke the active-testing consent for a project. Effective immediately —

@@ -5,11 +5,14 @@
 > Read this after `docs/HANDOFF.md` — that gives you the *product* context; this
 > one gives you the *engine*.
 >
-> **Status.** Phases 1–3 all shipped and verified end-to-end: framework,
-> seven specialists, consent v2 (#24), per-specialist cost accounting (#25),
-> and live-Anthropic verify variants (#26). The remaining gap is *product
-> integration* — the engine is not yet reachable from the customer dashboard.
-> Tracked in #27; see the "What's next" section at the bottom.
+> **Status.** Phases 1–3 shipped and verified: framework, seven specialists,
+> consent v2 (#24), per-specialist cost accounting (#25), live-Anthropic
+> verify variants (#26). **#27 MVP is now shipped too** — the engine is
+> reachable from the dashboard via `scans.mode='active_pentest'`. The one
+> remaining piece is real endpoint discovery from the connected repo +
+> Supabase schema (MVP customer backends re-use the test-target shape
+> parameterized by `app_base_url`). See the "What's next" section at the
+> bottom.
 
 ---
 
@@ -556,34 +559,48 @@ docs/
 
 ---
 
-## 11. What's next — customer integration (#27)
+## 11. What's next — endpoint discovery (#27 follow-up)
 
-Phase 3 is closed. Consent v2 (#24), cost accounting (#25), and live-Anthropic
-verify (#26) are all shipped. What separates the engine from actual product
-value is one thing: **it is not yet reachable from the customer dashboard.**
-Today the orchestrator only runs via `npm run verify:*-target[-live]` against
-the in-repo test target — a real customer connecting a real repo cannot
-trigger a campaign.
+**#27 MVP shipped.** The engine is now reachable from the customer dashboard:
 
-Tracked in **#27**. Scope, in short:
+- **Migration `0008`** adds `projects.app_base_url` and
+  `scans.mode ∈ {'passive', 'active_pentest'}`.
+- **`executeActivePentestScan`** in `apps/worker/src/scan-processor.ts`
+  branches on `scans.mode`, gates on plan tier (#17) + consent v2 (#24) +
+  monthly cost cap (#25), dispatches the seven-specialist campaign via
+  `buildCustomerCampaignEntries`, persists findings via the new
+  `campaignFindingsToDetected` mapper and cost via `scans.cost_cents`.
+- **Dashboard**: `ActivePentestButton` top-bar CTA (paid only, gated on
+  consent + `app_base_url`), Settings section with `ActivePentestConfigForm`
+  for `app_base_url` + two encrypted test-account credentials,
+  `ScanningView` renders a per-specialist checklist when
+  `mode === 'active_pentest'`.
+- **`verify:campaign-e2e`** boots the test target, seeds a scratch
+  org+project + consent v2, runs one campaign through the full
+  scan-processor path, asserts findings written and `cost_cents`
+  populated. Gated by `KELP_ANTHROPIC_LIVE=1`.
 
-- **Customer specialist backends** — a per-specialist `customer-backends/`
-  variant that discovers endpoints from the connected repo + Supabase and
-  probes the customer's deployed app (new `projects.app_base_url` column,
-  migration `0008`). Every data-hygiene rule in §9 must survive the port.
-- **Scan pipeline** — a new scan class (or `scans.mode`) that dispatches
-  through `runActivePentest`, loads consent v2 + plan tier + monthly spend,
-  and persists per-specialist findings + `scans.cost_cents`.
-- **Dashboard** — "Run active pen test" button (paid tiers only, gated by
-  #17), consent v2 re-check modal, per-specialist progress rows in
-  `ScanningView`, class-specific severity + icons on the findings page.
-- **Cost cap** — every campaign checks the projected cost against
-  `MONTHLY_CAMPAIGN_CAP_CENTS[plan]` BEFORE the first Claude call; over-cap
-  → calm "upgrade for more" banner, not a crash.
-- **`verify:campaign-e2e`** — new script that boots the target, seeds a
-  consent v2 row, and runs one campaign through the *full* scan-processor
-  path (not the direct orchestrator call). This is the gate for enabling
-  multi-agent in production.
+**What's still open (#27 follow-up).** The MVP customer backends live in
+`apps/worker/src/agent/customer-backends/index.ts` and re-use the seven
+test-target backend factories — same probe shapes, but parameterized by
+the customer's `app_base_url` + encrypted test accounts. That means a
+customer whose deployed app happens to expose endpoints matching the
+test-target shape (`POST /api/login`, `GET /api/orders/:id`,
+`GET /api/session-lookup?as=…`, …) gets real findings today; a customer
+whose endpoints look different gets zero (the specialist logs in and its
+tools return "no such endpoint" — its outcome carries `error`, but the
+campaign continues).
+
+Closing that gap = **real endpoint discovery**:
+
+- Parse routes from the connected repo (`listSourceFiles` already exists)
+  for Express / Next.js / Hono / Fastify style handlers. Extract path +
+  method + the auth-relevant param name.
+- Map Supabase tables (via the read-only role, #5) to the RLS-deep
+  specialist's `list_tables` tool.
+- Feed both into the customer backends so `list_endpoints` /
+  `list_tables` return the customer's actual surface, not the
+  test-target seed.
 
 Everything else (deployment #16, GitHub App rotation #1, App public + org
 #2, design pass #13) is independent of the multi-agent roadmap.

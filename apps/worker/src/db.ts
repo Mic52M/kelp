@@ -3,7 +3,14 @@
 // decrypted here with the app encryption key; plaintext never leaves the worker.
 
 import pg from "pg";
-import { openSecret, sealSecret, type DetectedFinding, type PlanTier, type VulnClass } from "@kelp/core";
+import {
+  openSecret,
+  sealSecret,
+  type DetectedFinding,
+  type PlanTier,
+  type ScanMode,
+  type VulnClass,
+} from "@kelp/core";
 
 let pool: pg.Pool | null = null;
 export function getPool(): pg.Pool {
@@ -26,6 +33,8 @@ export interface ClaimedScan {
   orgId: string;
   projectId: string;
   classes: VulnClass[];
+  /** 'passive' → deterministic scanners; 'active_pentest' → multi-agent campaign (#27). */
+  mode: ScanMode;
 }
 
 /** Atomically claim the next queued scan (skip-locked), marking it running. */
@@ -36,11 +45,17 @@ export async function claimQueuedScan(): Promise<ClaimedScan | null> {
        select id from scans where status = 'queued'
        order by queued_at limit 1 for update skip locked
      )
-     returning id, org_id, project_id, classes::text[]`,
+     returning id, org_id, project_id, classes::text[], mode`,
   );
   if (rows.length === 0) return null;
   const r = rows[0];
-  return { scanId: r.id, orgId: r.org_id, projectId: r.project_id, classes: r.classes };
+  return {
+    scanId: r.id,
+    orgId: r.org_id,
+    projectId: r.project_id,
+    classes: r.classes,
+    mode: r.mode as ScanMode,
+  };
 }
 
 /** Claim one specific queued scan by id (for Redis/BullMQ delivery, issue #7).
@@ -50,12 +65,18 @@ export async function claimScanById(scanId: string): Promise<ClaimedScan | null>
   const { rows } = await getPool().query(
     `update scans set status = 'running', started_at = now()
      where id = $1 and status = 'queued'
-     returning id, org_id, project_id, classes::text[]`,
+     returning id, org_id, project_id, classes::text[], mode`,
     [scanId],
   );
   if (rows.length === 0) return null;
   const r = rows[0];
-  return { scanId: r.id, orgId: r.org_id, projectId: r.project_id, classes: r.classes };
+  return {
+    scanId: r.id,
+    orgId: r.org_id,
+    projectId: r.project_id,
+    classes: r.classes,
+    mode: r.mode as ScanMode,
+  };
 }
 
 /** Ids of scans still 'queued' (oldest first) — used by the Redis reconciler
@@ -75,12 +96,14 @@ export interface ProjectRow {
   repoFullName: string | null;
   installationId: number | null;
   supabaseRef: string | null;
+  appBaseUrl: string | null;
 }
 
 export async function loadProject(projectId: string): Promise<ProjectRow | null> {
   const { rows } = await getPool().query(
-    `select id, org_id, github_repo_full_name, github_installation_id, supabase_project_ref
-     from projects where id = $1`,
+    `select id, org_id, github_repo_full_name, github_installation_id,
+            supabase_project_ref, app_base_url
+       from projects where id = $1`,
     [projectId],
   );
   if (rows.length === 0) return null;
@@ -91,7 +114,13 @@ export async function loadProject(projectId: string): Promise<ProjectRow | null>
     repoFullName: r.github_repo_full_name,
     installationId: r.github_installation_id === null ? null : Number(r.github_installation_id),
     supabaseRef: r.supabase_project_ref,
+    appBaseUrl: r.app_base_url,
   };
+}
+
+/** Store the customer's deployed app URL for active_pentest scans (#27). */
+export async function setAppBaseUrl(projectId: string, url: string | null): Promise<void> {
+  await getPool().query(`update projects set app_base_url = $2 where id = $1`, [projectId, url]);
 }
 
 /** Record (or re-activate) a GitHub App installation for an org. Idempotent. */

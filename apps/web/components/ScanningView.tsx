@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 // Auto-refreshes the server component while a scan is active so findings replace
 // this view the moment the worker finishes.
 
-const PHASES = [
+const PASSIVE_PHASES = [
   "Connecting to your project",
   "Reading Supabase schema & RLS policies",
   "Fetching repository contents",
@@ -15,25 +15,53 @@ const PHASES = [
   "Analyzing results",
 ];
 
-export function ScanningView({ status }: { status: string | null }) {
+// The seven multi-agent specialists (#27). Order = campaign dispatch order.
+const ACTIVE_PHASES = [
+  "BOLA — cross-account object access",
+  "Auth bypass — impersonation techniques",
+  "Injection — payload vs baseline diff",
+  "SSRF — out-of-band callback",
+  "Exposure — response field-name audit",
+  "RLS-deep — cross-account at the table level",
+  "Weak crypto — Set-Cookie flag audit",
+];
+
+export function ScanningView({
+  status,
+  mode = "passive",
+}: {
+  status: string | null;
+  mode?: "passive" | "active_pentest" | null;
+}) {
   const router = useRouter();
   const active = status === "queued" || status === "running";
+  const phases = mode === "active_pentest" ? ACTIVE_PHASES : PASSIVE_PHASES;
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
     if (!active) return;
+    // Active-pentest campaigns take longer per specialist — slow the pace so
+    // the checklist doesn't run out ahead of the real work.
+    const advanceMs = mode === "active_pentest" ? 3500 : 1300;
     const poll = setInterval(() => router.refresh(), 2000);
     const advance = setInterval(
-      () => setPhase((p) => Math.min(p + 1, PHASES.length - 1)),
-      1300,
+      () => setPhase((p) => Math.min(p + 1, phases.length - 1)),
+      advanceMs,
     );
     return () => {
       clearInterval(poll);
       clearInterval(advance);
     };
-  }, [active, router]);
+  }, [active, router, mode, phases.length]);
 
   if (!active) return null;
+
+  const title =
+    mode === "active_pentest" ? "Running the multi-agent pen test" : "Scanning your project";
+  const subtitle =
+    mode === "active_pentest"
+      ? "Seven specialists probe your app in parallel — a full run takes a few minutes."
+      : "This usually takes a few seconds.";
 
   return (
     <div className="mt-8 flex flex-col items-center rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-16 text-center">
@@ -43,11 +71,11 @@ export function ScanningView({ status }: { status: string | null }) {
         <span className="absolute inset-0 m-auto h-2.5 w-2.5 rounded-full bg-aqua-400 shadow-[0_0_12px_2px_rgba(52,230,207,0.5)]" />
       </div>
 
-      <h2 className="text-lg font-medium tracking-tight text-fog-50">Scanning your project</h2>
-      <p className="mt-1.5 text-sm text-fog-400">This usually takes a few seconds.</p>
+      <h2 className="text-lg font-medium tracking-tight text-fog-50">{title}</h2>
+      <p className="mt-1.5 text-sm text-fog-400">{subtitle}</p>
 
-      <ul className="mt-9 w-full max-w-xs space-y-3 text-left">
-        {PHASES.map((label, i) => {
+      <ul className="mt-9 w-full max-w-md space-y-3 text-left">
+        {phases.map((label, i) => {
           const done = i < phase;
           const current = i === phase;
           return (

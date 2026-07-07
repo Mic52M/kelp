@@ -263,15 +263,20 @@ wiring it into the customer scan path (#27).
 
 Suggested order toward **production-ready, self-serve** (the current north star):
 
-1. **#27** wire multi-agent orchestrator into the customer scan path (dashboard
-   trigger + progress + findings render). This is the big one — turns everything
-   already shipped into product value. ~3-4h focused. **Do this next.**
+1. **#27 (MVP shipped, follow-up open)** orchestrator wired into the customer
+   scan path — migration `0008` (`projects.app_base_url`, `scans.mode`),
+   customer-backends factory, `executeActivePentestScan` branch, dashboard
+   "Run active pen test" button + consent v2 + config forms + per-specialist
+   progress rows, `verify:campaign-e2e`. **Follow-up: real endpoint discovery**
+   from the connected repo + Supabase schema (MVP reuses the test-target
+   endpoint shape parameterized by `app_base_url` — customers whose app
+   matches that shape get real findings today; others get zero).
 2. **#1** rotate GitHub App secret + private key — security, blocking prod, small.
 3. **#2** make the GitHub App public + dedicated org — unblocks true multi-user
    install (pairs with the closed #14).
-4. **#13** Resend-grade design pass — do after #27 (dashboard surface will change).
+4. **#13** Resend-grade design pass — do after the endpoint-discovery follow-up.
 5. **#16** production deploy (Vercel + Railway/Fly) — after #1/#2.
-6. **#19** parent tracker — closes automatically once #27 lands.
+6. **#19** parent tracker — closes once #27's follow-up (real endpoint discovery) ships.
 
 ## 11z. Multi-agent pen-testing framework (post-#19 phase 1)
 
@@ -413,10 +418,30 @@ positives on any control endpoint.
     `live-verify.ts`, all seven chained by `npm run verify:live`. Gated by
     `KELP_ANTHROPIC_LIVE=1`.
 
-**What's left before the moat is customer-reachable:** #27 — wire
-`runActivePentest` into the dashboard scan path (trigger button, per-specialist
-progress rows, cost persisted, findings rendered). Everything the orchestrator
-needs is already shipped; #27 is pure integration work.
+**Customer path (#27 MVP shipped).** `runActivePentest` is now reachable
+from the dashboard:
+  · Migration `0008` adds `projects.app_base_url` and `scans.mode`
+    (`passive` | `active_pentest`).
+  · `executeActivePentestScan` in `apps/worker/src/scan-processor.ts`
+    branches on `scans.mode`, gates on plan tier + consent v2 + monthly
+    cost cap, dispatches the seven-specialist campaign via
+    `buildCustomerCampaignEntries`, persists findings via the new
+    `campaignFindingsToDetected` mapper and cost via `scans.cost_cents`.
+  · Dashboard top-bar `ActivePentestButton` (paid tiers only, gated by
+    plan + consent + app URL). New Settings section wires
+    `app_base_url` + two encrypted `app_test_account_a/_b` credentials.
+    `ScanningView` shows a seven-row per-specialist checklist when
+    `mode === 'active_pentest'`.
+  · `verify:campaign-e2e -w @kelp/worker` seeds a scratch org+project,
+    runs one campaign through the full scan-processor path, asserts
+    findings written + `cost_cents` populated. Gated by
+    `KELP_ANTHROPIC_LIVE=1`.
+
+**Follow-up (still open under #27):** the MVP customer backends re-use the
+in-repo test-target endpoint shape parameterized by `app_base_url`, so a
+customer whose deployed app matches that shape gets real findings today
+and everyone else gets zero. Real endpoint discovery from the connected
+repo (via `listSourceFiles`) + Supabase schema is the follow-up.
 
 ## 11a. Findings lifecycle (post-#15)
 
