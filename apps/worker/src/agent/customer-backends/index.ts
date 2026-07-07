@@ -27,7 +27,7 @@ import {
 } from "@kelp/core";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAnthropicDriver } from "../anthropic-driver.js";
-import { loginSupabaseUser, resolveAnonKey } from "../supabase-native/auth.js";
+import { loginSupabaseUser, resolveAnonKey, resolveServiceRoleKey } from "../supabase-native/auth.js";
 import { listPublicTables } from "../supabase-native/schema.js";
 import { createSupabaseBolaBackend } from "../supabase-native/bola-backend.js";
 import { createSupabaseRlsDeepBackend } from "../supabase-native/rls-deep-backend.js";
@@ -55,6 +55,10 @@ export interface CustomerCampaignConfig {
   /** Callback so a discovered anon key can be cached back via putCredential —
    *  the next scan skips the Management-API round-trip. */
   onDiscoveredAnonKey?: (anonKey: string) => Promise<void>;
+  /** Already-cached service-role key (from a previous auto-fetch). */
+  supabaseServiceRoleKey?: string | null;
+  /** Callback for caching a freshly-fetched service_role. */
+  onDiscoveredServiceRoleKey?: (serviceRole: string) => Promise<void>;
   /** The two real Supabase-Auth users the campaign impersonates. */
   accountA: { email: string; password: string };
   accountB: { email: string; password: string };
@@ -79,13 +83,20 @@ export async function buildCustomerCampaignEntries(
   const apiKey = cfg.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
 
-  // ── Resolve the anon key + log in both test accounts. Runs in sequence
-  // ── because the anon key gates both logins.
+  // ── Resolve the anon key + (optional) service_role. Anon gates login;
+  // ── service_role unlocks the admin-impersonation fallback when the
+  // ── customer's stored password is wrong / stale / never worked.
   const anonKey = await resolveAnonKey({
     projectRef: cfg.supabaseRef,
     explicitAnonKey: cfg.supabaseAnonKey,
     managementPat: cfg.supabaseManagementPat,
     onDiscovered: cfg.onDiscoveredAnonKey,
+  });
+  const serviceRoleKey = await resolveServiceRoleKey({
+    projectRef: cfg.supabaseRef,
+    managementPat: cfg.supabaseManagementPat,
+    cachedServiceRole: cfg.supabaseServiceRoleKey,
+    onDiscovered: cfg.onDiscoveredServiceRoleKey,
   });
   const [sessionA, sessionB, tables] = await Promise.all([
     loginSupabaseUser({
@@ -93,12 +104,14 @@ export async function buildCustomerCampaignEntries(
       anonKey,
       email: cfg.accountA.email,
       password: cfg.accountA.password,
+      serviceRoleKey,
     }),
     loginSupabaseUser({
       ref: cfg.supabaseRef,
       anonKey,
       email: cfg.accountB.email,
       password: cfg.accountB.password,
+      serviceRoleKey,
     }),
     listPublicTables(cfg.supabaseReadonlyConnString),
   ]);

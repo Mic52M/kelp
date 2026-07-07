@@ -34,25 +34,71 @@ export function supabaseBaseUrl(ref: string): string {
 }
 
 /**
- * Log in one test account against real Supabase Auth. Times out at 8s so a
- * dead network doesn't hang the campaign. Throws with an actionable error the
- * scan-issues banner can render verbatim.
+ * Log in one test account. Robust to whatever the customer's Supabase Auth
+ * config happens to be:
+ *
+ *   1. Try grant_type=password with the stored credentials.
+ *   2. On 400 / 422 (typical "invalid_credentials", "email not confirmed",
+ *      CAPTCHA required, MFA required, …) AND a service_role key is
+ *      available → look the user up in auth.users by email, then generate
+ *      a magic-link and verify it to mint a real session.
+ *
+ * The fallback path bypasses password validation entirely — Kelp is
+ * impersonating the user via an operator-scoped admin flow, which is fair
+ * for a pen test the org owner explicitly consented to. Falls back only
+ * when the service_role is present; without it the caller sees the original
+ * password error (unchanged UX for people who didn't provide a mgmt PAT).
  */
 export async function loginSupabaseUser(input: {
   ref: string;
   anonKey: string;
   email: string;
   password: string;
+  /** Optional service-role key. When present, Kelp falls back to admin-
+   *  impersonation on password failure. Never sent for the primary path. */
+  serviceRoleKey?: string | null;
 }): Promise<SupabaseSession> {
+  const primary = await tryPasswordLogin(input);
+  if (primary.ok) return primary.session;
+
+  // Password failed. If we can, escalate to admin impersonation — otherwise
+  // surface the primary failure as-is.
+  if (!input.serviceRoleKey) {
+    throw primary.error;
+  }
+  try {
+    return await adminImpersonate({
+      ref: input.ref,
+      anonKey: input.anonKey,
+      serviceRoleKey: input.serviceRoleKey,
+      email: input.email,
+    });
+  } catch (fallbackErr) {
+    // Both paths failed — bubble up the more informative message.
+    const fbMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+    throw new Error(
+      `${primary.error.message} Admin impersonation fallback also failed: ${fbMsg}`,
+    );
+  }
+}
+
+/** Password grant. Returns {ok:false, error} on ANY non-2xx so the caller
+ *  can decide whether to fall back — throws only on network/timeout. */
+async function tryPasswordLogin(input: {
+  ref: string;
+  anonKey: string;
+  email: string;
+  password: string;
+}): Promise<
+  | { ok: true; session: SupabaseSession }
+  | { ok: false; error: Error }
+> {
   const url = `${supabaseBaseUrl(input.ref)}/auth/v1/token?grant_type=password`;
   let res: Response;
   try {
     res = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        apikey: input.anonKey,
-      },
+      headers: { "content-type": "application/json", apikey: input.anonKey },
       body: JSON.stringify({ email: input.email, password: input.password }),
       signal: AbortSignal.timeout(8000),
     });
@@ -65,22 +111,94 @@ export async function loginSupabaseUser(input: {
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(
-      `Supabase Auth rejected ${input.email} with HTTP ${res.status}: ${body.slice(0, 160)}. ` +
-        `Verify the test-account email + password in Configuration.`,
-    );
+    return {
+      ok: false,
+      error: new Error(
+        `Supabase Auth rejected ${input.email} with HTTP ${res.status}: ${body.slice(0, 160)}. ` +
+          `Verify the test-account email + password in Configuration.`,
+      ),
+    };
   }
-  const data = (await res.json()) as {
-    access_token?: string;
-    user?: { id?: string };
-  };
+  const data = (await res.json()) as { access_token?: string; user?: { id?: string } };
   if (!data.access_token || !data.user?.id) {
+    return {
+      ok: false,
+      error: new Error(
+        `Supabase Auth returned an unexpected shape for ${input.email} — ` +
+          `Kelp needs { access_token, user: { id } }.`,
+      ),
+    };
+  }
+  return {
+    ok: true,
+    session: { accessToken: data.access_token, userId: data.user.id, email: input.email },
+  };
+}
+
+/**
+ * Admin impersonation via `generate_link(magiclink)` → `verify(magiclink)`.
+ * Requires the service_role key. The magic-link path is universally available
+ * on every Supabase project (there's no way to disable /auth/v1/verify while
+ * keeping auth working). Bypasses password, email-confirm, CAPTCHA, and MFA.
+ */
+async function adminImpersonate(input: {
+  ref: string;
+  anonKey: string;
+  serviceRoleKey: string;
+  email: string;
+}): Promise<SupabaseSession> {
+  const base = supabaseBaseUrl(input.ref);
+  const genRes = await fetch(`${base}/auth/v1/admin/generate_link`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: input.serviceRoleKey,
+      Authorization: `Bearer ${input.serviceRoleKey}`,
+    },
+    body: JSON.stringify({ type: "magiclink", email: input.email }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!genRes.ok) {
+    const body = await genRes.text().catch(() => "");
     throw new Error(
-      `Supabase Auth returned an unexpected shape for ${input.email} — ` +
-        `Kelp needs { access_token, user: { id } }.`,
+      `admin/generate_link failed with HTTP ${genRes.status}: ${body.slice(0, 160)}. ` +
+        `Is the service-role key correct, and does the user ${input.email} exist in auth.users?`,
     );
   }
-  return { accessToken: data.access_token, userId: data.user.id, email: input.email };
+  // generate_link returns two token shapes — `email_otp` (a short OTP the
+  // JSON /auth/v1/verify endpoint accepts alongside the email) and
+  // `hashed_token` (used by the browser-style GET /auth/v1/verify?token=…
+  // redirect flow). Kelp uses the OTP path because it's a single JSON POST.
+  const genData = (await genRes.json()) as {
+    email_otp?: string;
+    properties?: { email_otp?: string };
+  };
+  const emailOtp = genData.email_otp ?? genData.properties?.email_otp;
+  if (!emailOtp) {
+    throw new Error(
+      `admin/generate_link returned an unexpected shape for ${input.email} — no email_otp`,
+    );
+  }
+
+  const vRes = await fetch(`${base}/auth/v1/verify`, {
+    method: "POST",
+    headers: { "content-type": "application/json", apikey: input.anonKey },
+    body: JSON.stringify({ type: "magiclink", email: input.email, token: emailOtp }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!vRes.ok) {
+    const body = await vRes.text().catch(() => "");
+    throw new Error(
+      `auth/v1/verify failed with HTTP ${vRes.status}: ${body.slice(0, 160)}`,
+    );
+  }
+  const vData = (await vRes.json()) as { access_token?: string; user?: { id?: string } };
+  if (!vData.access_token || !vData.user?.id) {
+    throw new Error(
+      `auth/v1/verify returned an unexpected shape for ${input.email} — Kelp needs { access_token, user: { id } }`,
+    );
+  }
+  return { accessToken: vData.access_token, userId: vData.user.id, email: input.email };
 }
 
 /**
@@ -135,4 +253,36 @@ export async function resolveAnonKey(input: {
     });
   }
   return anon;
+}
+
+/**
+ * Resolve the service-role key, same shape as resolveAnonKey but service_role
+ * is a SECRET (never embed in the browser) so no explicit-paste field is
+ * exposed — only the Management-PAT auto-fetch path. Returns null when no
+ * PAT is available; caller then skips the admin-impersonation fallback.
+ */
+export async function resolveServiceRoleKey(input: {
+  projectRef: string;
+  managementPat: string | null;
+  onDiscovered?: ((serviceRole: string) => Promise<void>) | undefined;
+  /** When set, resolveServiceRoleKey short-circuits with the stored value
+   *  instead of hitting the Management API. */
+  cachedServiceRole?: string | null | undefined;
+}): Promise<string | null> {
+  if (input.cachedServiceRole) return input.cachedServiceRole;
+  if (!input.managementPat) return null;
+  const res = await fetch(
+    `https://api.supabase.com/v1/projects/${input.projectRef}/api-keys`,
+    { headers: { Authorization: `Bearer ${input.managementPat}` } },
+  );
+  if (!res.ok) return null;
+  const keys = (await res.json()) as Array<{ name?: string; api_key?: string }>;
+  const sr = keys.find((k) => k.name === "service_role")?.api_key;
+  if (!sr) return null;
+  if (input.onDiscovered) {
+    await input.onDiscovered(sr).catch((e: unknown) => {
+      console.warn("could not cache service_role key:", e instanceof Error ? e.message : e);
+    });
+  }
+  return sr;
 }

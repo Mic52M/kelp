@@ -198,9 +198,10 @@ async function executeActivePentestScan(scan: {
         "(Configuration → Supabase — read-only role) to enumerate tables.",
     );
   }
-  const [anonKey, managementPat] = await Promise.all([
+  const [anonKey, managementPat, serviceRoleKey] = await Promise.all([
     getCredential(scan.projectId, "supabase_anon_key"),
     getCredential(scan.projectId, "supabase_management"),
+    getCredential(scan.projectId, "supabase_service_role"),
   ]);
 
   const entries = await buildCustomerCampaignEntries({
@@ -208,8 +209,12 @@ async function executeActivePentestScan(scan: {
     supabaseReadonlyConnString: readonlyConnString,
     supabaseAnonKey: anonKey,
     supabaseManagementPat: managementPat,
+    supabaseServiceRoleKey: serviceRoleKey,
     onDiscoveredAnonKey: async (k) => {
       await putCredential(scan.orgId, scan.projectId, "supabase_anon_key", k);
+    },
+    onDiscoveredServiceRoleKey: async (k) => {
+      await putCredential(scan.orgId, scan.projectId, "supabase_service_role", k);
     },
     accountA,
     accountB,
