@@ -37,6 +37,7 @@
     "@anthropic-ai/sdk": "^0.109.1",
     "@kelp/core": "*",
     "@octokit/app": "^16.1.2",
+    "bullmq": "^5.79.3",
     "pg": "^8.22.0",
     "tar-stream": "^3.2.0"
   },

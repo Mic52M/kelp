@@ -6,6 +6,7 @@
 import { runScan, type ConsentStore, type ScanDeps, type VulnClass } from "@kelp/core";
 import {
   claimQueuedScan,
+  claimScanById,
   finishScan,
   getCredential,
   getPool,
@@ -108,6 +109,17 @@ export async function runScanForProject(input: {
 /** Process one queued scan (if any). Used by the worker poll loop. */
 export async function processOneScan(): Promise<{ processed: boolean } & Partial<ScanOutcome>> {
   const scan = await claimQueuedScan();
+  if (!scan) return { processed: false };
+  const outcome = await executeScan(scan);
+  return { processed: true, ...outcome };
+}
+
+/** Process a specific scan by id (used by the Redis/BullMQ consumer, issue #7).
+ *  No-op if the row is no longer 'queued' — makes duplicate delivery safe. */
+export async function processScanById(
+  scanId: string,
+): Promise<{ processed: boolean } & Partial<ScanOutcome>> {
+  const scan = await claimScanById(scanId);
   if (!scan) return { processed: false };
   const outcome = await executeScan(scan);
   return { processed: true, ...outcome };

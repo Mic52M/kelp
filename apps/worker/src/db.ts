@@ -43,6 +43,32 @@ export async function claimQueuedScan(): Promise<ClaimedScan | null> {
   return { scanId: r.id, orgId: r.org_id, projectId: r.project_id, classes: r.classes };
 }
 
+/** Claim one specific queued scan by id (for Redis/BullMQ delivery, issue #7).
+ *  Returns null if the row isn't 'queued' anymore — i.e. already claimed by
+ *  another consumer / poller — so a duplicate or replayed job is a safe no-op. */
+export async function claimScanById(scanId: string): Promise<ClaimedScan | null> {
+  const { rows } = await getPool().query(
+    `update scans set status = 'running', started_at = now()
+     where id = $1 and status = 'queued'
+     returning id, org_id, project_id, classes::text[]`,
+    [scanId],
+  );
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return { scanId: r.id, orgId: r.org_id, projectId: r.project_id, classes: r.classes };
+}
+
+/** Ids of scans still 'queued' (oldest first) — used by the Redis reconciler
+ *  to re-deliver rows that never reached Redis (e.g. enqueued while Redis was
+ *  down). Idempotent because delivery uses jobId=scanId. */
+export async function listQueuedScanIds(limit = 50): Promise<string[]> {
+  const { rows } = await getPool().query(
+    `select id from scans where status = 'queued' order by queued_at limit $1`,
+    [limit],
+  );
+  return rows.map((r) => r.id as string);
+}
+
 export interface ProjectRow {
   id: string;
   orgId: string;

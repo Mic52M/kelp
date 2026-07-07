@@ -28,6 +28,13 @@ export type { SecretFixPrResult } from "./fix-pr.js";
 export type { SupabaseProjectInfo, ConnectInput, RepoOption } from "./api.js";
 export { InMemoryQueue } from "./queue.js";
 export type { ScanJob, ScanQueue } from "./queue.js";
+export {
+  enqueueScanJob,
+  startScanWorker,
+  closeScanQueue,
+  redisEnabled,
+} from "./redis-queue.js";
+export { processScanById } from "./scan-processor.js";
 
 async function pollLoop() {
   const { processOneScan } = await import("./scan-processor.js");
@@ -42,6 +49,47 @@ async function pollLoop() {
   }
 }
 
+/**
+ * Production entry (issue #7): if REDIS_URL is set, consume scans from BullMQ
+ * and run a light reconciler that re-delivers any 'queued' rows that never
+ * reached Redis (idempotent — jobId = scanId de-dupes). Otherwise fall back
+ * to the DB poll loop (local dev / no Redis).
+ */
+async function main() {
+  const { startScanWorker, enqueueScanJob, closeScanQueue, redisEnabled } =
+    await import("./redis-queue.js");
+  if (!redisEnabled()) {
+    await pollLoop();
+    return;
+  }
+
+  const worker = await startScanWorker();
+  console.log("Kelp worker: consuming scans via Redis (BullMQ)…");
+
+  const { listQueuedScanIds } = await import("./db.js");
+  const reconcile = setInterval(() => {
+    void (async () => {
+      try {
+        for (const id of await listQueuedScanIds()) await enqueueScanJob(id);
+      } catch (e) {
+        console.error("reconcile error:", e instanceof Error ? e.message : e);
+      }
+    })();
+  }, 15000);
+
+  const shutdown = async () => {
+    clearInterval(reconcile);
+    try {
+      if (worker) await worker.close();
+      await closeScanQueue();
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.on("SIGTERM", () => void shutdown());
+  process.on("SIGINT", () => void shutdown());
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  void pollLoop();
+  void main();
 }

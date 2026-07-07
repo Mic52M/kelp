@@ -5,6 +5,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { VulnClass } from "@kelp/core";
 import { getPool, putCredential, listOrgInstallationIds, saveGithubInstallation } from "./db.js";
 import { createGitHubApp, createGitHubConnector } from "./connectors/github.js";
+import { enqueueScanJob } from "./redis-queue.js";
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -162,7 +163,11 @@ export async function enqueueScanForProject(input: {
      values ($1, $2, 'queued', $3, $4::vuln_class[]) returning id`,
     [input.orgId, input.projectId, input.trigger ?? "manual", input.classes],
   );
-  return { scanId: rows[0].id as string };
+  const scanId = rows[0].id as string;
+  // If Redis is configured, hand the job to the durable queue (#7); otherwise
+  // the DB poll loop / Next after() path picks the 'queued' row up (local dev).
+  await enqueueScanJob(scanId);
+  return { scanId };
 }
 
 /** Create the project (+ encrypted creds) and enqueue its first scan. */
