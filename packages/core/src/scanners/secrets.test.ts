@@ -69,6 +69,22 @@ test("ignores placeholder values", () => {
   assert.equal(findings.length, 0);
 });
 
+test("ignores template-literal idempotency keys (dynamic, not secrets)", () => {
+  // Real false positives reported from usatopoint-test: an idempotencyKey built
+  // from a record id + timestamp. `${…}` means it's constructed at runtime.
+  const findings = detectSecrets([
+    {
+      path: "src/pages/admin/AdminRequests.tsx",
+      content: "const idempotencyKey = `req-update-${r.id}-${Date.now()}`;",
+    },
+    {
+      path: "src/pages/admin/AdminProposals.tsx",
+      content: "const idempotencyKey = `proposal-reply-${id}-${Date.now()}`;",
+    },
+  ]);
+  assert.equal(findings.length, 0, "interpolated template literals must not be flagged as secrets");
+});
+
 test("Supabase anon publishable key produces NO finding (public by design)", () => {
   // The real-world Lovable/Bolt pattern: anon key assigned in a client file.
   const findings = detectSecrets([

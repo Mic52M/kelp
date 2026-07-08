@@ -276,6 +276,10 @@ function scanFile(file: SourceFile): SecretMatch[] {
   while ((am = ASSIGN_RE.exec(file.content)) !== null) {
     const value = am[1]!;
     if (PLACEHOLDER_RE.test(value)) continue;
+    // Template-literal interpolation (`req-${id}-${Date.now()}`) is built at
+    // runtime — it is NOT a hard-coded secret. This kills the common false
+    // positive on idempotency keys / cache keys assigned to a *Key name.
+    if (value.includes("${")) continue;
     // JWTs are owned by the JWT layer above — which deliberately SKIPS the
     // Supabase anon key (public by design). Don't second-guess it here, or we
     // re-flag public keys as suspicious. Same for known provider secrets: the

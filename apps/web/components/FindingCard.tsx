@@ -4,7 +4,12 @@ import { useActionState, useState } from "react";
 import type { Finding } from "@/lib/types";
 import { SeverityBadge } from "./SeverityBadge";
 import { Button } from "./Button";
-import { dismissFinding, openFixPr, type FixPrState } from "@/app/dashboard/finding-actions";
+import {
+  markResolvedFinding,
+  reportFalsePositive,
+  openFixPr,
+  type FixPrState,
+} from "@/app/dashboard/finding-actions";
 
 const CLASS_LABEL: Record<Finding["vulnClass"], string> = {
   rls: "Row Level Security",
@@ -136,11 +141,21 @@ export function FindingCard({ finding }: { finding: Finding }) {
                   View PR on GitHub ↗
                 </a>
               )}
-              <form action={dismissFinding}>
+              <form action={markResolvedFinding}>
                 <input type="hidden" name="findingId" value={finding.id} />
                 <Button type="submit" variant="secondary">
-                  Dismiss
+                  Mark resolved
                 </Button>
+              </form>
+              <form action={reportFalsePositive}>
+                <input type="hidden" name="findingId" value={finding.id} />
+                <button
+                  type="submit"
+                  title="Not a real issue — tells Kelp to stop flagging this pattern"
+                  className="rounded-lg border border-line px-3.5 py-2 text-sm text-fog-400 transition-colors hover:border-fog-600 hover:text-fog-200"
+                >
+                  False positive
+                </button>
               </form>
             </div>
           )}
