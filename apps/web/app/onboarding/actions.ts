@@ -18,8 +18,7 @@ import {
 function friendlyError(raw: string): string {
   if (/duplicate key|already/i.test(raw)) return "That project is already connected — re-scan it from your dashboard.";
   if (/rate limit|secondary/i.test(raw)) return "GitHub is rate-limiting us right now. Please try again in a minute.";
-  if (/401|unauthor|token/i.test(raw)) return "A credential was rejected. Double-check your Supabase token.";
-  return "Something went wrong running the scan. Please try again.";
+  return "Something went wrong connecting the repository. Please try again.";
 }
 
 async function requireOrg(): Promise<{ orgId: string }> {
@@ -66,36 +65,37 @@ export async function getSupabaseProjectsAction(
   }
 }
 
+/**
+ * Connect a repository (repo-first onboarding). Kelp links the repo, runs the
+ * first secret scan, and sends the user to Configuration to finish setup —
+ * where the Supabase backend is auto-detected from the repo and the user only
+ * adds the two test accounts. No API-key prompt during connect (issue: the old
+ * flow asked for a Supabase Management token here; that now lives in
+ * Configuration, and is optional thanks to repo auto-detection).
+ */
 export async function connectAndScanAction(input: {
   projectName: string;
   repoFullName: string | null;
   installationId: number | null;
-  supabaseRef: string | null;
-  supabaseToken: string | null;
 }): Promise<{ ok: false; error: string }> {
   const { orgId } = await requireOrg();
 
-  const classes: Array<"secret" | "rls"> = [];
-  if (input.repoFullName) classes.push("secret");
-  if (input.supabaseRef) classes.push("rls");
-  if (classes.length === 0) {
-    return { ok: false, error: "Connect at least a repository or a Supabase project." };
+  if (!input.repoFullName) {
+    return { ok: false, error: "Pick a repository to connect." };
   }
 
   let error: string | null = null;
   try {
     await createProjectAndEnqueueScan({
       orgId,
-      name: input.projectName || input.repoFullName || input.supabaseRef || "Project",
+      name: input.projectName || input.repoFullName || "Project",
       repoFullName: input.repoFullName,
       installationId: input.installationId,
-      supabaseRef: input.supabaseRef,
-      supabaseToken: input.supabaseToken,
-      classes,
+      supabaseRef: null,
+      supabaseToken: null,
+      classes: ["secret"],
     });
   } catch (e) {
-    // PlanLimitError is a friendly upgrade prompt, not a crash — surface its
-    // own message verbatim instead of running it through friendlyError.
     if (e instanceof Error && e.name === "PlanLimitError") {
       error = e.message;
     } else {
@@ -104,8 +104,8 @@ export async function connectAndScanAction(input: {
   }
   if (error) return { ok: false, error };
 
-  // Process the queue in the background after the response is sent — so the scan
-  // runs even when no separate worker process is up (local dev "just works").
   after(() => drainScans().catch((e) => console.error("scan processing failed:", e)));
-  redirect("/dashboard");
+  // Land in Configuration to finish setup (test accounts, consent) — the
+  // Supabase backend is auto-detected from the repo there.
+  redirect("/dashboard/configuration");
 }

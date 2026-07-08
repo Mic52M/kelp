@@ -141,30 +141,52 @@ export default async function ConfigurationPage({
         />
 
         <div className="mt-12 space-y-8">
+          <div className="rounded-2xl border border-aqua-600/25 bg-aqua-500/[0.04] px-6 py-5">
+            <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-aqua-300">
+              Backend — auto-detected
+            </div>
+            <p className="text-sm leading-relaxed text-fog-300">
+              Kelp reads your connected repo to detect the Supabase backend (URL, public
+              anon key, and schema) — including Lovable Cloud, where you have no database
+              login. <span className="text-fog-100">The only thing Kelp needs from you is
+              two test accounts</span> (below). The Supabase credentials further down are
+              optional — they deepen the scan when you can provide them, but the pen test
+              runs without them.
+            </p>
+          </div>
+
           <Section
-            label="Data sources"
-            title="Supabase — read-only role (recommended)"
-            description="Least-privilege: Kelp connects with the standard Session-pooler URL and switches to a kelp_readonly role you install once. No application data is ever read through this credential."
+            label="Active testing"
+            title="Test accounts — required"
+            description="Kelp signs in as two low-privilege accounts on your app and probes whether one can reach the other's data. Emails are shown after saving; passwords are stored encrypted and never re-rendered."
+          >
+            <ActivePentestConfigForm projects={pentestConfigs} />
+          </Section>
+
+          <Section
+            label="Advanced (optional)"
+            title="Supabase — read-only role"
+            description="Optional. Gives the agents a live database view (exact RLS state) on self-managed Supabase. Not needed for Lovable Cloud — Kelp derives the schema from your repo."
           >
             {supabaseFormProjects.length > 0 ? (
               <SupabaseReadonlyForm projects={supabaseFormProjects} />
             ) : (
               <p className="text-sm text-fog-500">
-                This project isn't linked to a Supabase database yet. Connect one from Onboarding to
-                enable read-only credentials.
+                No self-managed Supabase database linked — the schema is auto-detected from
+                your repo, so this is optional.
               </p>
             )}
           </Section>
 
           <Section
-            label="Data sources"
+            label="Advanced (optional)"
             title="Supabase — Management API token (legacy)"
-            description="Only if you can't create a Postgres role. This is an account-level token — prefer the read-only role above."
+            description="Only if you can't create a Postgres role. Account-level token — prefer the read-only role above. Not needed for Lovable Cloud."
           >
             {supabaseFormProjects.length > 0 ? (
               <ReconnectForm projects={supabaseFormProjects} />
             ) : (
-              <p className="text-sm text-fog-500">No Supabase project linked.</p>
+              <p className="text-sm text-fog-500">Optional — not needed when the backend is auto-detected.</p>
             )}
           </Section>
 
@@ -178,14 +200,6 @@ export default async function ConfigurationPage({
               copy={CONSENT_V3_TEXT}
               version={CONSENT_VERSION_LATEST}
             />
-          </Section>
-
-          <Section
-            label="Active testing"
-            title="Where to probe"
-            description="The active pen test signs in to your Supabase as two test accounts (A + B) and probes cross-account reads through PostgREST. The deployed app URL is optional today — it'll be used once the four Stage-B specialists (auth-bypass, injection, SSRF, weak-crypto) come online with real endpoint discovery."
-          >
-            <ActivePentestConfigForm projects={pentestConfigs} />
           </Section>
         </div>
 
