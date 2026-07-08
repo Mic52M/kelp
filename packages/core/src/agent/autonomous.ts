@@ -459,6 +459,13 @@ export interface PentestBrief {
   mission: string;
 }
 
+export interface PentesterOptions {
+  /** Deterministic backend intelligence to inject into the agent's first
+   *  message, so it skips the "grep the repo to find things Kelp already
+   *  parsed" phase. Injected as the initial user message context. */
+  backendBrief?: string;
+}
+
 const PERSONA =
   "You are Kelp — an autonomous penetration tester with explicit, signed " +
   "authorization to attack this single connected project. You test a real " +
@@ -487,6 +494,7 @@ const PERSONA =
 
 export function createAutonomousPentester(
   brief: PentestBrief,
+  opts: PentesterOptions = {},
 ): Specialist<PentestTools, AutonomousFinding> {
   return {
     name: brief.name,
@@ -494,10 +502,15 @@ export function createAutonomousPentester(
     systemPrompt: `${PERSONA}\n\nYOUR ASSIGNED SURFACE:\n${brief.mission}`,
     tools: AUTONOMOUS_TOOLS,
     initialPrompt(ctx: SpecialistContext): string {
+      const brief = opts.backendBrief
+        ? `\n\n${opts.backendBrief}\n\nUse the brief above BEFORE grepping the repo. ` +
+          `Then hypothesize + probe — every step spent re-discovering things Kelp already ` +
+          `told you is one fewer probe you get to run.`
+        : "";
       return (
         `Target project ${ctx.projectId}. Begin recon on your assigned surface, ` +
         `then hypothesize and attack. Report every vulnerability you can reproduce. ` +
-        `Call conclude when done.`
+        `Call conclude when done.${brief}`
       );
     },
     createExecutor(tools: PentestTools): SpecialistExecutor<AutonomousFinding> {

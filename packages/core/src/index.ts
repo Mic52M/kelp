@@ -19,6 +19,7 @@ export * from "./agent/campaign-findings.js";
 export * from "./agent/edge-functions.js";
 export * from "./agent/autonomous.js";
 export * from "./agent/repo-recon.js";
+export * from "./agent/backend-brief.js";
 export * from "./agent/specialists/auth-bypass.js";
 export * from "./agent/specialists/injection.js";
 export * from "./agent/specialists/ssrf.js";

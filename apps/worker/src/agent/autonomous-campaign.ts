@@ -8,6 +8,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import {
+  buildBackendBrief,
   createAutonomousPentester,
   DEFAULT_PENTEST_SQUAD,
   type DiscoveredEdgeFunction,
@@ -82,8 +83,18 @@ export async function buildAutonomousCampaign(
   const client = new Anthropic({ apiKey });
   const model = cfg.model ?? DEFAULT_MODEL;
 
+  // Deterministic pre-recon: extract RPC function bodies (SECURITY DEFINER
+  // flagged), edge-fn signatures, and verify_jwt state from the repo, and
+  // hand the agents this brief up front so they don't waste steps grepping
+  // for things Kelp already parsed. Empty when there's no repo — agents fall
+  // back to the tool-based recon path.
+  const backendBrief =
+    cfg.sourceFiles.length > 0
+      ? buildBackendBrief(cfg.sourceFiles, cfg.edgeFunctions).humanText
+      : "";
+
   const entries: SpecialistEntry<unknown, unknown>[] = DEFAULT_PENTEST_SQUAD.map((brief) => ({
-    specialist: createAutonomousPentester(brief) as SpecialistEntry<unknown, unknown>["specialist"],
+    specialist: createAutonomousPentester(brief, { backendBrief }) as SpecialistEntry<unknown, unknown>["specialist"],
     backend: toolbox,
     driver: createAnthropicDriver(client, model),
   }));
