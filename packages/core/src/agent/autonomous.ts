@@ -117,6 +117,9 @@ export interface AutonomousFinding {
   /** endpoint / table / function the finding is about */
   endpoint: string;
   surface: ProbeSurface | "config" | "source";
+  /** paste-ready prompt for the user's AI coding tool that fixes THIS issue,
+   *  written by the agent from the real code it read. */
+  fix: string;
 }
 
 // ─── Tool schemas ────────────────────────────────────────────────────────────
@@ -189,7 +192,8 @@ export const AUTONOMOUS_TOOLS: AgentTool[] = [
       "Report a confirmed vulnerability. Kelp RE-RUNS your reproduction and only " +
       "records the finding if the expected observable actually holds — so give a " +
       "precise, self-contained reproduction. Do not report anything you have not " +
-      "reproduced with a tool.",
+      "reproduced with a tool. You MUST also include `fix`: a paste-ready prompt " +
+      "that resolves this exact issue, written from the real code you read.",
     inputSchema: {
       type: "object",
       properties: {
@@ -199,6 +203,15 @@ export const AUTONOMOUS_TOOLS: AgentTool[] = [
         surface: { type: "string", enum: ["postgrest", "edge", "auth", "config", "source"] },
         endpoint: { type: "string", description: "table / function / path the finding is about" },
         description: { type: "string", description: "what's wrong and the impact, in plain language; no raw PII" },
+        fix: {
+          type: "string",
+          description:
+            "A precise, paste-ready prompt for the user's AI coding tool (Lovable / Bolt / " +
+            "Cursor / v0) that fixes THIS exact issue. Name the exact file(s) you read and the " +
+            "exact change to make; show the corrected code. If a correct pattern already exists " +
+            "elsewhere in the repo, point at it. Written so the user can paste it verbatim and the " +
+            "vulnerability is resolved. No placeholders.",
+        },
         reproduction: {
           type: "object",
           description: "Either an http probe to re-run, or a source citation.",
@@ -221,7 +234,7 @@ export const AUTONOMOUS_TOOLS: AgentTool[] = [
         headerName: { type: "string", description: "for header_matches" },
         headerContains: { type: "string", description: "for header_matches: substring the header value must contain" },
       },
-      required: ["title", "severity", "vulnClass", "surface", "endpoint", "description", "reproduction", "expect"],
+      required: ["title", "severity", "vulnClass", "surface", "endpoint", "description", "fix", "reproduction", "expect"],
       additionalProperties: false,
     },
   },
@@ -324,6 +337,7 @@ class AutonomousExecutor implements SpecialistExecutor<AutonomousFinding> {
         evidence: `${str(i.description)}\n\n[Kelp confirmed: ${confirmed.why}]`,
         endpoint,
         surface: (str(i.surface) as AutonomousFinding["surface"]) || "postgrest",
+        fix: str(i.fix),
       });
     }
     return ok(call, "confirmed and recorded for human review");
@@ -464,9 +478,12 @@ const PERSONA =
   "Keep looping until you've genuinely covered your surface.\n\n" +
   "Rules: Kelp blocks destructive calls (delete/payment/…); treat a blocked " +
   "endpoint as UNTESTED, not safe. Never exfiltrate real user data — you only " +
-  "ever see a redacted view. To report, you MUST provide a reproduction Kelp " +
-  "can re-run; Kelp confirms the observable before recording, so unproven " +
-  "claims are silently dropped. When your surface is exhausted, call conclude.";
+  "ever see a redacted view. To report, you MUST provide (a) a reproduction Kelp " +
+  "can re-run — Kelp confirms the observable before recording, so unproven " +
+  "claims are silently dropped — and (b) a precise, paste-ready `fix` prompt " +
+  "written from the real code you read, naming the exact file and change so the " +
+  "user's AI coding tool resolves it verbatim. When your surface is exhausted, " +
+  "call conclude.";
 
 export function createAutonomousPentester(
   brief: PentestBrief,

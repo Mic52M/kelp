@@ -59,6 +59,14 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
     autofixable = s.confidence === "high";
   }
 
+  // Autonomous-agent findings carry their own paste-ready fix prompt (the agent
+  // wrote it from the real code it read). Prefer it whenever we didn't already
+  // compute a template prompt above.
+  if (!fixPrompt) {
+    const agentFix = (raw as { fix?: unknown } | undefined)?.fix;
+    if (typeof agentFix === "string" && agentFix.trim()) fixPrompt = agentFix;
+  }
+
   return {
     id: row.id,
     vulnClass: row.vuln_class,

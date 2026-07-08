@@ -50,6 +50,7 @@ test("records a finding only when Kelp re-runs the reproduction and the observab
       surface: "postgrest",
       endpoint: "orders",
       description: "A reads B's row",
+      fix: "In your RLS policy for orders, replace USING(true) with USING(auth.uid() = user_id).",
       reproduction: { probe: { surface: "postgrest", path: "/rest/v1/orders", identity: "accountA" } },
       expect: "row_owned_by_other",
       ownerColumn: "user_id",
@@ -59,6 +60,7 @@ test("records a finding only when Kelp re-runs the reproduction and the observab
   assert.equal(e.findings.length, 1);
   assert.equal(e.findings[0]!.vulnClass, "rls");
   assert.match(e.findings[0]!.evidence, /Kelp confirmed/);
+  assert.match(e.findings[0]!.fix, /USING\(auth\.uid/);
 });
 
 test("REJECTS a finding whose reproduction does not show the claimed observable", async () => {
