@@ -59,15 +59,20 @@ export function createAnthropicDriver(client: Anthropic, model: string): LlmAgen
       messages: withConversationCache(messages),
     });
     if (res.usage) {
-      // Count cache creation + cache reads as input tokens too. This slightly
-      // OVER-estimates cost (cache reads are ~10% price), which is the safe
-      // direction for the monthly spend cap. input_tokens already excludes
-      // cached reads, so we add them back explicitly.
+      // Anthropic prices cached input tokens differently: cache_creation ≈ 1.25×
+      // the base input rate, cache_read ≈ 0.10×. If we lumped them in as full
+      // input we'd over-report cost 3–6× on long agent loops (the previous
+      // audit surfaced $2.88 shown vs ~$0.50 actual). Convert to
+      // BILLABLE-EQUIVALENT input tokens here so pricing.ts (which multiplies
+      // by the base input rate) lands close to the real bill.
       const u = res.usage as Anthropic.Usage & {
         cache_creation_input_tokens?: number | null;
         cache_read_input_tokens?: number | null;
       };
-      inputTokens += (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+      const base = u.input_tokens ?? 0;
+      const cacheWrite = u.cache_creation_input_tokens ?? 0;
+      const cacheRead = u.cache_read_input_tokens ?? 0;
+      inputTokens += base + Math.round(cacheWrite * 1.25) + Math.round(cacheRead * 0.1);
       outputTokens += u.output_tokens ?? 0;
     }
     // Preserve the full assistant turn (incl. tool_use blocks) for the next request.
