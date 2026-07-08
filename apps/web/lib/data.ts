@@ -89,6 +89,22 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
 
 const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low"];
 
+/** Trimmed report the worker persists per active-pentest scan — see
+ *  campaignReportToPersisted in apps/worker/src/scan-processor.ts. */
+export interface PersistedAgentReport {
+  version: number;
+  totalUsage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number };
+  outcomes: Array<{
+    name: string;
+    vulnClass: string;
+    steps: number;
+    findingsCount: number;
+    error: string | null;
+    usage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number } | null;
+    transcript: string[];
+  }>;
+}
+
 export interface DashboardData {
   project: Project | null;
   /** all projects the caller can see (for the top-bar switcher) */
@@ -99,6 +115,12 @@ export interface DashboardData {
   scanStatus: string | null;
   /** mode of the most recent scan — 'passive' | 'active_pentest' (#27). */
   scanMode: "passive" | "active_pentest" | null;
+  /** Full per-agent report of the most recent active-pentest scan (transcripts,
+   *  step counts, per-agent cost). Null for passive scans or when the row
+   *  predates the agent_report column. */
+  agentReport: PersistedAgentReport | null;
+  /** Claude spend of the most recent scan, in USD cents. */
+  scanCostCents: number | null;
   /** human-readable warnings if a scan class couldn't complete */
   scanIssues: string[];
   /** Active-pentest gate state (#27): what's needed to enable the button. */
@@ -235,16 +257,24 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
   const { data: scanRows } = p
     ? await supabase
         .from("scans")
-        .select("status, error, mode")
+        .select("status, error, mode, agent_report, cost_cents")
         .eq("project_id", p.id)
         .order("queued_at", { ascending: false })
         .limit(1)
     : { data: null };
   const latestScan = scanRows?.[0] as
-    | { status: string; error: string | null; mode: "passive" | "active_pentest" }
+    | {
+        status: string;
+        error: string | null;
+        mode: "passive" | "active_pentest";
+        agent_report: PersistedAgentReport | null;
+        cost_cents: number | null;
+      }
     | undefined;
   const scanStatus = latestScan?.status ?? null;
   const scanMode = latestScan?.mode ?? null;
+  const agentReport = latestScan?.agent_report ?? null;
+  const scanCostCents = latestScan?.cost_cents ?? null;
 
   let scanIssues: string[] = [];
   if (latestScan?.error) {
@@ -356,6 +386,8 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
     findings,
     scanStatus,
     scanMode,
+    agentReport,
+    scanCostCents,
     scanIssues,
     summary: {
       score: findings.length === 0 ? 100 : Math.max(5, 100 - penalty),

@@ -5,6 +5,7 @@ import { ActivePentestButton } from "@/components/dashboard/ActivePentestButton"
 import { FindingCard } from "@/components/FindingCard";
 import { ScoreRing } from "@/components/ScoreRing";
 import { ScanningView } from "@/components/ScanningView";
+import { AgentReportPanel } from "@/components/dashboard/AgentReportPanel";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { loadDashboard } from "@/lib/data";
@@ -24,7 +25,7 @@ export default async function Dashboard({
   }
 
   const params = (await searchParams) ?? {};
-  const { project, projectOptions, findings, summary, scanStatus, scanMode, scanIssues, activePentest } =
+  const { project, projectOptions, findings, summary, scanStatus, scanMode, scanIssues, activePentest, agentReport } =
     await loadDashboard(params.project);
   const scanning = scanStatus === "queued" || scanStatus === "running";
   const active = findings.filter((f) => f.status !== "resolved");
@@ -200,6 +201,10 @@ export default async function Dashboard({
                   ))}
                 </div>
               </div>
+            )}
+
+            {agentReport && agentReport.outcomes.length > 0 && (
+              <AgentReportPanel report={agentReport} />
             )}
           </>
         )}

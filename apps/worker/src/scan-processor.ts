@@ -309,6 +309,16 @@ async function executeActivePentestScan(scan: {
       : undefined;
   await finishScan(scan.scanId, "succeeded", errorNote, costCents);
 
+  // Persist the full CampaignReport (per-agent transcript + counts + cost +
+  // findings) so the "How the pen test ran" panel can show exactly what the
+  // agents did. Bodies were already redacted by the toolbox — safe to store.
+  await getPool()
+    .query(`update scans set agent_report = $2 where id = $1`, [
+      scan.scanId,
+      JSON.stringify(campaignReportToPersisted(report)),
+    ])
+    .catch((e) => console.warn("agent_report persist failed:", e instanceof Error ? e.message : e));
+
   return {
     scanId: scan.scanId,
     found,
@@ -398,6 +408,44 @@ export async function processScanById(
   if (!scan) return { processed: false };
   const outcome = await executeScan(scan);
   return { processed: true, ...outcome };
+}
+
+/**
+ * Trim + shape the CampaignReport for persistence. Keeps the human-useful
+ * fields (per-agent name, class, steps, cost, findings, error, transcript)
+ * and caps the transcript text so a very chatty agent can't blow up the row.
+ * Response bodies were already redacted by the toolbox — transcripts hold
+ * only the agent's narration + tool-choice reasoning, no user data.
+ */
+function campaignReportToPersisted(report: {
+  outcomes: Array<{
+    name: string;
+    vulnClass: string;
+    findings: unknown[];
+    transcript: string[];
+    error: string | null;
+    steps: number;
+    usage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number } | null;
+  }>;
+  totalUsage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number };
+}): unknown {
+  const MAX_STEP_CHARS = 1200;
+  const MAX_STEPS = 60;
+  return {
+    version: 1,
+    totalUsage: report.totalUsage,
+    outcomes: report.outcomes.map((o) => ({
+      name: o.name,
+      vulnClass: o.vulnClass,
+      steps: o.steps,
+      findingsCount: o.findings.length,
+      error: o.error,
+      usage: o.usage,
+      transcript: o.transcript
+        .slice(0, MAX_STEPS)
+        .map((t) => (t.length > MAX_STEP_CHARS ? t.slice(0, MAX_STEP_CHARS) + "…" : t)),
+    })),
+  };
 }
 
 /** Drain all currently-queued scans (local dev / poll loop tick). */
