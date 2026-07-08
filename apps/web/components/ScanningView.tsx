@@ -15,21 +15,19 @@ const PASSIVE_PHASES = [
   "Analyzing results",
 ];
 
-// The seven multi-agent specialists (#27). Order = campaign dispatch order.
-// Stage A (PostgREST + Auth) + Stage B (Supabase Edge Functions from the
-// connected repo) are both live.
+// The autonomous pen-test squad (#27). Three agents, each reasoning over and
+// attacking its own surface — not a fixed checklist. Labels describe what each
+// agent is hunting; the agent decides how.
 interface ActivePhase {
   label: string;
   pending?: boolean;
 }
 const ACTIVE_PHASES: ActivePhase[] = [
-  { label: "BOLA — cross-account object access" },
-  { label: "Auth bypass — edge-function identity override" },
-  { label: "Injection — payload vs baseline diff" },
-  { label: "SSRF — out-of-band callback" },
-  { label: "Exposure — response field-name audit" },
-  { label: "RLS-deep — cross-account at the table level" },
-  { label: "Weak crypto — Set-Cookie flag audit" },
+  { label: "Recon — mapping schema, policies & source" },
+  { label: "Data agent — cross-account reads, broken RLS, exposure" },
+  { label: "Edge agent — function authorization, injection, SSRF" },
+  { label: "Surface agent — CORS, secrets, auth config, enumeration" },
+  { label: "Confirming findings against live reproductions" },
 ];
 
 export function ScanningView({
@@ -50,10 +48,9 @@ export function ScanningView({
   const active = status === "queued" || status === "running";
   const passivePhases: ActivePhase[] = PASSIVE_PHASES.map((l) => ({ label: l }));
   const phases: ActivePhase[] = mode === "active_pentest" ? ACTIVE_PHASES : passivePhases;
-  // Active pen test = up to 7 specialists (3 PostgREST + 4 edge-function)
-  // running in parallel on Haiku 4.5 — ~3–4 min across a typical Supabase
-  // schema plus a repo's edge functions.
-  const eta = etaSeconds ?? (mode === "active_pentest" ? 210 : 30);
+  // Active pen test = 3 autonomous agents reasoning + attacking in parallel.
+  // A real run is ~2–4 min depending on how deep the agents go.
+  const eta = etaSeconds ?? (mode === "active_pentest" ? 200 : 30);
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {

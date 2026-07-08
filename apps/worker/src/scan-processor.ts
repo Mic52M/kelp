@@ -39,7 +39,7 @@ import {
 import { createGitHubConnector } from "./connectors/github.js";
 import { createSupabaseConnector } from "./connectors/supabase.js";
 import { createSupabasePgConnector } from "./connectors/supabase-pg.js";
-import { buildCustomerCampaignEntries } from "./agent/customer-backends/index.js";
+import { buildAutonomousCampaign } from "./agent/autonomous-campaign.js";
 
 const noConsent: ConsentStore = { getActiveTestConsent: async () => null };
 
@@ -206,11 +206,12 @@ async function executeActivePentestScan(scan: {
     getCredential(scan.projectId, "supabase_service_role"),
   ]);
 
-  // Stage B: if a GitHub repo is connected, discover the Supabase Edge
-  // Functions so the four HTTP specialists have real endpoints to probe.
-  // Best-effort — a repo read failure must not sink the whole campaign
-  // (Stage A still runs), so we swallow and log.
+  // Recon inputs for the autonomous agents: the app's source (edge functions,
+  // config, helpers) + a structured list of edge functions (for the destructive
+  // block-list). Best-effort — no repo just means the agents work from the
+  // Supabase surface alone.
   let edgeFunctions: DiscoveredEdgeFunction[] = [];
+  let sourceFiles: Awaited<ReturnType<ReturnType<typeof createGitHubConnector>["listSourceFiles"]>> = [];
   if (project.repoFullName && project.installationId != null) {
     try {
       const github = createGitHubConnector({
@@ -218,16 +219,18 @@ async function executeActivePentestScan(scan: {
         privateKey: Buffer.from(requireEnv("GITHUB_APP_PRIVATE_KEY_BASE64"), "base64").toString("utf8"),
         installationId: project.installationId,
       });
-      const files = await github.listSourceFiles(project.repoFullName);
-      edgeFunctions = discoverEdgeFunctions(files);
+      sourceFiles = await github.listSourceFiles(project.repoFullName);
+      edgeFunctions = discoverEdgeFunctions(sourceFiles);
     } catch (e) {
-      console.warn("edge-function discovery failed:", e instanceof Error ? e.message : e);
+      console.warn("repo recon failed:", e instanceof Error ? e.message : e);
     }
   }
 
-  const entries = await buildCustomerCampaignEntries({
+  // The autonomous multi-agent squad IS the pen test now (replaces the scripted
+  // specialists). Each agent reasons + attacks + loops over its surface.
+  const { entries } = await buildAutonomousCampaign({
     supabaseRef: project.supabaseRef,
-    supabaseReadonlyConnString: readonlyConnString,
+    readonlyConnString,
     supabaseAnonKey: anonKey,
     supabaseManagementPat: managementPat,
     supabaseServiceRoleKey: serviceRoleKey,
@@ -240,6 +243,7 @@ async function executeActivePentestScan(scan: {
     accountA,
     accountB,
     edgeFunctions,
+    sourceFiles,
   });
 
   const ctx: SpecialistContext = {
@@ -248,10 +252,14 @@ async function executeActivePentestScan(scan: {
     jobId: scan.scanId,
   };
 
+  // Autonomous agents need a real budget to recon → hypothesize → attack →
+  // adapt → loop, but each step re-sends accumulated context, so the budget is
+  // also the main cost lever. 28 steps × 3 agents in parallel, with prompt
+  // caching in the driver, keeps a full run in a sane cost envelope.
   const report = await runActivePentest(
     { consent: consentStoreFromDb(), audit: { record: writeAudit } },
     ctx,
-    { entries, maxParallel: 4, maxStepsPer: 20 },
+    { entries, maxParallel: 3, maxStepsPer: 28 },
     { acceptedVersions: CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST },
   );
 
