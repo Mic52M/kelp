@@ -172,12 +172,9 @@ async function executeActivePentestScan(scan: {
 }): Promise<ScanOutcome> {
   const project = await loadProject(scan.projectId);
   if (!project) throw new Error(`project ${scan.projectId} not found`);
-  if (!project.supabaseRef) {
-    throw new Error(
-      "The active pen test targets a Supabase-backed project — connect a " +
-        "Supabase database from Onboarding first.",
-    );
-  }
+  // NOTE: we do NOT require project.supabaseRef here — it's resolved below from
+  // the connected repo (Lovable Cloud & repo-only connects have no stored ref
+  // until the first scan). The real reachability check happens after recon.
 
   const plan = await loadOrgPlan(scan.orgId);
   assertActivePentestAvailable(plan);
@@ -246,16 +243,12 @@ async function executeActivePentestScan(scan: {
   if (!storedAnonKey && repoConfig?.anonKey) {
     await putCredential(scan.orgId, scan.projectId, "supabase_anon_key", repoConfig.anonKey).catch(() => {});
   }
-  if (!supabaseRef) {
+  if (!supabaseRef || (!storedConnString && !anonKey && !managementPat)) {
     throw new Error(
-      "Kelp couldn't determine the Supabase project ref — connect a repo whose " +
-        "code references a Supabase URL, or set the project ref in Configuration.",
-    );
-  }
-  if (!storedConnString && !anonKey && !managementPat) {
-    throw new Error(
-      "Kelp needs a way to reach your Supabase: connect a repo (its anon key is " +
-        "detected automatically) or add the anon key / read-only role in Configuration.",
+      "Kelp couldn't find your app's backend in the connected repository. The " +
+        "active pen test works with apps built on Supabase (including Lovable " +
+        "Cloud, Bolt and v0) — Kelp reads the backend automatically from the " +
+        "repo. If your app uses a different backend, it isn't supported yet.",
     );
   }
 
