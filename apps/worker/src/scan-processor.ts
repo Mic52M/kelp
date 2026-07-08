@@ -40,6 +40,7 @@ import { createGitHubConnector } from "./connectors/github.js";
 import { createSupabaseConnector } from "./connectors/supabase.js";
 import { createSupabasePgConnector } from "./connectors/supabase-pg.js";
 import { buildAutonomousCampaign } from "./agent/autonomous-campaign.js";
+import { selectPentestSource } from "./agent/pentest-source.js";
 
 const noConsent: ConsentStore = { getActiveTestConsent: async () => null };
 
@@ -219,8 +220,13 @@ async function executeActivePentestScan(scan: {
         privateKey: Buffer.from(requireEnv("GITHUB_APP_PRIVATE_KEY_BASE64"), "base64").toString("utf8"),
         installationId: project.installationId,
       });
-      sourceFiles = await github.listSourceFiles(project.repoFullName);
-      edgeFunctions = discoverEdgeFunctions(sourceFiles);
+      const allFiles = await github.listSourceFiles(project.repoFullName);
+      edgeFunctions = discoverEdgeFunctions(allFiles);
+      // Hand the agents only the security-relevant backend source — not the
+      // hundreds of UI/doc files that would bury the attack surface and burn
+      // their step budget before they reach config.toml / edge functions.
+      sourceFiles = selectPentestSource(allFiles);
+      console.log(`repo recon: ${allFiles.length} files → ${sourceFiles.length} security-relevant, ${edgeFunctions.length} edge functions`);
     } catch (e) {
       console.warn("repo recon failed:", e instanceof Error ? e.message : e);
     }
