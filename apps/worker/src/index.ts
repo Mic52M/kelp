@@ -10,6 +10,7 @@ export {
   listSupabaseProjects,
   validateSupabaseReadonlyConnString,
   getProjectConfigStatus,
+  detectAndStoreSupabaseBackend,
   createProjectAndEnqueueScan,
   enqueueScanForProject,
   getGithubInstallUrl,

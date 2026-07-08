@@ -8,6 +8,7 @@ import {
   listReposForOrg,
   listSupabaseProjects,
   createProjectAndEnqueueScan,
+  detectAndStoreSupabaseBackend,
   getGithubInstallUrl,
   drainScans,
   type RepoOption,
@@ -85,8 +86,9 @@ export async function connectAndScanAction(input: {
   }
 
   let error: string | null = null;
+  let projectId: string | null = null;
   try {
-    await createProjectAndEnqueueScan({
+    const res = await createProjectAndEnqueueScan({
       orgId,
       name: input.projectName || input.repoFullName || "Project",
       repoFullName: input.repoFullName,
@@ -95,6 +97,7 @@ export async function connectAndScanAction(input: {
       supabaseToken: null,
       classes: ["secret"],
     });
+    projectId = res.projectId;
   } catch (e) {
     if (e instanceof Error && e.name === "PlanLimitError") {
       error = e.message;
@@ -104,7 +107,20 @@ export async function connectAndScanAction(input: {
   }
   if (error) return { ok: false, error };
 
-  after(() => drainScans().catch((e) => console.error("scan processing failed:", e)));
+  // Auto-detect the Supabase backend from the repo (URL/ref + public anon key)
+  // and persist it, so Configuration shows it as detected and the user never
+  // has to paste it. Best-effort + in the background — a detection miss just
+  // leaves the fields for manual entry.
+  const pid = projectId;
+  const repo = input.repoFullName;
+  const inst = input.installationId;
+  after(async () => {
+    if (pid && repo && inst != null) {
+      await detectAndStoreSupabaseBackend({ orgId, projectId: pid, repoFullName: repo, installationId: inst })
+        .catch((e) => console.warn("backend auto-detect failed:", e instanceof Error ? e.message : e));
+    }
+    await drainScans().catch((e) => console.error("scan processing failed:", e));
+  });
   // Land in Configuration to finish setup (test accounts, consent) — the
   // Supabase backend is auto-detected from the repo there.
   redirect("/dashboard/configuration");

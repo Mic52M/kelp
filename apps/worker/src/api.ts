@@ -3,7 +3,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { VulnClass } from "@kelp/core";
-import { assertCanCreateProject, assertCanTriggerRescan } from "@kelp/core";
+import { assertCanCreateProject, assertCanTriggerRescan, detectSupabaseConfig } from "@kelp/core";
 import {
   countProjectsForOrg,
   getCredential,
@@ -155,6 +155,48 @@ export async function validateSupabaseReadonlyConnString(connectionString: strin
   } finally {
     if (client) await client.end().catch(() => {});
   }
+}
+
+/**
+ * Read the connected repo and auto-detect the Supabase backend (URL/ref +
+ * PUBLIC anon key), persisting what it finds: the project's supabase_project_ref
+ * and the anon key credential. This is what lets a Lovable-Cloud project be
+ * fully configured from the repo alone — the user never pastes the anon key.
+ * Best-effort: any failure just leaves the fields for manual entry. Never
+ * overwrites an anon key the user set explicitly.
+ */
+export async function detectAndStoreSupabaseBackend(input: {
+  orgId: string;
+  projectId: string;
+  repoFullName: string;
+  installationId: number;
+}): Promise<{ ref: string | null; anonKeyDetected: boolean }> {
+  const github = createGitHubConnector({
+    appId: requireEnv("GITHUB_APP_ID"),
+    privateKey: Buffer.from(requireEnv("GITHUB_APP_PRIVATE_KEY_BASE64"), "base64").toString("utf8"),
+    installationId: input.installationId,
+  });
+  const files = await github.listSourceFiles(input.repoFullName);
+  const cfg = detectSupabaseConfig(files);
+  if (!cfg) return { ref: null, anonKeyDetected: false };
+
+  if (cfg.ref) {
+    await getPool().query(
+      `update projects set supabase_project_ref = coalesce(supabase_project_ref, $2),
+              db_provider = coalesce(db_provider, 'supabase')
+        where id = $1`,
+      [input.projectId, cfg.ref],
+    );
+  }
+  let anonKeyDetected = false;
+  if (cfg.anonKey) {
+    const existing = await getCredential(input.projectId, "supabase_anon_key");
+    if (!existing) {
+      await putCredential(input.orgId, input.projectId, "supabase_anon_key", cfg.anonKey);
+    }
+    anonKeyDetected = true;
+  }
+  return { ref: cfg.ref, anonKeyDetected };
 }
 
 export interface ProjectConfigStatus {

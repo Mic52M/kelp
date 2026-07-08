@@ -239,6 +239,13 @@ async function executeActivePentestScan(scan: {
   // repo — in that order. The repo path is what unlocks managed-Supabase.
   const supabaseRef = project.supabaseRef || repoConfig?.ref || "";
   const anonKey = storedAnonKey || repoConfig?.anonKey || null;
+
+  // Persist a freshly repo-detected anon key so Configuration shows it as
+  // "detected" for projects connected before auto-detect existed. Never
+  // overwrites a user-set one.
+  if (!storedAnonKey && repoConfig?.anonKey) {
+    await putCredential(scan.orgId, scan.projectId, "supabase_anon_key", repoConfig.anonKey).catch(() => {});
+  }
   if (!supabaseRef) {
     throw new Error(
       "Kelp couldn't determine the Supabase project ref — connect a repo whose " +
