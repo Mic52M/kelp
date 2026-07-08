@@ -14,6 +14,7 @@ import {
   type PentestTools,
   type SpecialistEntry,
   type SourceFile,
+  type TableIntel,
 } from "@kelp/core";
 import { createAnthropicDriver } from "./anthropic-driver.js";
 import { loginSupabaseUser, resolveAnonKey, resolveServiceRoleKey } from "./supabase-native/auth.js";
@@ -21,7 +22,11 @@ import { createPentestToolbox } from "./pentest-toolbox.js";
 
 export interface AutonomousCampaignConfig {
   supabaseRef: string;
-  readonlyConnString: string;
+  /** Live DB connection string. Optional — Lovable Cloud has none, then
+   *  `repoSchema` is used for schema/RLS recon. */
+  readonlyConnString?: string | null;
+  /** Schema + RLS parsed from the repo (no-DB recon path). */
+  repoSchema?: TableIntel[];
   supabaseAnonKey: string | null;
   supabaseManagementPat: string | null;
   supabaseServiceRoleKey?: string | null;
@@ -68,7 +73,8 @@ export async function buildAutonomousCampaign(
     anonKey,
     sessionA,
     sessionB,
-    readonlyConnString: cfg.readonlyConnString,
+    readonlyConnString: cfg.readonlyConnString ?? null,
+    repoSchema: cfg.repoSchema ?? [],
     sourceFiles: cfg.sourceFiles,
     edgeFunctions: cfg.edgeFunctions,
   });

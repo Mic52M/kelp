@@ -11,6 +11,8 @@ import {
   PlanLimitError,
   assertActivePentestAvailable,
   discoverEdgeFunctions,
+  parseRepoSchema,
+  detectSupabaseConfig,
   runActivePentest,
   runScan,
   type ActiveTestConsent,
@@ -20,6 +22,7 @@ import {
   type SpecialistContext,
   type VulnClass,
   type DiscoveredEdgeFunction,
+  type TableIntel,
 } from "@kelp/core";
 import {
   claimQueuedScan,
@@ -191,28 +194,22 @@ async function executeActivePentestScan(scan: {
 
   const { accountA, accountB } = await loadCustomerTestAccounts(scan.projectId);
 
-  // Post-#27 Stage A: the customer campaign runs against real Supabase
-  // (PostgREST + Auth), so app_base_url is no longer required — it's only
-  // relevant once the Stage-B HTTP-endpoint specialists come online.
-  const readonlyConnString = await getCredential(scan.projectId, "supabase_readonly_connstring");
-  if (!readonlyConnString) {
-    throw new Error(
-      "The active pen test needs the Supabase read-only connection string " +
-        "(Configuration → Supabase — read-only role) to enumerate tables.",
-    );
-  }
-  const [anonKey, managementPat, serviceRoleKey] = await Promise.all([
+  const [storedConnString, storedAnonKey, managementPat, serviceRoleKey] = await Promise.all([
+    getCredential(scan.projectId, "supabase_readonly_connstring"),
     getCredential(scan.projectId, "supabase_anon_key"),
     getCredential(scan.projectId, "supabase_management"),
     getCredential(scan.projectId, "supabase_service_role"),
   ]);
 
   // Recon inputs for the autonomous agents: the app's source (edge functions,
-  // config, helpers) + a structured list of edge functions (for the destructive
-  // block-list). Best-effort — no repo just means the agents work from the
-  // Supabase surface alone.
+  // config, helpers) + the edge-function list (for the destructive block-list)
+  // + repo-derived schema/RLS + repo-detected Supabase config. This is what
+  // makes a Lovable-Cloud project — no DB access, no service_role — scannable:
+  // everything comes from the connected repo.
   let edgeFunctions: DiscoveredEdgeFunction[] = [];
   let sourceFiles: Awaited<ReturnType<ReturnType<typeof createGitHubConnector>["listSourceFiles"]>> = [];
+  let repoSchema: TableIntel[] = [];
+  let repoConfig: ReturnType<typeof detectSupabaseConfig> = null;
   if (project.repoFullName && project.installationId != null) {
     try {
       const github = createGitHubConnector({
@@ -222,21 +219,46 @@ async function executeActivePentestScan(scan: {
       });
       const allFiles = await github.listSourceFiles(project.repoFullName);
       edgeFunctions = discoverEdgeFunctions(allFiles);
+      repoSchema = parseRepoSchema(allFiles);
+      repoConfig = detectSupabaseConfig(allFiles);
       // Hand the agents only the security-relevant backend source — not the
       // hundreds of UI/doc files that would bury the attack surface and burn
       // their step budget before they reach config.toml / edge functions.
       sourceFiles = selectPentestSource(allFiles);
-      console.log(`repo recon: ${allFiles.length} files → ${sourceFiles.length} security-relevant, ${edgeFunctions.length} edge functions`);
+      console.log(
+        `repo recon: ${allFiles.length} files → ${sourceFiles.length} relevant, ` +
+          `${edgeFunctions.length} edge fns, ${repoSchema.length} tables, ` +
+          `config ${repoConfig ? "detected" : "not found"}`,
+      );
     } catch (e) {
       console.warn("repo recon failed:", e instanceof Error ? e.message : e);
     }
   }
 
-  // The autonomous multi-agent squad IS the pen test now (replaces the scripted
-  // specialists). Each agent reasons + attacks + loops over its surface.
+  // Resolve the Supabase ref + anon key from the project, stored creds, or the
+  // repo — in that order. The repo path is what unlocks managed-Supabase.
+  const supabaseRef = project.supabaseRef || repoConfig?.ref || "";
+  const anonKey = storedAnonKey || repoConfig?.anonKey || null;
+  if (!supabaseRef) {
+    throw new Error(
+      "Kelp couldn't determine the Supabase project ref — connect a repo whose " +
+        "code references a Supabase URL, or set the project ref in Configuration.",
+    );
+  }
+  if (!storedConnString && !anonKey && !managementPat) {
+    throw new Error(
+      "Kelp needs a way to reach your Supabase: connect a repo (its anon key is " +
+        "detected automatically) or add the anon key / read-only role in Configuration.",
+    );
+  }
+
+  // The autonomous multi-agent squad IS the pen test now. Each agent reasons +
+  // attacks + loops over its surface, using repo-derived schema when there's no
+  // live DB connection.
   const { entries } = await buildAutonomousCampaign({
-    supabaseRef: project.supabaseRef,
-    readonlyConnString,
+    supabaseRef,
+    readonlyConnString: storedConnString,
+    repoSchema,
     supabaseAnonKey: anonKey,
     supabaseManagementPat: managementPat,
     supabaseServiceRoleKey: serviceRoleKey,

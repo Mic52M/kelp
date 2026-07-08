@@ -340,7 +340,12 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
       consent.revokedAt === null &&
       (CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST as readonly string[]).includes(consent.consentVersion);
     supabaseReadonlySet = status.hasSupabaseReadonly;
-    supabaseAnonReady = status.hasSupabaseAnonKey || status.hasSupabaseManagement;
+    // Reachable if we have any stored credential OR a connected repo — a repo
+    // lets Kelp auto-detect the anon key + schema from the source (the
+    // Lovable-Cloud path, where the user has no DB access to hand over).
+    const hasRepo = !!(p as { github_repo_full_name?: string | null }).github_repo_full_name;
+    supabaseAnonReady =
+      status.hasSupabaseAnonKey || status.hasSupabaseManagement || status.hasSupabaseReadonly || hasRepo;
     accountASet = status.testAccountAEmail !== null;
     accountBSet = status.testAccountBEmail !== null;
   }
@@ -366,13 +371,9 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
       supabaseAnonReady,
       accountASet,
       accountBSet,
-      ready:
-        planAllowed &&
-        consentGranted &&
-        supabaseReadonlySet &&
-        supabaseAnonReady &&
-        accountASet &&
-        accountBSet,
+      // No longer requires the read-only DB string — supabaseAnonReady covers
+      // any reachable path (stored creds OR a repo we can auto-detect from).
+      ready: planAllowed && consentGranted && supabaseAnonReady && accountASet && accountBSet,
       plan,
     },
   };
