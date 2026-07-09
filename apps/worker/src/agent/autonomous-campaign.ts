@@ -45,7 +45,13 @@ const DEFAULT_MODEL = "claude-haiku-4-5";
 
 export async function buildAutonomousCampaign(
   cfg: AutonomousCampaignConfig,
-): Promise<{ entries: SpecialistEntry<unknown, unknown>[]; toolbox: PentestTools }> {
+): Promise<{
+  entries: SpecialistEntry<unknown, unknown>[];
+  toolbox: PentestTools;
+  /** Factory sharing the Anthropic client — used to spin up the reviewer's
+   *  driver and each follow-up specialist's driver post-campaign. */
+  makeDriver: () => ReturnType<typeof createAnthropicDriver>;
+}> {
   const apiKey = cfg.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
 
@@ -99,5 +105,10 @@ export async function buildAutonomousCampaign(
     driver: createAnthropicDriver(client, model),
   }));
 
-  return { entries, toolbox };
+  // Expose a factory the caller uses to spin up the reviewer + follow-up
+  // drivers with the same Anthropic client, so cost accounting stays clean
+  // and there's no duplicate auth setup at the call site.
+  const makeDriver = () => createAnthropicDriver(client, model);
+
+  return { entries, toolbox, makeDriver };
 }

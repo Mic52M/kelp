@@ -13,6 +13,8 @@ import {
   discoverEdgeFunctions,
   parseRepoSchema,
   detectSupabaseConfig,
+  reviewCampaign,
+  runFollowup,
   runActivePentest,
   runScan,
   type ActiveTestConsent,
@@ -23,6 +25,10 @@ import {
   type VulnClass,
   type DiscoveredEdgeFunction,
   type TableIntel,
+  type CampaignReport,
+  type Lead,
+  type PentestTools,
+  type SpecialistOutcome,
 } from "@kelp/core";
 import {
   claimQueuedScan,
@@ -255,7 +261,7 @@ async function executeActivePentestScan(scan: {
   // The autonomous multi-agent squad IS the pen test now. Each agent reasons +
   // attacks + loops over its surface, using repo-derived schema when there's no
   // live DB connection.
-  const { entries } = await buildAutonomousCampaign({
+  const { entries, toolbox, makeDriver } = await buildAutonomousCampaign({
     supabaseRef,
     readonlyConnString: storedConnString,
     repoSchema,
@@ -284,12 +290,19 @@ async function executeActivePentestScan(scan: {
   // adapt → loop, but each step re-sends accumulated context, so the budget is
   // also the main cost lever. 28 steps × 3 agents in parallel, with prompt
   // caching in the driver, keeps a full run in a sane cost envelope.
-  const report = await runActivePentest(
+  const primaryReport = await runActivePentest(
     { consent: consentStoreFromDb(), audit: { record: writeAudit } },
     ctx,
     { entries, maxParallel: 3, maxStepsPer: 28 },
     { acceptedVersions: CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST },
   );
+
+  // Post-hoc reviewer: reads the squad's transcripts, spots unconfirmed leads,
+  // and spawns 0..3 focused follow-up agents to convert them into confirmed
+  // findings. Cheap when nothing to chase (one review call); crash-isolated so
+  // a bad review just falls back to the primary report. Follow-ups go through
+  // the same evidence gate — no fabrication path is opened.
+  const report = await runReviewerAndFollowups(primaryReport, toolbox, makeDriver, ctx);
 
   const detected = campaignFindingsToDetected(report.outcomes);
   const found = await upsertFindings(scan.orgId, scan.projectId, scan.scanId, detected);
@@ -446,6 +459,68 @@ function campaignReportToPersisted(report: {
         .map((t) => (t.length > MAX_STEP_CHARS ? t.slice(0, MAX_STEP_CHARS) + "…" : t)),
     })),
   };
+}
+
+/**
+ * Post-hoc reviewer + follow-ups. Runs after the primary squad:
+ *   1. Reviewer LLM reads the outcomes, queues up to 3 leads.
+ *   2. Each lead is chased by a focused follow-up specialist (8 steps max).
+ *   3. Follow-up outcomes + their findings are merged into the report.
+ *
+ * Never throws — a reviewer or follow-up failure just returns the primary
+ * report unchanged. Cost is bounded by the lead cap: one review call plus at
+ * most 3 short follow-ups. Same evidence gate applies to follow-up findings.
+ */
+async function runReviewerAndFollowups(
+  primary: CampaignReport,
+  toolbox: PentestTools,
+  makeDriver: () => import("@kelp/core").LlmAgentDriver,
+  ctx: SpecialistContext,
+): Promise<CampaignReport> {
+  let leads: Lead[] = [];
+  try {
+    leads = await reviewCampaign(makeDriver(), primary.outcomes);
+  } catch (e) {
+    console.warn("reviewer failed:", e instanceof Error ? e.message : e);
+    return primary;
+  }
+  if (leads.length === 0) return primary;
+
+  const followupOutcomes: SpecialistOutcome[] = [];
+  for (const lead of leads) {
+    try {
+      const outcome = await runFollowup(lead, toolbox, makeDriver(), ctx);
+      followupOutcomes.push(outcome);
+    } catch (e) {
+      console.warn(`follow-up ${lead.id} failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+  if (followupOutcomes.length === 0) return primary;
+
+  const merged: CampaignReport = {
+    outcomes: [...primary.outcomes, ...followupOutcomes],
+    findings: [
+      ...primary.findings,
+      ...followupOutcomes.flatMap((o) => o.findings),
+    ],
+    totalUsage: {
+      inputTokens:
+        primary.totalUsage.inputTokens +
+        followupOutcomes.reduce((n, o) => n + (o.usage?.inputTokens ?? 0), 0),
+      outputTokens:
+        primary.totalUsage.outputTokens +
+        followupOutcomes.reduce((n, o) => n + (o.usage?.outputTokens ?? 0), 0),
+      estimatedCostUsd:
+        primary.totalUsage.estimatedCostUsd +
+        followupOutcomes.reduce((n, o) => n + (o.usage?.estimatedCostUsd ?? 0), 0),
+    },
+  };
+  console.log(
+    `reviewer queued ${leads.length} lead(s); follow-ups produced ${
+      followupOutcomes.reduce((n, o) => n + o.findings.length, 0)
+    } finding(s).`,
+  );
+  return merged;
 }
 
 /** Drain all currently-queued scans (local dev / poll loop tick). */

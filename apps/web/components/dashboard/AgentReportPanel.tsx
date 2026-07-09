@@ -14,6 +14,10 @@ const AGENT_LABEL: Record<string, string> = {
   "agent-surface": "Surface agent — CORS, secrets, auth config, enumeration",
 };
 
+function isFollowup(name: string): boolean {
+  return name.startsWith("followup:");
+}
+
 function money(usd: number): string {
   if (usd < 0.01) return `< $0.01`;
   return `$${usd.toFixed(2)}`;
@@ -49,7 +53,10 @@ export function AgentReportPanel({ report }: { report: PersistedAgentReport }) {
 
 function AgentRow({ o }: { o: PersistedAgentReport["outcomes"][number] }) {
   const [open, setOpen] = useState(false);
-  const label = AGENT_LABEL[o.name] ?? o.name;
+  const followup = isFollowup(o.name);
+  const label = followup
+    ? `Follow-up · ${o.name.replace(/^followup:/, "")}`
+    : AGENT_LABEL[o.name] ?? o.name;
   const cost = o.usage?.estimatedCostUsd ?? 0;
   const tokens = o.usage ? o.usage.inputTokens + o.usage.outputTokens : 0;
   return (
@@ -70,7 +77,14 @@ function AgentRow({ o }: { o: PersistedAgentReport["outcomes"][number] }) {
           {o.error ? "!" : o.findingsCount > 0 ? o.findingsCount : "✓"}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-medium">{label}</div>
+          <div className="flex items-center gap-2">
+            <div className="truncate text-[15px] font-medium">{label}</div>
+            {followup && (
+              <span className="rounded-full border border-violet-500/40 bg-violet-500/[0.08] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-violet-300">
+                reviewer
+              </span>
+            )}
+          </div>
           <div className="mt-0.5 flex items-center gap-2 text-xs text-fog-400">
             <span>{o.steps} reasoning steps</span>
             <span className="text-line">·</span>
