@@ -21,7 +21,11 @@ import { runAgent } from "./loop.js";
 import type { SpecialistOutcome } from "./orchestrator.js";
 import type { PentestTools } from "./autonomous.js";
 import type { Specialist, SpecialistExecutor, SpecialistContext } from "./specialist.js";
-import { AUTONOMOUS_TOOLS, type AutonomousFinding } from "./autonomous.js";
+import {
+  AUTONOMOUS_TOOLS,
+  createAutonomousPentester,
+  type AutonomousFinding,
+} from "./autonomous.js";
 
 /** One lead the reviewer wants a follow-up agent to chase. */
 export interface Lead {
@@ -249,12 +253,8 @@ export function createFollowupSpecialist(
       );
     },
     createExecutor(tools: PentestTools, ctx: SpecialistContext): SpecialistExecutor<AutonomousFinding> {
-      // Delayed import to avoid a circular reference at module init.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { createAutonomousPentester } = require("./autonomous.js") as typeof import("./autonomous.js");
-      // We reuse the full autonomous specialist just for its executor — the
-      // system prompt above already overrides scope + tone, so the persona
-      // wrapping is fine to reuse.
+      // Reuse the autonomous specialist for its executor — the system prompt
+      // above already overrides scope + tone, so the persona wrapping is fine.
       const inner = createAutonomousPentester(
         { name: "followup-inner", vulnClass: this.vulnClass, mission: lead.hypothesis },
       );
