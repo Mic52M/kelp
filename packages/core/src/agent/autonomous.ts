@@ -202,7 +202,15 @@ export const AUTONOMOUS_TOOLS: AgentTool[] = [
         vulnClass: { type: "string", enum: ["bola", "auth", "injection", "ssrf", "exposure", "rls", "secret"] },
         surface: { type: "string", enum: ["postgrest", "edge", "auth", "config", "source"] },
         endpoint: { type: "string", description: "table / function / path the finding is about" },
-        description: { type: "string", description: "what's wrong and the impact, in plain language; no raw PII" },
+        description: {
+          type: "string",
+          description:
+            "PRECISE description of the issue: (1) the exact object (table/function/path) and " +
+            "the specific policy/config/line at fault, (2) who can trigger it (anon / any " +
+            "authed user / cross-account), (3) the concrete impact (what a real attacker gets), " +
+            "(4) any mitigating factors you observed. Written for a technical founder to read " +
+            "in 15 seconds. No raw PII. No 'hypothetically' — you have already reproduced this.",
+        },
         fix: {
           type: "string",
           description:
@@ -210,7 +218,8 @@ export const AUTONOMOUS_TOOLS: AgentTool[] = [
             "Cursor / v0) that fixes THIS exact issue. Name the exact file(s) you read and the " +
             "exact change to make; show the corrected code. If a correct pattern already exists " +
             "elsewhere in the repo, point at it. Written so the user can paste it verbatim and the " +
-            "vulnerability is resolved. No placeholders.",
+            "vulnerability is resolved. No placeholders — never emit strings like 'undefined' or " +
+            "'<TABLE>' or 'PROVIDER'. If you don't know a value, don't write the prompt.",
         },
         reproduction: {
           type: "object",

@@ -308,12 +308,13 @@ async function executeActivePentestScan(scan: {
   const found = await upsertFindings(scan.orgId, scan.projectId, scan.scanId, detected);
 
   const erroredSpecialists = report.outcomes.filter((o) => o.error !== null);
-  const erroredClasses = new Set(erroredSpecialists.map((o) => o.vulnClass));
-  const successfulClasses = report.outcomes
-    .filter((o) => o.error === null)
-    .map((o) => o.vulnClass)
-    .filter((c) => !erroredClasses.has(c));
-  await resolveMissingFindings(scan.projectId, scan.scanId, successfulClasses);
+  // NOTE: we do NOT call resolveMissingFindings on the active-pentest path.
+  // Autonomous agents make non-deterministic choices between runs (an LLM
+  // may or may not re-file the same finding depending on which lead it
+  // chased first), so "not seen in this run" is NOT reliable evidence a vuln
+  // is fixed. Auto-resolve stays on the deterministic passive path only.
+  // The user resolves findings explicitly via the Mark resolved / False
+  // positive buttons.
 
   const costCents = costUsdToCents(report.totalUsage.estimatedCostUsd);
   const errorNote =

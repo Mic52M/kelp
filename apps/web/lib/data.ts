@@ -40,31 +40,28 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
   const raw = row.evidence?.raw;
   let fixPreview: string | undefined;
   let fixPrompt: string | undefined;
+  let autofixable = false;
 
-  if (row.vuln_class === "rls" && raw) {
+  // Autonomous-agent findings carry their own paste-ready fix prompt in
+  // `raw.fix` — written by the agent from the real code it read, so it names
+  // the exact file + change. Always prefer it when present; the template
+  // helpers below are for deterministic passive-scan findings (RlsFinding /
+  // SecretFinding shapes), and would produce "undefined … undefined" junk
+  // when accidentally called on an autonomous-agent payload with a different
+  // shape.
+  const agentFix = (raw as { fix?: unknown } | undefined)?.fix;
+  if (typeof agentFix === "string" && agentFix.trim()) {
+    fixPrompt = agentFix.trim();
+  } else if (row.vuln_class === "rls" && raw && looksLikeRlsFinding(raw)) {
     const r = raw as RlsFinding;
     fixPrompt = fixPromptForRls(r, "generic");
     if (r.fixable && r.ownershipColumn) {
       fixPreview = generateRlsMigration({ schema: r.schema, name: r.table }, r.ownershipColumn);
     }
-  }
-
-  let autofixable = false;
-  if (row.vuln_class === "secret" && raw) {
+  } else if (row.vuln_class === "secret" && raw && looksLikeSecretFinding(raw)) {
     const s = raw as SecretFinding;
     fixPrompt = fixPromptForSecret(s, "generic");
-    // Only high-confidence secrets (branded provider keys, service_role) get the
-    // automatic-PR button; medium ones fall back to the prompt. Mirrors the
-    // backend guard in openSecretFixPr.
     autofixable = s.confidence === "high";
-  }
-
-  // Autonomous-agent findings carry their own paste-ready fix prompt (the agent
-  // wrote it from the real code it read). Prefer it whenever we didn't already
-  // compute a template prompt above.
-  if (!fixPrompt) {
-    const agentFix = (raw as { fix?: unknown } | undefined)?.fix;
-    if (typeof agentFix === "string" && agentFix.trim()) fixPrompt = agentFix;
   }
 
   return {
@@ -78,13 +75,27 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
     remediation:
       row.vuln_class === "bola"
         ? "Queued for review by the Kelp team before it is confirmed."
-        : "Apply the fix below, or paste the prompt into your AI coding tool.",
+        : fixPrompt
+          ? "Paste the prompt into your AI coding tool to apply the fix."
+          : "Review the finding and decide how to fix it.",
     ...(fixPreview ? { fixPreview } : {}),
     ...(fixPrompt ? { fixPrompt } : {}),
     ...(prUrl ? { prUrl } : {}),
     ...(autofixable ? { autofixable: true } : {}),
     detectedAt: "recent",
   };
+}
+
+/** Duck-type guards: the deterministic scanners populate specific fields.
+ *  Autonomous-agent payloads have a completely different shape (surface,
+ *  endpoint, fix, evidence) and would produce "undefined … undefined" if
+ *  passed to the template helpers. Only apply the templates when the payload
+ *  actually looks like the scanner's own shape. */
+function looksLikeRlsFinding(raw: unknown): raw is RlsFinding {
+  return !!raw && typeof (raw as RlsFinding).table === "string";
+}
+function looksLikeSecretFinding(raw: unknown): raw is SecretFinding {
+  return !!raw && typeof (raw as SecretFinding).ruleId === "string" && typeof (raw as SecretFinding).path === "string";
 }
 
 const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low"];

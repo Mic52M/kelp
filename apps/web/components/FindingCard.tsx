@@ -85,10 +85,12 @@ export function FindingCard({ finding }: { finding: Finding }) {
             </div>
           )}
 
-          <div className="mt-4 rounded-lg border border-line/70 bg-ink-900/60 p-3">
-            <div className="mb-1.5 text-xs font-medium text-fog-400">What to do</div>
-            <p className="text-sm text-fog-300">{finding.remediation}</p>
-          </div>
+          {finding.remediation && (
+            <div className="mt-4 rounded-lg border border-line/70 bg-ink-900/60 p-3">
+              <div className="mb-1.5 text-xs font-medium text-fog-400">What to do</div>
+              <p className="text-sm text-fog-300">{finding.remediation}</p>
+            </div>
+          )}
 
           {finding.fixPreview && (
             <pre className="mt-3 overflow-x-auto rounded-lg border border-line/70 bg-ink-950 p-3 font-mono text-[12.5px] leading-relaxed text-fog-300">

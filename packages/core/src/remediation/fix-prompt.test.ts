@@ -18,9 +18,10 @@ const secret: SecretFinding = {
   confidence: "high",
 };
 
-test("secret fix prompt names the tool, env var, and rotation for critical", () => {
+test("secret fix prompt names the env var, path, and rotation for critical", () => {
   const p = fixPromptForSecret(secret, "lovable");
-  assert.match(p, /Paste this into Lovable/);
+  // No "Paste this…" preamble — the UI wraps the prompt with its own heading.
+  assert.ok(!/Paste this/i.test(p), "must not include a meta 'Paste this' preface");
   assert.match(p, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(p, /src\/lib\/supabase\.ts/);
   assert.match(p, /rotate the Supabase key/);
@@ -33,9 +34,9 @@ test("non-critical secret prompt omits rotation", () => {
   assert.ok(!/rotate/i.test(p));
 });
 
-test("generic tool uses a neutral label", () => {
+test("generic tool omits any 'Paste this' preface (UI wraps the prompt)", () => {
   const p = fixPromptForSecret(secret);
-  assert.match(p, /your AI coding assistant/);
+  assert.ok(!/Paste this/i.test(p));
 });
 
 const rls: RlsFinding = {
@@ -52,7 +53,7 @@ const rls: RlsFinding = {
 
 test("RLS fix prompt embeds the migration when fixable", () => {
   const p = fixPromptForRls(rls, "bolt");
-  assert.match(p, /Paste this into Bolt/);
+  assert.ok(!/Paste this/i.test(p));
   assert.match(p, /enable row level security/);
   assert.match(p, /auth\.uid\(\)\) = "user_id"/);
 });
@@ -74,7 +75,7 @@ test("BOLA fix prompt references the endpoint and an ownership check", () => {
     remediation: "…",
   };
   const p = fixPromptForBola(report, "v0");
-  assert.match(p, /Paste this into v0/);
+  assert.ok(!/Paste this/i.test(p));
   assert.match(p, /\/rest\/v1\/invoices/);
   assert.match(p, /auth\.uid\(\)/);
 });
