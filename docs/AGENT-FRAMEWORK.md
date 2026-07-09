@@ -1,18 +1,66 @@
 # Kelp — Multi-Agent Pen-Testing Framework
 
 > **Who this is for.** A new contributor (human or a fresh Claude session) who
-> needs to understand, run, extend, or ship the multi-agent pen-testing engine.
-> Read this after `docs/HANDOFF.md` — that gives you the *product* context; this
-> one gives you the *engine*.
->
-> **Status.** Phases 1–3 shipped and verified: framework, seven specialists,
-> consent v2 (#24), per-specialist cost accounting (#25), live-Anthropic
-> verify variants (#26). **#27 MVP is now shipped too** — the engine is
-> reachable from the dashboard via `scans.mode='active_pentest'`. The one
-> remaining piece is real endpoint discovery from the connected repo +
-> Supabase schema (MVP customer backends re-use the test-target shape
-> parameterized by `app_base_url`). See the "What's next" section at the
-> bottom.
+> needs to understand, run, extend, or ship the pen-testing engine. Read this
+> after `docs/HANDOFF.md` — that gives you the *product* context; this one
+> gives you the *engine*.
+
+## ⚠️ Big change (2026-07-08) — read this first
+
+The rest of this document describes the **scripted seven-specialist framework**
+(BOLA / auth-bypass / injection / SSRF / exposure / RLS-deep / weak-crypto).
+That framework still exists in the repo (as of 2026-07-09) — see
+`packages/core/src/agent/specialists/*.ts` and the factories under
+`apps/worker/src/agent/{customer-backends,supabase-native/*-backend,edge-backends,test-target-*-backend}.ts`.
+
+**But it is no longer on the active-pentest scan path.** It was replaced by a
+smaller, more powerful **autonomous multi-agent engine** where three agents
+(data / edge / surface) reason freely over a shared toolbox instead of walking
+fixed `list_endpoints → probe → report` scripts. A post-hoc **reviewer** spawns
+focused follow-up agents to chase leads the primary squad didn't confirm.
+
+Read `docs/HANDOFF.md § 11 "Autonomous pen-test engine (current)"` for the
+authoritative description of what runs today, then use this document for:
+
+- The **load-bearing invariant** ("no confirmed evidence → no finding") — still
+  the design's most important idea, generalized rather than replaced. The
+  autonomous executor enforces it via `handleReport` + `confirm` in
+  `packages/core/src/agent/autonomous.ts`.
+- The **orchestrator + `runActivePentest`** — still used by the autonomous
+  engine to dispatch its 3 agents, and by the reviewer to spawn follow-ups
+  (`runOne` / `runCampaign` / crash isolation / usage aggregation — unchanged).
+- The **specialist framework** (`packages/core/src/agent/specialist.ts`) — still
+  the abstraction the autonomous agents plug into.
+- The **test target** (`apps/test-target`) — still ships the ground-truth
+  vulnerabilities the legacy `verify:*-target` scripts assert against. Green.
+
+Scripted specialists that **remain green as test infrastructure** (do NOT
+delete):
+`verify:bola-target`, `verify:auth-bypass-target`, `verify:injection-target`,
+`verify:ssrf-target`, `verify:exposure-target`, `verify:rls-deep-target`,
+`verify:weak-crypto-target`, `verify:edge-backends`.
+
+New pieces the autonomous engine added on top (see HANDOFF § 11 for detail):
+- `agent/autonomous.ts` — reasoning agent + `PentestTools` + evidence gate.
+- `agent/reviewer.ts` — post-hoc reviewer + `runFollowup`.
+- `agent/backend-brief.ts` — deterministic pre-recon pack.
+- `agent/repo-recon.ts` — detect Supabase config + schema from repo (Lovable
+  Cloud unlock).
+- `agent/edge-functions.ts` — edge-fn discovery + destructive-fn safety.
+- `apps/worker/src/agent/pentest-toolbox.ts` — real `PentestTools` impl.
+- `apps/worker/src/agent/pentest-source.ts` — repo source curation.
+- Persona calibration in `autonomous.ts` (vulnClass + severity discipline).
+- Migration `0010` — `scans.agent_report` persisted per-agent transcripts.
+
+---
+
+## Historical: the scripted specialist framework
+
+*The following describes the framework as it stood at the end of Phase 3,
+before the autonomous-engine pivot. It's still accurate about the shared
+infrastructure (orchestrator, evidence-gate philosophy, test target), and the
+seven specialists are still in-tree — but they're no longer what runs during
+a customer scan.*
 
 ---
 

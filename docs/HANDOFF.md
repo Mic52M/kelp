@@ -2,12 +2,21 @@
 
 > Read this first. It is the single source of truth for a new contributor (human
 > or a fresh Claude session) to understand what Kelp is, where it stands, and how
-> to continue. Repo: `github.com/Mic52M/kelp` (private). Last updated: 2026-07-07.
+> to continue. Repo: `github.com/Mic52M/kelp` (private). Last updated: 2026-07-09.
 >
 > **For the multi-agent engine specifically** (Layer-by-layer architecture, the
 > load-bearing invariant, how to add a new specialist, verify commands): read
 > [`docs/AGENT-FRAMEWORK.md`](./AGENT-FRAMEWORK.md). It's the authoritative doc
 > for that subsystem; this file gives you the product/business context around it.
+>
+> **BIG PIVOT (2026-07-08):** the scripted list→probe specialists were replaced
+> by an **autonomous multi-agent squad** — real reasoning + attack + adapt loops
+> over a shared toolbox, with a post-hoc reviewer that spawns focused follow-up
+> agents on missed leads. This is Kelp's north star ("XBOW for vibe-code") made
+> real. The scripted specialists still exist in-repo (customer-backends, edge-
+> backends, supabase-native/*-backend.ts) but they are **not on the active-
+> pentest path anymore**. Kept for test infrastructure and possible reuse as
+> agent tools. See § 11 for the current engine, and `AGENT-FRAMEWORK.md`.
 
 ---
 
@@ -100,20 +109,41 @@ apps/
             - db.ts (pg, privileged/bypass-RLS), scan-processor.ts, api.ts (web-facing).
             - index.ts also runs as a persistent poll loop (production worker).
 packages/
-  core/     Framework-agnostic domain logic (@kelp/core), 55 unit tests, all green.
-            - Scanners: scanners/secrets.ts, scanners/rls.ts (+ migration generator).
-            - Consent guard, crypto (AES-256-GCM), fingerprint.
-            - Remediation: secret-pr.ts, bola-report.ts, fix-prompt.ts (the wedge).
-            - Orchestrator (runScan) + agent loop (agent/loop.ts, agent/bola.ts).
+  core/     Framework-agnostic domain logic (@kelp/core), 155 unit tests, green.
+            - Deterministic scanners: scanners/secrets.ts, scanners/rls.ts.
+            - Consent guard (v1/v2/v3), crypto (AES-256-GCM), fingerprint.
+            - Remediation: secret-pr.ts, bola-report.ts, fix-prompt.ts.
+            - Autonomous pen-test engine: agent/autonomous.ts (PentestTools +
+              executor + evidence gate), agent/reviewer.ts (post-hoc reviewer +
+              follow-ups), agent/backend-brief.ts (deterministic pre-recon
+              pack), agent/repo-recon.ts (detect Supabase config + schema/RLS
+              from the repo — the Lovable Cloud unlock), agent/edge-functions.ts
+              (edge-fn discovery + safety classification).
+            - Legacy scripted specialists: agent/specialists/*.ts + agent/
+              orchestrator.ts. NOT on the active-pentest path anymore — kept
+              as test infra and possible agent tools.
   db/       SQL schema + migrations (source of truth) + migrate.ts runner.
-            0001_init.sql (multi-tenant schema), 0002_rls_policies.sql.
+            0001–0008 (multi-tenant + consent + cost accounting + active
+            pentest), 0009 finding_feedback (false-positive loop), 0010
+            scans.agent_report (persisted transcripts).
 ```
 
-**Deterministic vs LLM (important principle):** scanners are deterministic (regex,
-schema analysis) so results are reproducible and low-false-positive. Claude sits
-*on top* — explanations, planning the agentic BOLA test, fix-prompts — and **never
-decides on its own whether a finding is real** (the agentic executor refuses to
-record a BOLA finding unless a real probe confirmed it).
+**Deterministic vs LLM (important principle):** the load-bearing invariant of
+the whole product is "no fabrication". Everything the LLM says gets re-verified
+by Kelp deterministically before it becomes a finding:
+
+- Passive scanners (secrets, RLS-static) run without any LLM.
+- The autonomous agents reason, form hypotheses and probe *freely*, but every
+  `report_finding` call is gated by an executor that RE-RUNS the model's
+  reproduction (probe or source citation) and only persists the finding if the
+  expected observable actually holds. See `packages/core/src/agent/autonomous.ts`
+  → `handleReport` + `confirm`.
+- The reviewer (post-hoc) can spawn follow-up agents but cannot itself file
+  findings — only queue leads. Follow-up findings still go through the same
+  evidence gate.
+
+The result: agents have real autonomy on the reasoning side, zero fabrication
+on the results side. "We never claim 100% coverage — but what we report is real."
 
 ## 6. What's built and VERIFIED (on real data unless noted)
 
@@ -193,7 +223,50 @@ record a BOLA finding unless a real probe confirmed it).
   per specialist, gated by `KELP_ANTHROPIC_LIVE=1`. Shared harness in
   `apps/worker/src/agent/live-verify.ts`. `npm run verify:live -w @kelp/worker`
   chains all seven; each burns real tokens against `localhost:4400` and prints
-  cost. Gate absent → skips (never fails CI by default).
+  cost. Gate absent → skips (never fails CI by default). Note these verify the
+  *legacy* scripted specialists; the autonomous engine is verified via live
+  runs against real customer projects (§ 11 below).
+- ✅ **Autonomous multi-agent engine (48d100c)** — the north-star pivot. Three
+  agents (`agent-data`, `agent-edge`, `agent-surface`) reason + attack + loop
+  over their own attack surface with a shared toolbox (`PentestTools`). See § 11.
+- ✅ **Repo-based Supabase detection (31c3438, f9da32e, 92ab60c)** — Lovable
+  Cloud unlock. `detectSupabaseConfig` + `parseRepoSchema` read URL/anon key/
+  schema/RLS from the connected repo, so a project with no DB access is fully
+  scannable. Verified live on `usatopoint-test`.
+- ✅ **Connect = repo-only + auto-filled Configuration (9516589)** — onboarding
+  is a single step: pick a repo. No API-key prompt. Configuration is
+  pre-populated from repo detection; only test-account credentials are asked.
+- ✅ **Deterministic backend brief (463f4d8)** — RPC function bodies (SECURITY
+  DEFINER flagged for search_path attacks), edge-fn signatures + verify_jwt
+  state, injected into every agent's initial prompt. Cuts wasted "grep the
+  repo" steps that the audit caught agent-data spending ~6/22 steps on.
+- ✅ **Prompt caching in Anthropic driver (fc9a9ba)** — system + tools +
+  conversation prefix cached ephemeral. Cost accounting reweights
+  `cache_creation` × 1.25 and `cache_read` × 0.10 back into billable-equivalent
+  input tokens so the estimated cost matches the real bill.
+- ✅ **Agent transcript persistence (4b5ecc2, migration 0010)** — every
+  active-pentest scan writes its full `CampaignReport` (per-agent name, steps,
+  cost, transcript, findings, error) to `scans.agent_report jsonb`. Overview
+  renders an "Agent report" panel per outcome with expandable transcripts —
+  the trust surface for the "0 findings" case.
+- ✅ **Post-hoc reviewer + follow-ups (2ecde17)** — one LLM call reads the
+  squad's outcomes and queues up to 3 leads; each lead becomes a focused
+  follow-up specialist (8-step budget, tight brief, same evidence gate).
+  Verified live: on usatopoint-test, filed a genuine `newsletter_subscribers`
+  RLS finding the primary squad hadn't converted.
+- ✅ **Findings feedback loop (ad4c9ae, migration 0009)** — "Mark resolved"
+  and "False positive" buttons. False-positive click writes to
+  `finding_feedback` (vuln class, rule, location, fingerprint — never any
+  secret value) for detector tuning. Begin of the data moat.
+- ✅ **UX polish from live testing (3cf1458)** — auto-resolve disabled on
+  active-pentest (agents are non-deterministic between runs); fix-prompt
+  templates fixed to use the agent's `raw.fix` when present (was rendering
+  "undefined … undefined" for reclassified findings); "Paste this to your AI
+  coding assistant:" preamble removed; conditional "What to do" panel.
+- ✅ **DB pool cap (6254c55)** — `KELP_DB_POOL_MAX=5` default. Supabase
+  session pooler has 15 total connections; web(5) + worker(5) = 10 < 15 with
+  headroom. In prod, prefer the transaction pooler (port 6543) which scales
+  to far more connections.
 
 ## 7. Credentials & environment (NOT in the repo)
 
@@ -253,34 +326,189 @@ Useful scripts (worker, run with `--env-file=.env.local`):
 
 ## 10. What's next — prioritized backlog (see GitHub issues)
 
-**Every open issue now has a "Execution context for a fresh Claude Code session"
-comment** with file pointers, approach and a verification step — a new session can
-pick any issue and run it. Recent work this cycle (all shipped, closed): #5
-Supabase read-only role, #7 Redis queue, #10 Stripe, #17 plan gating, #24
-consent v2, #25 cost accounting, #26 live-Anthropic verify. Multi-agent phase 2 +
-phase 3 both done — the moat is complete engine-side; the remaining gap is
-wiring it into the customer scan path (#27).
+**Every open issue has a "Execution context for a fresh Claude Code session"
+comment** with file pointers, approach and a verification step. Recent big-ticket
+work (all shipped, closed): #5 Supabase read-only role, #7 Redis queue, #10
+Stripe, #17 plan gating, #24 consent v2, #25 cost accounting, #26 live-Anthropic
+verify, #27 (MVP + Stage-A + Stage-B all done — customer scan path is live and
+the endpoint-discovery follow-up shipped via Stage B).
 
-Suggested order toward **production-ready, self-serve** (the current north star):
+**The engine is a genuinely working autonomous pen tester now.** Verified
+end-to-end on `luneai` and `usatopoint-test` (both real Lovable projects). The
+remaining backlog is about trust, cost, and product polish — not core capability.
 
-1. **#27 (MVP shipped, follow-up open)** orchestrator wired into the customer
-   scan path — migration `0008` (`projects.app_base_url`, `scans.mode`),
-   customer-backends factory, `executeActivePentestScan` branch, dashboard
-   "Run active pen test" button + consent v2 + config forms + per-specialist
-   progress rows, `verify:campaign-e2e`. **Follow-up: real endpoint discovery**
-   from the connected repo + Supabase schema (MVP reuses the test-target
-   endpoint shape parameterized by `app_base_url` — customers whose app
-   matches that shape get real findings today; others get zero).
+Suggested order toward **production-ready, self-serve**:
+
+1. **#29 (open — proposed)** false-positive triage layer — meta-reviewer that
+   downgrades/reclassifies/rejects filed findings before they ship. The
+   `newsletter_subscribers` finding on usatopoint was real but filed with wrong
+   class + inflated severity; a triage pass would have caught it. Only ever
+   downgrades — never adds noise. Design in the issue body. Small slice (~1 file
+   in core + wire into scan-processor + UI section).
 2. **#1** rotate GitHub App secret + private key — security, blocking prod, small.
 3. **#2** make the GitHub App public + dedicated org — unblocks true multi-user
    install (pairs with the closed #14).
-4. **#13** Resend-grade design pass — do after the endpoint-discovery follow-up.
-5. **#16** production deploy (Vercel + Railway/Fly) — after #1/#2.
-6. **#19** parent tracker — closes once #27's follow-up (real endpoint discovery) ships.
+4. **#16** production deploy (Vercel + Railway/Fly) — after #1/#2. In prod, use
+   the **transaction pooler** (port 6543) for `DATABASE_URL` — the current
+   `KELP_DB_POOL_MAX=5` cap (see 6254c55) exists because the session pooler
+   ships with only 15 server connections.
+5. **#13** Resend-grade design pass — after #29 lands and results settle.
+6. **#19** parent tracker — closable now (Stage-A + Stage-B both shipped; the
+   engine has since evolved past the specialist model). Leave open only if you
+   want it as a retrospective anchor.
 
-## 11z. Multi-agent pen-testing framework (post-#19 phase 1)
+**Open questions worth thinking about (not yet issues):**
 
-Foundation for the "XBOW-for-vibe-code" moat is now shipped:
+- **Reviewer transparency.** The reviewer LLM picks up to 3 leads per scan but
+  its reasoning + the specific hypothesis it queued aren't persisted separately —
+  only the resulting follow-up outcome is. If Kelp scales, users will want to see
+  *why* Kelp chased what it chased. Small extension to `agent_report`.
+- **Cost visibility per user, not per scan.** `scans.cost_cents` is per-scan
+  only. A monthly view of "your team's Claude spend" is table stakes for the
+  paid tier.
+- **Non-Supabase backends.** Lovable Cloud IS Supabase, Bolt/v0 ship on Supabase
+  too. Firebase (via Firebase Studio) and Convex are the next credible
+  alternatives. Not urgent — no target customers on those today — but the seam
+  `BackendAdapter` was left implicit; if we need it, it's a real refactor.
+
+## 11. Autonomous pen-test engine (current — the north-star)
+
+**This section supersedes the old "seven scripted specialists" story.** The
+scripted specialists still exist in `packages/core/src/agent/specialists/*.ts`
+and their factories in `apps/worker/src/agent/{customer-backends,supabase-native,
+edge-backends,test-target-*-backend}.ts`, but the active-pentest scan path no
+longer uses them. They remain green as test infrastructure and as a source of
+future agent tools. What follows describes what actually runs today.
+
+### The engine
+
+- `packages/core/src/agent/autonomous.ts` — the specialist framework for a
+  reasoning agent. Interface `PentestTools` (implemented by the worker) gives
+  the agent: `list_source_files`, `read_source_file`, `list_tables` (schema +
+  RLS policies), `http_probe` (arbitrary authenticated requests as anon/A/B
+  against PostgREST / edge / auth / raw), `oob_canary_*` (SSRF confirmation),
+  `report_finding`, `conclude`. `createAutonomousPentester(brief, opts)` builds
+  one `Specialist` scoped to an attack surface; `DEFAULT_PENTEST_SQUAD` = data /
+  edge / surface agents.
+
+- **Evidence gate — the load-bearing invariant, generalized.** The model can
+  reason and probe freely, but `report_finding` requires a reproduction
+  (probe+expected observable, or source citation). The executor RE-RUNS it and
+  records the finding only if the observable actually holds:
+  `status_2xx | status_ge_500 | returns_rows | row_owned_by_other |
+  callback_fired | header_matches | source_contains`. Autonomy in reasoning,
+  zero fabrication in results.
+
+- `packages/core/src/agent/reviewer.ts` — post-hoc reviewer. One LLM call over
+  the tail (last 10 steps × 1.5 KB) of each primary agent's transcript, hard
+  cap of 3 leads, dedupe by surface+target+hypothesis prefix. For each lead,
+  `runFollowup` spawns a scoped `createFollowupSpecialist` with an 8-step
+  budget. Follow-up findings still go through the same evidence gate.
+
+- `packages/core/src/agent/backend-brief.ts` — deterministic pre-recon.
+  `buildBackendBrief` extracts RPC function bodies (SECURITY DEFINER flagged
+  for missing `SET search_path` — a real vuln pattern), edge-fn signatures +
+  `verify_jwt` state from `supabase/config.toml`, and injects the human text
+  into every agent's initial prompt. Cuts wasted "grep the repo" steps.
+
+- `packages/core/src/agent/repo-recon.ts` — Lovable-Cloud unlock. Detects
+  Supabase URL + PUBLIC anon key + project ref from `.env` and generated
+  `integrations/supabase/client.ts` (never scrapes service_role). Parses
+  schema (types.ts) + RLS state (migrations, `CREATE POLICY … USING/WITH CHECK`,
+  DROP/ALTER respected chronologically) into the same `TableIntel[]` shape the
+  live catalog reader produces. Managed-Supabase projects with no DB access
+  are fully scannable.
+
+- `apps/worker/src/agent/pentest-toolbox.ts` — real `PentestTools` impl. Two
+  guarantees: **SAFETY** (destructive edge fns classified in
+  `discoverEdgeFunctions` are never invoked — `httpProbe` returns `{blocked}`);
+  **HYGIENE** (all response bodies redacted before the model sees them — long
+  free-text and known-sensitive keys become `<email>`/`<redacted>`; short
+  scalar identifiers pass through so the agent can still reason about ownership).
+
+- `apps/worker/src/agent/autonomous-campaign.ts` — logs in A+B (with admin-
+  impersonation fallback via service_role when password login fails —
+  35270cd), builds the shared toolbox, returns the entries + `makeDriver()`
+  factory the reviewer + follow-up runners share (so cost accounting stays
+  clean).
+
+- `apps/worker/src/agent/pentest-source.ts` — `selectPentestSource` curates
+  the repo to 80 backend-relevant files (config.toml, `_shared/*`, functions/*,
+  migrations/*) so the agents don't waste their step budget on 300 files of
+  UI + skills-markdown.
+
+- `apps/worker/src/agent/anthropic-driver.ts` — prompt caching on system +
+  tools + conversation prefix. Cost accounting reweights
+  `cache_creation × 1.25` and `cache_read × 0.10` back into billable-equivalent
+  input tokens so the shown cost matches the real bill (fc9a9ba fixed a bug
+  where this counter was 5× inflated).
+
+### Persona calibration (6fdb556 + 3cf1458)
+
+The agent's system prompt now explicitly:
+- Names how the redaction works (short scalar ids pass through — don't talk
+  yourself out of a real leak thinking it was masked).
+- Forbids "VULNERABILITY FOUND" narration before `report_finding` succeeds.
+- Warns to interpret ambiguous HTTP statuses (204 from PATCH may be success
+  OR a PostgREST protocol error — always inspect the body).
+- Defines **vulnClass discipline** — pick by the NATURE of the bug, not the
+  surface used to find it. Permissive RLS = `rls`, not `secret`.
+- Defines **severity calibration** — critical: total takeover / unauth PII /
+  service_role in browser. high: authed reads of others' private data.
+  medium: spam / enumeration / permissive CORS without credentials. low:
+  hardening.
+
+### Persistence + UI
+
+- Migration `0010` adds `scans.agent_report jsonb`. After each active-pentest,
+  `campaignReportToPersisted` in scan-processor writes the full report
+  (per-agent name, class, steps, cost, findings count, error, transcript up
+  to 60 × 1.2 KB) there.
+- `apps/web/components/dashboard/AgentReportPanel.tsx` — the "How the pen test
+  ran" panel on Overview. Per-agent expander (icon = state, tokens, cost,
+  transcript inline). Follow-up outcomes render with a violet "reviewer" pill.
+
+### What it costs (measured on real Lovable projects)
+
+- Primary squad (3 agents × 28 steps) on `usatopoint-test` (Lovable Cloud):
+  ~$0.58, ~30 s, correct 0 findings.
+- Same shape + reviewer + 2 follow-ups (one refuted, one confirmed): ~$0.58
+  (follow-ups came out below 1¢ each thanks to prompt caching).
+- Reviewer baseline (nothing to chase): +~$0.02.
+- Cost cap enforced per org/month via `plans.ts` + `monthToDateCampaignCostCents`.
+
+### Verified live
+
+- **luneai**: 26 tables + 32 edge functions. RLS solid, edge functions
+  correctly derive identity from JWT, 4 real CORS findings surfaced
+  (`_shared/cors.ts` wildcard imported into most functions, and the correctly
+  configured `_shared/security.ts` is NOT the one imported — the agent-surface
+  went beyond a manual audit here).
+- **usatopoint-test** (Lovable Cloud, no DB access): 28 tables detected from
+  repo, 14 edge functions. Genuine finding filed via reviewer follow-up:
+  `newsletter_public_insert` policy allows anon INSERT with only format
+  validation → spam / enumeration primitive. Manually reclassified from
+  `secret/high` (model's initial call) to `rls/medium` — this is what
+  motivates issue #29 (triage layer).
+
+### Known limitations (be honest with the user)
+
+- LLM variance between runs. Two consecutive scans against the same project
+  can file different subsets of the true finding set. That's why
+  auto-resolve is DISABLED on the active-pentest path (3cf1458). The user
+  closes findings explicitly via Mark resolved / False positive.
+- Model can still mis-score severity or vulnClass despite calibration —
+  hence #29 (triage) is the next slice.
+- SSRF probe: the toolbox spins a localhost callback, which is unreachable
+  from Supabase Cloud → SSRF is only confirmable against a target that runs
+  outbound requests to arbitrary hosts. Public canary is future work.
+- Non-Supabase backends: the whole engine assumes Postgres+PostgREST+
+  Supabase Auth. Bolt/v0/Lovable/Cursor all sit on Supabase, so this is not
+  an urgent gap — but Firebase/Convex projects are not scannable today.
+
+## 11z. Legacy scripted specialists (still in-repo, not on the active path)
+
+Foundation for the "XBOW-for-vibe-code" moat when first shipped:
 
 - `packages/core/src/agent/specialist.ts` — `Specialist<Backend, Finding>`
   interface. Each specialist declares its name, `vulnClass`, system prompt,
@@ -493,15 +721,31 @@ the real auth-bypass / injection bugs are.
 canary to confirm out-of-band fetches from Supabase's cloud; a non-Supabase
 (Next.js/Vercel/Express) discovery path for apps that aren't pure-SPA-on-Supabase.
 
-## 11a. Findings lifecycle (post-#15)
+## 11a. Findings lifecycle (post-#15, updated 3cf1458)
 
-Every scan closes what it doesn't re-detect. After `upsertFindings` in
-`apps/worker/src/scan-processor.ts`, `resolveMissingFindings` closes findings
-whose `last_scan_id <> currentScanId` and status is in
-(`open`, `pr_opened`, `regressed`). Scoped to project × **successfully-run**
-vuln classes only (a class that errored doesn't get to resolve anything).
-`needs_review` / `confirmed` / `dismissed` are left alone. Existing resolve→
+Two paths, deliberately different:
+
+**Passive scans (deterministic — secret + RLS static).** Every scan closes what
+it doesn't re-detect. After `upsertFindings` in scan-processor's
+`executePassiveScan`, `resolveMissingFindings` closes findings whose
+`last_scan_id <> currentScanId` and status is in (`open`, `pr_opened`,
+`regressed`). Scoped to project × successfully-run vuln classes only.
+`needs_review` / `confirmed` / `dismissed` are left alone. Existing resolve →
 regress on re-detection (`upsertFindings`) is unchanged.
+
+**Active-pentest scans (autonomous agents — non-deterministic).** Auto-resolve
+is DISABLED. Between two consecutive runs, an autonomous agent may or may not
+re-file the same true finding depending on which lead it chased first (LLM
+variance) — treating "not seen this run" as evidence of fix would silently
+close real vulns. The user closes findings explicitly:
+ - `apps/web/app/dashboard/finding-actions.ts` → `markResolvedFinding` sets
+   status = 'resolved'.
+ - `reportFalsePositive` sets status = 'dismissed' AND writes a
+   `finding_feedback` row (vuln_class, rule_id, title, location, fingerprint —
+   never any secret value) to `packages/db/migrations/0009_finding_feedback.sql`.
+Cards render two buttons: "Mark resolved" (positive) and "False positive"
+(bordered, quieter). The feedback table is the seed of the detection-tuning
+loop and the aggregate data moat.
 
 ## 11b. Webhook re-scan (post-#4)
 
@@ -512,6 +756,23 @@ pushes for repos not connected to a Kelp project. A matching push enqueues a
 secret re-scan with `trigger='webhook_push'`. Requires the GitHub App's Webhook
 URL set to `<APP_URL>/api/github/webhook` with the same secret and the `push`
 event subscribed.
+
+## 11d. Onboarding / connect flow (updated 9516589)
+
+Onboarding is now a single step: pick a GitHub repo. No API-key prompt, no
+Supabase project picker (`apps/web/app/onboarding/page.tsx` +
+`connectAndScanAction`). After the repo is linked:
+ 1. A passive secret scan is enqueued immediately.
+ 2. `detectAndStoreSupabaseBackend` (worker/src/api.ts) reads the repo, detects
+    URL + ref + public anon key, and persists them
+    (`projects.supabase_project_ref` + credential kind `supabase_anon_key`).
+ 3. User is redirected to `/dashboard/configuration`, where the only required
+    input is the two test accounts (+ consent for active pentesting).
+
+The old "Configuration" fields (Supabase read-only role, Management PAT) are
+still present under **Advanced (optional)**; they deepen the scan (live schema
+vs repo-parsed) but are not needed on Lovable Cloud or any managed-Supabase
+setup where the customer has no DB access.
 
 ## 11c. GitHub install flow — how it works now (post-#14)
 
