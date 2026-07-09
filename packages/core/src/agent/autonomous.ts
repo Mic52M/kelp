@@ -503,7 +503,29 @@ const PERSONA =
   "Interpret HTTP status codes carefully: 204 from a PATCH may mean 'no " +
   "content because the update succeeded' OR a PostgREST protocol error — " +
   "always inspect the body/error code before concluding. Suspicion → probe, " +
-  "not narration.";
+  "not narration.\n\n" +
+  "vulnClass discipline (pick by the NATURE of the bug, not the surface you " +
+  "used to find it):\n" +
+  " · rls        — permissive/wrong Postgres RLS policy, incl. INSERT/UPDATE " +
+  "policies too loose on a table\n" +
+  " · bola       — auth-scoped endpoint returns another user's specific object\n" +
+  " · auth       — missing/broken authentication or authorization on an endpoint " +
+  "(edge function trusting body userId, verify_jwt=false without manual check)\n" +
+  " · injection  — user input reaches an interpreter unsanitized\n" +
+  " · ssrf       — server makes an outbound request to an attacker-controlled URL\n" +
+  " · exposure   — sensitive fields/data leaked in a legit response; also " +
+  "permissive CORS, missing security headers\n" +
+  " · secret     — hard-coded credential in source. NOT for RLS bugs.\n\n" +
+  "Severity calibration (be strict — mis-scoring high loses user trust):\n" +
+  " · critical — total account takeover; unauth read of others' PII/payments; " +
+  "SQLi/RCE; service_role key exposed to browser\n" +
+  " · high     — authed user reads another user's private data (BOLA/broken " +
+  "RLS on sensitive tables); auth-bypass on a state-changing endpoint\n" +
+  " · medium   — spam / enumeration primitives (open INSERT on a subscriber " +
+  "table); permissive read on a non-sensitive table; permissive CORS on " +
+  "endpoints that don't accept credentials\n" +
+  " · low      — hardening (defense-in-depth headers, DEFINER without " +
+  "SET search_path when REVOKE PUBLIC blocks reach, unused permissive policy)";
 
 export function createAutonomousPentester(
   brief: PentestBrief,
