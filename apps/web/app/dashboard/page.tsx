@@ -29,7 +29,10 @@ export default async function Dashboard({
   const { project, projectOptions, findings, summary, scanStatus, scanMode, scanIssues, activePentest, agentReport } =
     await loadDashboard(params.project);
   const scanning = scanStatus === "queued" || scanStatus === "running";
-  const active = findings.filter((f) => f.status !== "resolved");
+  const active = findings.filter(
+    (f) => f.status !== "resolved" && f.status !== "needs_review",
+  );
+  const needsJudgment = findings.filter((f) => f.status === "needs_review");
   const resolved = findings.filter((f) => f.status === "resolved");
 
   return (
@@ -206,6 +209,53 @@ export default async function Dashboard({
                 )}
               </div>
             </div>
+
+            {needsJudgment.length > 0 && (
+              <div className="mt-16">
+                <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-violet-300">
+                  <svg
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-3.5 w-3.5"
+                    aria-hidden
+                  >
+                    <path d="M10 3v14M6 6l-3 5a3 3 0 0 0 6 0L6 6ZM14 6l-3 5a3 3 0 0 0 6 0l-3-5ZM5 17h10" />
+                  </svg>
+                  Needs your judgment
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <h2 className="text-2xl font-semibold tracking-tight">Kelp isn't sure</h2>
+                  <span className="text-sm text-fog-400">
+                    {needsJudgment.length}{" "}
+                    {needsJudgment.length === 1 ? "finding" : "findings"}
+                  </span>
+                </div>
+                <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-fog-400">
+                  Kelp reviewed these after the scan and downgraded them — the
+                  evidence held up, but the impact under this app's auth model
+                  wasn't clear-cut. Read Kelp's reason inside each card, then
+                  mark them fixed or dismiss.
+                </p>
+                <div className="mt-6 space-y-3">
+                  {needsJudgment.map((f, i) => (
+                    <div
+                      key={f.id}
+                      className="animate-rise"
+                      style={{
+                        animationDelay: `${(active.length + i) * 60}ms`,
+                        animationFillMode: "both",
+                      }}
+                    >
+                      <FindingCard finding={f} defaultOpen />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {resolved.length > 0 && (
               <div className="mt-16">

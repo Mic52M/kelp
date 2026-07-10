@@ -30,9 +30,15 @@ const STATUS: Record<Finding["status"], { label: string; className: string }> = 
   resolved: { label: "Resolved", className: "text-aqua-300 border-aqua-600/40" },
 };
 
-export function FindingCard({ finding }: { finding: Finding }) {
+export function FindingCard({
+  finding,
+  defaultOpen,
+}: {
+  finding: Finding;
+  defaultOpen?: boolean;
+}) {
   const [open, setOpen] = useState(
-    finding.severity === "critical" && finding.status === "open",
+    defaultOpen ?? (finding.severity === "critical" && finding.status === "open"),
   );
   const [copied, setCopied] = useState(false);
   const [fixPr, fixPrAction, fixPrPending] = useActionState<FixPrState, FormData>(openFixPr, {});
