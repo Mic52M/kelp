@@ -8,9 +8,11 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import {
+  buildAuthModelBrief,
   buildBackendBrief,
   createAutonomousPentester,
   DEFAULT_PENTEST_SQUAD,
+  type AuthModelBrief,
   type DiscoveredEdgeFunction,
   type PentestTools,
   type SpecialistEntry,
@@ -51,6 +53,9 @@ export async function buildAutonomousCampaign(
   /** Factory sharing the Anthropic client — used to spin up the reviewer's
    *  driver and each follow-up specialist's driver post-campaign. */
   makeDriver: () => ReturnType<typeof createAnthropicDriver>;
+  /** Auth-model brief derived once, shared between agents (injected into
+   *  each persona) and the triage pass (passed to `triageCampaign`). */
+  authModel: AuthModelBrief;
 }> {
   const apiKey = cfg.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
@@ -99,8 +104,15 @@ export async function buildAutonomousCampaign(
       ? buildBackendBrief(cfg.sourceFiles, cfg.edgeFunctions).humanText
       : "";
 
+  // Deterministic auth-model derivation. Every agent's system prompt starts
+  // with `authModel.narrative` (facts the agent must not re-derive), and the
+  // executor enforces `checkExploitability` as a second gate after the
+  // per-probe confirm(). The same brief is returned to the caller so the
+  // triage pass can read the model too.
+  const authModel = buildAuthModelBrief(cfg.sourceFiles);
+
   const entries: SpecialistEntry<unknown, unknown>[] = DEFAULT_PENTEST_SQUAD.map((brief) => ({
-    specialist: createAutonomousPentester(brief, { backendBrief }) as SpecialistEntry<unknown, unknown>["specialist"],
+    specialist: createAutonomousPentester(brief, { backendBrief, authModel }) as SpecialistEntry<unknown, unknown>["specialist"],
     backend: toolbox,
     driver: createAnthropicDriver(client, model),
   }));
@@ -110,5 +122,5 @@ export async function buildAutonomousCampaign(
   // and there's no duplicate auth setup at the call site.
   const makeDriver = () => createAnthropicDriver(client, model);
 
-  return { entries, toolbox, makeDriver };
+  return { entries, toolbox, makeDriver, authModel };
 }

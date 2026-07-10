@@ -43,6 +43,11 @@ delete):
 New pieces the autonomous engine added on top (see HANDOFF § 11 for detail):
 - `agent/autonomous.ts` — reasoning agent + `PentestTools` + evidence gate.
 - `agent/reviewer.ts` — post-hoc reviewer + `runFollowup`.
+- `agent/triage.ts` — post-review LLM pass that can downgrade / reclassify /
+  reject findings before they ship (#29). Never adds, never upgrades severity.
+  Wired into `scan-processor.ts` between `runReviewerAndFollowups` and
+  `campaignFindingsToDetected`; verify via `npm run verify:triage -w
+  @kelp/worker`.
 - `agent/backend-brief.ts` — deterministic pre-recon pack.
 - `agent/repo-recon.ts` — detect Supabase config + schema from repo (Lovable
   Cloud unlock).

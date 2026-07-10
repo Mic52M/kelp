@@ -20,6 +20,7 @@ import type { LlmAgentDriver, ToolCall } from "./loop.js";
 import { runAgent } from "./loop.js";
 import type { SpecialistOutcome } from "./orchestrator.js";
 import type { PentestTools } from "./autonomous.js";
+import type { AuthModelBrief } from "./auth-model.js";
 import type { Specialist, SpecialistExecutor, SpecialistContext } from "./specialist.js";
 import {
   AUTONOMOUS_TOOLS,
@@ -53,30 +54,60 @@ export interface FollowupOutcome {
 
 // ─── Compact "what to review" input ──────────────────────────────────────────
 
-/** How many trailing transcript steps we hand to the reviewer per agent. The
- *  interesting "let me check X" / "found Y" / "budget exhausted" turns are
- *  overwhelmingly in the tail. Reduces reviewer input tokens ~4×. */
-const TAIL_STEPS = 10;
+/**
+ * We hand the reviewer BOTH the head and the tail of each agent's transcript.
+ *
+ * - Head (first HEAD_STEPS): where agents enumerate hypotheses and often
+ *   commit their first "this looks suspicious but let me move on" — the
+ *   *early-abandonment* pattern. usatopoint 2026-07-09 13:37 missed the
+ *   newsletter_subscribers finding because agent-data expressed the
+ *   observation at step 4/28 and the reviewer only saw the tail.
+ * - Tail (last TAIL_STEPS): where budget-exhausted probes and
+ *   last-minute hypotheses live.
+ *
+ * Middle steps are dropped — they're usually elaboration of the head, and
+ * dropping them keeps the reviewer's input token cost near flat.
+ */
+const HEAD_STEPS = 6;
+const TAIL_STEPS = 12;
 const MAX_STEP_CHARS = 1500;
 
 function compactOutcomes(outcomes: readonly SpecialistOutcome[]): string {
   const parts: string[] = [];
   for (const o of outcomes) {
-    const t = o.transcript.slice(-TAIL_STEPS).map((s, i) => {
-      const idx = Math.max(0, o.transcript.length - TAIL_STEPS) + i;
-      const body = s.length > MAX_STEP_CHARS ? s.slice(0, MAX_STEP_CHARS) + "…" : s;
-      return `[step ${idx}] ${body}`;
-    });
     parts.push(
       `## ${o.name} (${o.vulnClass}) — ${o.steps} steps, ${o.findings.length} confirmed findings${
         o.error ? `, ERROR: ${o.error}` : ""
       }`,
       "",
-      t.length ? t.join("\n\n") : "(no narration)",
+      renderTranscript(o.transcript) || "(no narration)",
       "",
     );
   }
   return parts.join("\n");
+}
+
+function renderTranscript(transcript: readonly string[]): string {
+  const truncate = (s: string) =>
+    s.length > MAX_STEP_CHARS ? s.slice(0, MAX_STEP_CHARS) + "…" : s;
+  const fmt = (idx: number, s: string) => `[step ${idx}] ${truncate(s)}`;
+
+  const n = transcript.length;
+  if (n === 0) return "";
+  // Small transcript → send everything, no head/tail split needed.
+  if (n <= HEAD_STEPS + TAIL_STEPS) {
+    return transcript.map((s, i) => fmt(i, s)).join("\n\n");
+  }
+  const head = transcript.slice(0, HEAD_STEPS).map((s, i) => fmt(i, s));
+  const tail = transcript
+    .slice(n - TAIL_STEPS)
+    .map((s, i) => fmt(n - TAIL_STEPS + i, s));
+  const skipped = n - HEAD_STEPS - TAIL_STEPS;
+  return [
+    ...head,
+    `[… ${skipped} intermediate step(s) elided …]`,
+    ...tail,
+  ].join("\n\n");
 }
 
 // ─── Reviewer LLM call ───────────────────────────────────────────────────────
@@ -228,21 +259,34 @@ function processReviewerCall(
  */
 export function createFollowupSpecialist(
   lead: Lead,
+  opts: { authModel?: AuthModelBrief } = {},
 ): Specialist<PentestTools, AutonomousFinding> {
+  const authHeader = opts.authModel ? `${opts.authModel.narrative}\n\n` : "";
   return {
     name: `followup:${lead.id}`,
     vulnClass: guessVulnClass(lead.surface),
     systemPrompt:
-      "You are a focused follow-up run inside Kelp's autonomous pen test. " +
+      `${authHeader}You are a focused follow-up run inside Kelp's autonomous pen test. ` +
       "The primary squad flagged ONE specific lead they didn't confirm. Your " +
-      "entire job is to confirm or refute it with 2–3 probes and file a " +
-      "finding IF AND ONLY IF the observable proves the vuln. Do not " +
-      "explore anywhere else. If the lead was a misread (common failure " +
-      "modes: 204 was a PostgREST error, not a success; a foreign uuid was " +
-      "in fact your own; the endpoint is locked by RLS you didn't see) — " +
-      "call conclude with no finding. Same rules as the primary squad: no " +
-      "language like 'VULNERABILITY FOUND' before report_finding succeeds; " +
-      "short scalar identifiers pass through un-redacted.",
+      "entire job is to confirm or refute it with focused probes and file a " +
+      "finding IF AND ONLY IF the observable proves the vuln AND the impact " +
+      "chain survives the auth model above. Do not explore anywhere else. " +
+      "If the lead was a misread (common failure modes: 204 was a PostgREST " +
+      "error, not a success; a foreign uuid was in fact your own; the " +
+      "endpoint is locked by RLS you didn't see; the 'CSRF' hypothesis dies " +
+      "because there's no ambient authority) — call conclude with no " +
+      "finding. Same rules as the primary squad: no language like " +
+      "'VULNERABILITY FOUND' before report_finding succeeds; short scalar " +
+      "identifiers pass through un-redacted.\n\n" +
+      "CRITICAL FILING RULE — this loop has ended in the past with real " +
+      "findings LOST because the model wrote a full impact-chain narration " +
+      "and then said 'Now let me report this finding:' as a standalone " +
+      "message, deferring the actual report_finding tool call to a next " +
+      "turn that never came. DO NOT DO THIS. The moment your evidence + " +
+      "impact chain is complete, emit report_finding IN THE SAME assistant " +
+      "response as the narration. Keep the narration brief — the executor " +
+      "records the description you pass to report_finding, not your " +
+      "chain-of-thought. Two turns to file = one turn to lose the finding.",
     tools: AUTONOMOUS_TOOLS,
     initialPrompt() {
       return (
@@ -253,10 +297,12 @@ export function createFollowupSpecialist(
       );
     },
     createExecutor(tools: PentestTools, ctx: SpecialistContext): SpecialistExecutor<AutonomousFinding> {
-      // Reuse the autonomous specialist for its executor — the system prompt
-      // above already overrides scope + tone, so the persona wrapping is fine.
+      // Reuse the autonomous specialist for its executor — the follow-up's
+      // own systemPrompt already overrides scope + tone; we pass authModel
+      // through so the executor picks up the exploitability gate too.
       const inner = createAutonomousPentester(
         { name: "followup-inner", vulnClass: this.vulnClass, mission: lead.hypothesis },
+        opts.authModel ? { authModel: opts.authModel } : {},
       );
       return inner.createExecutor(tools, ctx);
     },
@@ -283,9 +329,10 @@ export async function runFollowup(
   tools: PentestTools,
   driver: LlmAgentDriver,
   ctx: SpecialistContext,
-  maxSteps = 8,
+  maxSteps = 20,
+  opts: { authModel?: AuthModelBrief } = {},
 ): Promise<SpecialistOutcome> {
-  const specialist = createFollowupSpecialist(lead);
+  const specialist = createFollowupSpecialist(lead, opts);
   try {
     const executor = specialist.createExecutor(tools, ctx);
     const { transcript, steps } = await runAgent(driver, executor, {

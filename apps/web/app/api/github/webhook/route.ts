@@ -8,7 +8,12 @@
 
 import { after, NextResponse, type NextRequest } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { drainScans, enqueueScanForProject, findProjectByRepo } from "@kelp/worker";
+import {
+  analyzeAndStoreBackendReport,
+  drainScans,
+  enqueueScanForProject,
+  findProjectByRepo,
+} from "@kelp/worker";
 
 function verify(payload: Buffer, signature: string | null, secret: string): boolean {
   if (!signature) return false;
@@ -77,6 +82,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Kick the local drain so scans run without a separate worker in dev; in prod
   // the poll loop / queue worker picks it up anyway.
   after(() => drainScans().catch((e) => console.error("webhook drain failed:", e)));
+
+  // Re-run the backend analyzer on the fresh repo state — a push may have
+  // migrated the stack (Firebase → Supabase, added Convex, changed URLs) and
+  // the Configuration UI must adapt. Background + best-effort: an analyzer
+  // failure never fails the webhook.
+  const projectMeta = {
+    orgId: project.orgId,
+    projectId: project.id,
+    repoFullName,
+    installationId,
+  };
+  after(() =>
+    analyzeAndStoreBackendReport(projectMeta).catch((e) =>
+      console.warn("webhook re-analyze failed:", e instanceof Error ? e.message : e),
+    ),
+  );
 
   return NextResponse.json({ enqueued: true, scanId });
 }

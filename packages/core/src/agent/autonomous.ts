@@ -22,6 +22,7 @@
 import type { Severity, VulnClass } from "../types.js";
 import type { AgentTool, ToolCall, ToolResult } from "./loop.js";
 import type { Specialist, SpecialistContext, SpecialistExecutor } from "./specialist.js";
+import { checkExploitability, type AuthModelBrief } from "./auth-model.js";
 
 // ─── The toolbox the worker implements ───────────────────────────────────────
 
@@ -276,6 +277,12 @@ class AutonomousExecutor implements SpecialistExecutor<AutonomousFinding> {
   constructor(
     private readonly tools: PentestTools,
     private readonly defaultVulnClass: VulnClass,
+    /** Optional exploitability gate. When present, runs AFTER confirm() and
+     *  can veto a finding whose declared class/severity doesn't survive the
+     *  app's auth model (see agent/auth-model.ts). */
+    private readonly exploitabilityGate:
+      | ((f: { vulnClass: string; severity: string; title: string; evidence: string }) => string | null)
+      | null = null,
   ) {}
 
   async execute(call: ToolCall): Promise<ToolResult> {
@@ -335,15 +342,38 @@ class AutonomousExecutor implements SpecialistExecutor<AutonomousFinding> {
       return err(call, `not recorded — Kelp could not reproduce this: ${confirmed.why}. Probe again and only report what you can reproduce.`);
     }
 
-    const fp = fingerprint([str(i.vulnClass), endpoint, str(i.title)]);
+    const declaredClass = validClass(str(i.vulnClass)) ?? this.defaultVulnClass;
+    const declaredSeverity = validSeverity(str(i.severity)) ?? "medium";
+    const title = str(i.title) || "Unnamed finding";
+    const description = str(i.description);
+
+    // Second gate: exploitability. `confirm()` proved the observable EXISTS;
+    // this checks whether the observable is a real attack primitive given the
+    // app's auth model. A CSRF finding on a bearer-JWT app has no vector; a
+    // wildcard-CORS finding without Allow-Credentials leaks nothing. When
+    // present, the gate is authoritative — the agent gets a specific reason
+    // it can react to (declassify + refile, or drop).
+    if (this.exploitabilityGate) {
+      const reason = this.exploitabilityGate({
+        vulnClass: declaredClass,
+        severity: declaredSeverity,
+        title,
+        evidence: description,
+      });
+      if (reason !== null) {
+        return err(call, `not recorded — the observable is real but the impact chain doesn't hold in this app: ${reason}`);
+      }
+    }
+
+    const fp = fingerprint([declaredClass, endpoint, title]);
     if (!this.seen.has(fp)) {
       this.seen.add(fp);
       this.findings.push({
         fingerprint: fp,
-        vulnClass: (validClass(str(i.vulnClass)) ?? this.defaultVulnClass),
-        severity: (validSeverity(str(i.severity)) ?? "medium"),
-        title: str(i.title) || "Unnamed finding",
-        evidence: `${str(i.description)}\n\n[Kelp confirmed: ${confirmed.why}]`,
+        vulnClass: declaredClass,
+        severity: declaredSeverity,
+        title,
+        evidence: `${description}\n\n[Kelp confirmed: ${confirmed.why}]`,
         endpoint,
         surface: (str(i.surface) as AutonomousFinding["surface"]) || "postgrest",
         fix: str(i.fix),
@@ -473,6 +503,18 @@ export interface PentesterOptions {
    *  message, so it skips the "grep the repo to find things Kelp already
    *  parsed" phase. Injected as the initial user message context. */
   backendBrief?: string;
+  /**
+   * Kelp-verified auth-model facts (see agent/auth-model.ts). Two effects:
+   *  1. `narrative` is injected at the TOP of the system prompt as ground
+   *     truth — agents reason from it, not around it.
+   *  2. `checkExploitability` becomes the second evidence gate in the
+   *     executor, refusing findings whose class/severity don't survive the
+   *     model (e.g. CSRF on a bearer-JWT app).
+   * When omitted, the agent falls back to the old behavior (persona-only
+   * threat modeling, no exploitability gate) — used by tests that don't
+   * want to fixture a full auth model.
+   */
+  authModel?: AuthModelBrief;
 }
 
 const PERSONA =
@@ -506,6 +548,53 @@ const PERSONA =
   "names — pass through UNCHANGED. If a probe body shows a UUID in a `user_id` " +
   "field that isn't your own uuid, that IS the real value: an actual cross-" +
   "account leak, not a masking artifact. Do not talk yourself out of it.\n\n" +
+  "IMPACT CHAIN FIRST — required for every report_finding:\n" +
+  "Before you call report_finding, STATE IN YOUR NARRATION:\n" +
+  "  (1) ATTACKER — starting capability (anon, low-priv authed user) and " +
+  "what they know (public code, a victim's email, nothing).\n" +
+  "  (2) VICTIM — which specific user or resource is harmed.\n" +
+  "  (3) VECTOR — the concrete primitive that chains, grounded in the AUTH " +
+  "MODEL block at the top. Not 'wildcard CORS is bad' — 'the attacker's " +
+  "site reads response X because Allow-Credentials is true' or 'the " +
+  "attacker triggers the endpoint via <exact method> and the server does " +
+  "<exact action> without checking <exact control>'.\n" +
+  "  (4) GAIN — what the attacker achieves BEYOND what they could do acting " +
+  "alone with public knowledge. If the answer is 'nothing more than they " +
+  "could do anyway', don't file.\n" +
+  "If ANY of 1–4 is hand-waved, the finding is a false positive. Prefer 'no " +
+  "finding' to a weak one — Kelp's reputation depends on it.\n\n" +
+  "KNOWN FALSE-POSITIVE PATTERNS on Supabase / vibe-code apps — do NOT file " +
+  "these unless the AUTH MODEL block above explicitly overrides:\n" +
+  " · 'CSRF on endpoint X' when the app is bearer-JWT with no cookie " +
+  "sessions and no Allow-Credentials: true. The browser NEVER sends the " +
+  "Bearer token cross-origin. No ambient authority = no CSRF vector. Kelp " +
+  "will refuse this finding at the gate.\n" +
+  " · 'Wildcard CORS is a vulnerability' at medium+ severity without either " +
+  "(a) Allow-Credentials: true on that endpoint, or (b) proof the response " +
+  "body itself contains a specific token/secret/PII. Without one of those, " +
+  "wildcard CORS on a public API is a design choice, not a bug. Kelp will " +
+  "refuse the finding at the gate. File as `severity=low` (hardening) only " +
+  "if you still want it recorded.\n" +
+  " · 'Anonymous INSERT is a vulnerability' when you can't name the " +
+  "downstream harm. A public newsletter form legitimately needs anon " +
+  "INSERT. Only file when you can prove (a) the row becomes publicly " +
+  "readable, (b) the INSERT dispatches a weaponizable email/webhook, or " +
+  "(c) the row enables enumeration. Kelp will refuse otherwise.\n" +
+  " · 'verify_jwt=false is a vulnerability' on functions that are (a) " +
+  "public data (google-reviews, health checks) or (b) gated by a one-time " +
+  "token / API-key check inside the function. Read the function body " +
+  "before filing — many disable JWT verification intentionally.\n\n" +
+  "Findings you must NOT dismiss (real bugs commonly misread as intended):\n" +
+  " · Anonymous SELECT on a table intended to be public but leaking a " +
+  "column that shouldn't be readable (e.g. `is_admin`, `internal_notes`, " +
+  "`stripe_customer_id` on a `stores` row). Public row ≠ public columns.\n" +
+  " · An endpoint that 'returned empty for me' — you tested as accountA and " +
+  "got no rows because A owns nothing. That doesn't prove the policy is " +
+  "correct; probe with an id you know is owned by B before concluding safe.\n" +
+  " · A body-userId override that the server actually honors (no " +
+  "auth.uid()-based lookup) — chain to a cross-account write.\n" +
+  " · A JWT accepted from a different Supabase project or with wrong " +
+  "audience — total auth bypass.\n\n" +
   "Language discipline: DO NOT write 'VULNERABILITY FOUND' or similar in your " +
   "narration until you have (a) run a probe whose observable proves the claim, " +
   "AND (b) successfully filed report_finding for it (the executor confirms). " +
@@ -513,6 +602,17 @@ const PERSONA =
   "content because the update succeeded' OR a PostgREST protocol error — " +
   "always inspect the body/error code before concluding. Suspicion → probe, " +
   "not narration.\n\n" +
+  "FILING DISCIPLINE — this is the single most important rule after the " +
+  "impact-chain requirement:\n" +
+  "The moment you have enough evidence + impact chain to file, CALL " +
+  "report_finding IN THE SAME TURN as your reasoning. Do NOT write 'Now let " +
+  "me report this finding:' as a standalone message and defer the tool call " +
+  "to the next turn — the loop may end before you get another turn, and a " +
+  "real finding will be lost. The correct pattern is: state the impact " +
+  "chain briefly, then immediately emit the report_finding tool call in the " +
+  "SAME assistant response. Narration and tool call together, never split. " +
+  "This applies to conclude() too — call it in the same turn as your final " +
+  "summary. Split turns are how findings get lost.\n\n" +
   "vulnClass discipline (pick by the NATURE of the bug, not the surface you " +
   "used to find it):\n" +
   " · rls        — permissive/wrong Postgres RLS policy, incl. INSERT/UPDATE " +
@@ -540,10 +640,19 @@ export function createAutonomousPentester(
   brief: PentestBrief,
   opts: PentesterOptions = {},
 ): Specialist<PentestTools, AutonomousFinding> {
+  const authModelHeader = opts.authModel ? `${opts.authModel.narrative}\n\n` : "";
+  const systemPrompt =
+    `${authModelHeader}${PERSONA}\n\nYOUR ASSIGNED SURFACE:\n${brief.mission}`;
+  const authModel = opts.authModel;
+  const gate = authModel
+    ? (f: { vulnClass: string; severity: string; title: string; evidence: string }) =>
+        checkExploitability(f, authModel)
+    : null;
+
   return {
     name: brief.name,
     vulnClass: brief.vulnClass,
-    systemPrompt: `${PERSONA}\n\nYOUR ASSIGNED SURFACE:\n${brief.mission}`,
+    systemPrompt,
     tools: AUTONOMOUS_TOOLS,
     initialPrompt(ctx: SpecialistContext): string {
       const brief = opts.backendBrief
@@ -558,7 +667,7 @@ export function createAutonomousPentester(
       );
     },
     createExecutor(tools: PentestTools): SpecialistExecutor<AutonomousFinding> {
-      return new AutonomousExecutor(tools, brief.vulnClass);
+      return new AutonomousExecutor(tools, brief.vulnClass, gate);
     },
   };
 }

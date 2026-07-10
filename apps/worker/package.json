@@ -33,7 +33,9 @@
     "verify:rls-deep-target-live": "node dist/agent/verify-rls-deep-target-live.js",
     "verify:weak-crypto-target-live": "node dist/agent/verify-weak-crypto-target-live.js",
     "verify:live": "npm run verify:bola-target-live && npm run verify:auth-bypass-target-live && npm run verify:injection-target-live && npm run verify:ssrf-target-live && npm run verify:exposure-target-live && npm run verify:rls-deep-target-live && npm run verify:weak-crypto-target-live",
-    "verify:campaign-e2e": "node dist/agent/verify-campaign-e2e.js"
+    "verify:campaign-e2e": "node dist/agent/verify-campaign-e2e.js",
+    "verify:triage": "node dist/agent/verify-triage.js",
+    "verify:auth-model": "node dist/agent/verify-auth-model.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.1",

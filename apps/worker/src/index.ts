@@ -28,6 +28,7 @@ export {
   loadOrgPlan,
   countProjectsForOrg,
   setAppBaseUrl,
+  setSupabaseProjectRef,
   findUserEmail,
   findOrgName,
   expireStuckScans,
@@ -36,6 +37,7 @@ export type { StoredActiveTestConsent } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";
 export type { SecretFixPrResult } from "./fix-pr.js";
 export type { SupabaseProjectInfo, ConnectInput, RepoOption, ProjectConfigStatus } from "./api.js";
+export { analyzeAndStoreBackendReport, loadBackendReport } from "./api.js";
 export { InMemoryQueue } from "./queue.js";
 export type { ScanJob, ScanQueue } from "./queue.js";
 export {

@@ -34,50 +34,27 @@ export async function markResolvedFinding(formData: FormData): Promise<void> {
 }
 
 /**
- * Report a finding as a false positive. Sets it to `dismissed` AND records a
- * feedback row (vuln class, rule, location, fingerprint — never any secret
- * value) so we can tune the detector. This is the precision feedback loop.
+ * Report a finding as a false positive. For now this HARD-DELETES the row —
+ * the previous soft-dismiss behavior left the finding visible on the
+ * dashboard (the active-issues filter only excludes `resolved`), so the
+ * button looked broken. Deleting is the honest UX: click → gone.
+ *
+ * `finding_feedback` had a FK on findings(id) with `on delete cascade`, so
+ * any prior feedback rows drop with the finding. We skip inserting a fresh
+ * feedback row on delete — the detection-tuning loop is a future feature
+ * (issue #29 follow-up); when we bring it back it will read from a
+ * separate telemetry table, not from cascaded rows.
  */
 export async function reportFalsePositive(formData: FormData): Promise<void> {
   const id = String(formData.get("findingId") ?? "");
-  const note = String(formData.get("note") ?? "").slice(0, 500) || null;
   if (!id) return;
 
   const supabase = await getServerSupabase();
-  // Ownership via RLS: the user can only SELECT findings in their orgs. Pull the
-  // context we want to learn from in the same query.
-  const { data: f } = await supabase
-    .from("findings")
-    .select("id, org_id, vuln_class, title, location, fingerprint, evidence")
-    .eq("id", id)
-    .maybeSingle();
-  if (!f) return;
+  // Ownership via RLS: the user can only SELECT findings in their orgs.
+  const { data: owned } = await supabase.from("findings").select("id").eq("id", id).maybeSingle();
+  if (!owned) return;
 
-  const admin = getAdminSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  const ruleId = (f as { evidence?: { raw?: { ruleId?: unknown } } }).evidence?.raw?.ruleId;
-
-  // Best-effort feedback insert — never let a missing table block the dismiss.
-  await admin
-    .from("finding_feedback")
-    .insert({
-      org_id: (f as { org_id: string }).org_id,
-      finding_id: id,
-      kind: "false_positive",
-      vuln_class: (f as { vuln_class?: string }).vuln_class ?? null,
-      rule_id: typeof ruleId === "string" ? ruleId : null,
-      title: (f as { title?: string }).title ?? null,
-      location: (f as { location?: string }).location ?? null,
-      fingerprint: (f as { fingerprint?: string }).fingerprint ?? null,
-      note,
-      created_by: auth.user?.id ?? null,
-    })
-    .then(
-      () => {},
-      (e: unknown) => console.warn("finding_feedback insert skipped:", e instanceof Error ? e.message : e),
-    );
-
-  await admin.from("findings").update({ status: "dismissed" }).eq("id", id);
+  await getAdminSupabase().from("findings").delete().eq("id", id);
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/findings");
 }

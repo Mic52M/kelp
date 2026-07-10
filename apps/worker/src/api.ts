@@ -2,8 +2,15 @@
 // @kelp/worker so the connect flow reuses the real scan engine (no duplication).
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { VulnClass } from "@kelp/core";
-import { assertCanCreateProject, assertCanTriggerRescan, detectSupabaseConfig } from "@kelp/core";
+import type { BackendReport, VulnClass } from "@kelp/core";
+import {
+  analyzeBackend,
+  assertCanCreateProject,
+  assertCanTriggerRescan,
+  detectSupabaseConfig,
+} from "@kelp/core";
+import Anthropic from "@anthropic-ai/sdk";
+import { createAnthropicDriver } from "./agent/anthropic-driver.js";
 import {
   countProjectsForOrg,
   getCredential,
@@ -197,6 +204,76 @@ export async function detectAndStoreSupabaseBackend(input: {
     anonKeyDetected = true;
   }
   return { ref: cfg.ref, anonKeyDetected };
+}
+
+/**
+ * Run the hybrid backend analyzer on the connected repo and persist the
+ * resulting BackendReport onto the project row. Called at connect time and
+ * on-demand from Configuration when a project has no report yet.
+ *
+ * Never throws — a failed LLM call falls back to the deterministic-only
+ * brief (see analyzeBackend). The customer's Configuration UX degrades
+ * gracefully in every failure mode.
+ */
+export async function analyzeAndStoreBackendReport(input: {
+  orgId: string;
+  projectId: string;
+  repoFullName: string;
+  installationId: number;
+}): Promise<BackendReport> {
+  const github = createGitHubConnector({
+    appId: requireEnv("GITHUB_APP_ID"),
+    privateKey: Buffer.from(requireEnv("GITHUB_APP_PRIVATE_KEY_BASE64"), "base64").toString("utf8"),
+    installationId: input.installationId,
+  });
+  const files = await github.listSourceFiles(input.repoFullName);
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const driver = apiKey
+    ? createAnthropicDriver(new Anthropic({ apiKey }), process.env.ANTHROPIC_MODEL_CHEAP ?? "claude-haiku-4-5")
+    : undefined;
+  const report = await analyzeBackend(files, driver ? { driver } : {});
+
+  await getPool().query(
+    `update projects set backend_report = $2 where id = $1`,
+    [input.projectId, JSON.stringify(report)],
+  );
+
+  // Also seed the legacy fields when we have high-confidence Supabase data
+  // so the rest of the pipeline (scan-processor) picks them up immediately.
+  if (report.primary.type === "supabase") {
+    if (report.publicConfig.supabaseRef) {
+      await getPool().query(
+        `update projects set supabase_project_ref = coalesce(supabase_project_ref, $2),
+                db_provider = coalesce(db_provider, 'supabase')
+          where id = $1`,
+        [input.projectId, report.publicConfig.supabaseRef],
+      );
+    }
+    if (report.publicConfig.supabaseAnonKey) {
+      const existing = await getCredential(input.projectId, "supabase_anon_key");
+      if (!existing) {
+        await putCredential(
+          input.orgId,
+          input.projectId,
+          "supabase_anon_key",
+          report.publicConfig.supabaseAnonKey,
+        );
+      }
+    }
+  }
+
+  return report;
+}
+
+/** Fetch the persisted BackendReport for a project (or null if not analyzed yet). */
+export async function loadBackendReport(projectId: string): Promise<BackendReport | null> {
+  const { rows } = await getPool().query(
+    `select backend_report from projects where id = $1`,
+    [projectId],
+  );
+  const r = rows[0]?.backend_report;
+  return r ? (r as BackendReport) : null;
 }
 
 export interface ProjectConfigStatus {

@@ -4,7 +4,7 @@
 // while tests and local dev inject mocks. BOLA only runs through the consent
 // guard — there is no way to reach it here without valid consent.
 
-import type { Severity, VulnClass } from "./types.js";
+import type { FindingStatus, Severity, VulnClass } from "./types.js";
 import { detectSecrets, type SourceFile, type SecretFinding } from "./scanners/secrets.js";
 import { analyzeRls, type SchemaSnapshot, type RlsFinding } from "./scanners/rls.js";
 import { buildBolaReport, type BolaProbeResult, type BolaReport } from "./remediation/bola-report.js";
@@ -42,6 +42,13 @@ export interface DetectedFinding {
    * type-only change.
    */
   raw: SecretFinding | RlsFinding | BolaReport | Record<string, unknown>;
+  /**
+   * Optional status the DB should use on INSERT for this finding. Set by the
+   * triage layer (#29) to downgrade borderline findings to `needs_review`.
+   * Ignored on UPDATE — user-driven status transitions win once a finding is
+   * on file.
+   */
+  initialStatus?: FindingStatus;
 }
 
 export interface ScanInput {

@@ -140,6 +140,19 @@ export async function setAppBaseUrl(projectId: string, url: string | null): Prom
   await getPool().query(`update projects set app_base_url = $2 where id = $1`, [projectId, url]);
 }
 
+/**
+ * Manual override for the Supabase project ref. Normally derived from repo
+ * auto-detect during onboarding (Lovable/Bolt/v0 style); this setter unblocks
+ * repos that don't ship a frontend client (e.g. backend-only test corpora).
+ * Empty string is normalized to null.
+ */
+export async function setSupabaseProjectRef(projectId: string, ref: string | null): Promise<void> {
+  await getPool().query(
+    `update projects set supabase_project_ref = $2 where id = $1`,
+    [projectId, ref && ref.length > 0 ? ref : null],
+  );
+}
+
 /** Record (or re-activate) a GitHub App installation for an org. Idempotent. */
 export async function saveGithubInstallation(input: {
   orgId: string;
@@ -226,7 +239,12 @@ export async function upsertFindings(
   try {
     await client.query("begin");
     for (const f of findings) {
-      const status = f.vulnClass === "bola" ? "needs_review" : "open";
+      // Triage (#29) may downgrade an autonomous finding to needs_review;
+      // BOLA has always been review-only. Fall back to open on everything
+      // else. Only affects INSERT — updates preserve the existing status
+      // path (regressed / user-driven transitions win).
+      const status =
+        f.initialStatus ?? (f.vulnClass === "bola" ? "needs_review" : "open");
       await client.query(
         `insert into findings
            (org_id, project_id, first_scan_id, last_scan_id, vuln_class, severity, status,

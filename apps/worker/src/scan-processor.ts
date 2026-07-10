@@ -15,6 +15,9 @@ import {
   detectSupabaseConfig,
   reviewCampaign,
   runFollowup,
+  triageCampaign,
+  applyTriage,
+  summarizeTriage,
   runActivePentest,
   runScan,
   type ActiveTestConsent,
@@ -261,7 +264,7 @@ async function executeActivePentestScan(scan: {
   // The autonomous multi-agent squad IS the pen test now. Each agent reasons +
   // attacks + loops over its surface, using repo-derived schema when there's no
   // live DB connection.
-  const { entries, toolbox, makeDriver } = await buildAutonomousCampaign({
+  const { entries, toolbox, makeDriver, authModel } = await buildAutonomousCampaign({
     supabaseRef,
     readonlyConnString: storedConnString,
     repoSchema,
@@ -286,14 +289,24 @@ async function executeActivePentestScan(scan: {
     jobId: scan.scanId,
   };
 
-  // Autonomous agents need a real budget to recon → hypothesize → attack →
-  // adapt → loop, but each step re-sends accumulated context, so the budget is
-  // also the main cost lever. 28 steps × 3 agents in parallel, with prompt
-  // caching in the driver, keeps a full run in a sane cost envelope.
+  // Autonomous agents run until THEY decide they're done (call conclude), not
+  // until we cut them off. Budget is a safety net for runaway loops, not the
+  // stopping criterion. Set generously — cost is not the constraint; precision
+  // and completeness are. Empirical model ceiling for a single Opus tool-use
+  // conversation is ~60 steps before the model starts revisiting already-
+  // covered ground. Beyond that, split agents by sub-surface rather than
+  // stretching one further.
+  //
+  // Prior incident (usatopoint 06dc909c, 2026-07-09): a follow-up agent
+  // narrated a full impact chain at step 10/10 and wrote "Now let me report
+  // this finding:" but the loop cut it off before the tool call — the
+  // is_staff_or_admin RPC anon-enumeration finding was lost. Persona now
+  // instructs "file in the same turn as the reasoning"; budgets doubled so
+  // this failure mode never resurfaces on a real vuln.
   const primaryReport = await runActivePentest(
     { consent: consentStoreFromDb(), audit: { record: writeAudit } },
     ctx,
-    { entries, maxParallel: 3, maxStepsPer: 28 },
+    { entries, maxParallel: 3, maxStepsPer: 60 },
     { acceptedVersions: CONSENT_ACCEPTED_FOR_MULTI_SPECIALIST },
   );
 
@@ -302,7 +315,13 @@ async function executeActivePentestScan(scan: {
   // findings. Cheap when nothing to chase (one review call); crash-isolated so
   // a bad review just falls back to the primary report. Follow-ups go through
   // the same evidence gate — no fabrication path is opened.
-  const report = await runReviewerAndFollowups(primaryReport, toolbox, makeDriver, ctx);
+  const reviewed = await runReviewerAndFollowups(primaryReport, toolbox, makeDriver, ctx, authModel);
+
+  // Triage (#29 + auth-model): read every confirmed finding with skeptical
+  // eyes and downgrade / reclassify / reject before we persist. Cannot
+  // upgrade severity, cannot invent findings, cannot re-verify — it only
+  // judges the label vs the evidence + the auth-model facts. Crash-isolated.
+  const report = await runTriagePass(reviewed, makeDriver, authModel);
 
   const detected = campaignFindingsToDetected(report.outcomes);
   const found = await upsertFindings(scan.orgId, scan.projectId, scan.scanId, detected);
@@ -477,6 +496,7 @@ async function runReviewerAndFollowups(
   toolbox: PentestTools,
   makeDriver: () => import("@kelp/core").LlmAgentDriver,
   ctx: SpecialistContext,
+  authModel: import("@kelp/core").AuthModelBrief,
 ): Promise<CampaignReport> {
   let leads: Lead[] = [];
   try {
@@ -490,7 +510,7 @@ async function runReviewerAndFollowups(
   const followupOutcomes: SpecialistOutcome[] = [];
   for (const lead of leads) {
     try {
-      const outcome = await runFollowup(lead, toolbox, makeDriver(), ctx);
+      const outcome = await runFollowup(lead, toolbox, makeDriver(), ctx, undefined, { authModel });
       followupOutcomes.push(outcome);
     } catch (e) {
       console.warn(`follow-up ${lead.id} failed:`, e instanceof Error ? e.message : e);
@@ -521,6 +541,45 @@ async function runReviewerAndFollowups(
       followupOutcomes.reduce((n, o) => n + o.findings.length, 0)
     } finding(s).`,
   );
+  return merged;
+}
+
+/**
+ * Post-review triage pass (#29). One LLM call reads the confirmed findings
+ * and can downgrade / reclassify / reject each one before it ships. Adds the
+ * triage cost onto the campaign's totalUsage so the shown cost stays honest.
+ * Never throws — a triage failure just returns the reviewed report unchanged.
+ */
+async function runTriagePass(
+  reviewed: CampaignReport,
+  makeDriver: () => import("@kelp/core").LlmAgentDriver,
+  authModel: import("@kelp/core").AuthModelBrief,
+): Promise<CampaignReport> {
+  if (reviewed.findings.length === 0) return reviewed;
+  let triageResult: Awaited<ReturnType<typeof triageCampaign>>;
+  try {
+    triageResult = await triageCampaign(makeDriver(), reviewed.outcomes, authModel);
+  } catch (e) {
+    console.warn("triage failed:", e instanceof Error ? e.message : e);
+    return reviewed;
+  }
+  if (triageResult.decisions.length === 0) return reviewed;
+
+  const applied = applyTriage(reviewed, triageResult.decisions);
+  const merged: CampaignReport = {
+    outcomes: applied.outcomes,
+    findings: applied.findings,
+    totalUsage: {
+      inputTokens:
+        reviewed.totalUsage.inputTokens + (triageResult.usage?.inputTokens ?? 0),
+      outputTokens:
+        reviewed.totalUsage.outputTokens + (triageResult.usage?.outputTokens ?? 0),
+      estimatedCostUsd:
+        reviewed.totalUsage.estimatedCostUsd +
+        (triageResult.usage?.estimatedCostUsd ?? 0),
+    },
+  };
+  console.log(summarizeTriage(triageResult.decisions));
   return merged;
 }
 

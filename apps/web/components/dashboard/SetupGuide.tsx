@@ -20,15 +20,22 @@ export function SetupGuide({
   const active = content.platforms.find((p) => p.platform === platform) ?? content.platforms[0];
 
   return (
-    <details className="group mt-2 rounded-lg border border-line/60 bg-ink-900/30 open:border-line/80">
-      <summary className="cursor-pointer list-none px-3.5 py-2 text-[12px] text-fog-400 transition-colors hover:text-fog-200">
-        <span className="mr-1.5 inline-block text-fog-600 transition-transform group-open:rotate-90">
-          ▸
+    <details className="group mt-2 rounded-xl border border-line/60 bg-ink-900/30 open:border-line/80">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-ink-900/60">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-fog-500/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-fog-400">
+            How to
+          </span>
+          <span className="text-[13px] font-medium text-fog-100">{title}</span>
+        </div>
+        <span className="text-fog-400 transition-transform group-open:rotate-180" aria-hidden>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+            <path d="m6 8 4 4 4-4" />
+          </svg>
         </span>
-        {title}
       </summary>
 
-      <div className="border-t border-line/50 px-4 pb-4 pt-3 text-sm leading-relaxed text-fog-300">
+      <div className="border-t border-line/60 px-4 pb-4 pt-4 text-sm leading-relaxed text-fog-300">
         <p className="text-[13px] text-fog-200">{content.whatIsIt}</p>
 
         <div className="mt-4">

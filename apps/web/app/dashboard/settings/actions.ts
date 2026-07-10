@@ -11,6 +11,7 @@ import {
   saveActiveTestConsent,
   revokeActiveTestConsent,
   setAppBaseUrl,
+  setSupabaseProjectRef,
   getProjectConfigStatus,
   getCredential,
 } from "@kelp/worker";
@@ -160,6 +161,7 @@ export async function configureActivePentestAction(
   const projectId = String(formData.get("projectId") ?? "");
   const appBaseUrl = String(formData.get("appBaseUrl") ?? "").trim();
   const anonKey = String(formData.get("supabaseAnonKey") ?? "").trim();
+  const supabaseRef = String(formData.get("supabaseProjectRef") ?? "").trim();
   const aEmail = String(formData.get("accountAEmail") ?? "").trim();
   const aPassword = String(formData.get("accountAPassword") ?? "");
   const bEmail = String(formData.get("accountBEmail") ?? "").trim();
@@ -174,6 +176,11 @@ export async function configureActivePentestAction(
     // with "eyJ...") or the new sb_publishable_… format. Refuse obvious typos
     // early so we don't burn a scan on a bad key.
     return { ok: false, message: "That doesn't look like a Supabase anon key (JWT or sb_publishable_…)." };
+  }
+  if (supabaseRef && !/^[a-z0-9]{16,}$/.test(supabaseRef)) {
+    // Supabase project refs are 20-char lowercase alphanumeric strings
+    // (they're the subdomain of <ref>.supabase.co). Reject obvious typos.
+    return { ok: false, message: "Supabase project ref must be lowercase alphanumeric (20 chars, e.g. abcdefghijklmnopqrst)." };
   }
 
   const supabase = await getServerSupabase();
@@ -203,6 +210,11 @@ export async function configureActivePentestAction(
 
   const { orgId } = await ensureTenant({ id: user.id, email: user.email });
   await setAppBaseUrl(projectId, appBaseUrl || null);
+  if (supabaseRef) {
+    // Manual override — leave blank to keep the current value (empty string
+    // means "no change", not "clear").
+    await setSupabaseProjectRef(projectId, supabaseRef);
+  }
   if (anonKey) {
     await putCredential(orgId, projectId, "supabase_anon_key", anonKey);
   }

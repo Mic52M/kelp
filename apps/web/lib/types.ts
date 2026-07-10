@@ -2,13 +2,30 @@
 // @kelp/core but are kept local so the web bundle stays free of server-only code.
 
 export type Severity = "critical" | "high" | "medium" | "low";
-export type VulnClass = "rls" | "secret" | "bola";
+export type VulnClass =
+  | "rls"
+  | "secret"
+  | "bola"
+  | "auth"
+  | "injection"
+  | "ssrf"
+  | "exposure";
 export type FindingStatus =
   | "open"
   | "pr_opened"
   | "needs_review"
   | "confirmed"
   | "resolved";
+
+/** Triage annotation (#29) — set when Kelp's post-review triage touched a
+ *  finding. Surfaced in the UI so the user sees WHY a finding was downgraded
+ *  or reclassified, and can trust the label. */
+export interface FindingTriage {
+  action: "keep" | "downgrade_to_needs_review" | "reclassify";
+  reason: string;
+  originalVulnClass?: VulnClass;
+  originalSeverity?: Severity;
+}
 
 export interface Finding {
   id: string;
@@ -30,6 +47,8 @@ export interface Finding {
   prUrl?: string;
   /** true when Kelp can safely open an automatic fix PR (high-confidence secrets) */
   autofixable?: boolean;
+  /** triage annotation, when Kelp's post-review pass touched this finding */
+  triage?: FindingTriage;
   detectedAt: string;
 }
 

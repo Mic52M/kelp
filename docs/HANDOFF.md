@@ -258,6 +258,38 @@ on the results side. "We never claim 100% coverage — but what we report is rea
   and "False positive" buttons. False-positive click writes to
   `finding_feedback` (vuln class, rule, location, fingerprint — never any
   secret value) for detector tuning. Begin of the data moat.
+- ✅ **AuthModelBrief + exploitability gate (precision pass, 2026-07-09)** —
+  the false-positive audit on usatopoint (Lovable refuted 4/5 findings) showed
+  agents were confirming observables that didn't survive this app's auth
+  model. Fix in `packages/core/src/agent/auth-model.ts`: deterministic
+  derivation of `AuthModelBrief` from source files (Set-Cookie presence,
+  `Access-Control-Allow-Credentials: true` presence, server-side price
+  recalc hints, one-time-token table names). Brief's `narrative` injected at
+  the TOP of every agent's system prompt as GROUND TRUTH, and
+  `checkExploitability` runs after `confirm()` in `handleReport` as a
+  deterministic second gate. Persona rewritten with explicit "impact chain
+  first" section (attacker → victim → vector → gain) + named
+  false-positive patterns (CSRF on bearer-JWT apps, wildcard CORS without
+  Allow-Credentials, anon INSERT without downstream harm, verify_jwt=false
+  on functions with internal auth). Triage receives the same brief and
+  applies the same rules as a third defense. Verified offline:
+  `npm run verify:auth-model -w @kelp/worker` reproduces all 4
+  Lovable-refuted findings and asserts they're refused at the gate; the
+  legitimate cross-account RLS finding + the anon INSERT WITH harm evidence
+  pass through. 190/190 core unit tests green (+19 for auth-model).
+- ✅ **Triage layer (#29)** — post-review LLM pass in `packages/core/src/agent/
+  triage.ts` reads every confirmed finding and can `keep` / `downgrade_to_
+  needs_review` / `reclassify` (vulnClass + severity, downward only) / `reject`
+  before we persist. Enforced in code: never adds a finding, never upgrades
+  severity (refused at the runner AND re-checked in the applier), crash-
+  isolated (any failure returns the untouched report). `DetectedFinding.
+  initialStatus` threaded through `campaignFindingsToDetected` →
+  `upsertFindings` so downgraded findings land as `needs_review` on insert;
+  reason string appended to `explanation` so the user sees WHY Kelp
+  declassified. Triage cost is folded into `totalUsage` → `scans.cost_cents`.
+  Verified offline via `npm run verify:triage -w @kelp/worker` (all 4
+  actions + upgrade refusal + crash isolation + empty-input path); 171/171
+  core unit tests green.
 - ✅ **UX polish from live testing (3cf1458)** — auto-resolve disabled on
   active-pentest (agents are non-deterministic between runs); fix-prompt
   templates fixed to use the agent's `raw.fix` when present (was rendering
@@ -339,12 +371,10 @@ remaining backlog is about trust, cost, and product polish — not core capabili
 
 Suggested order toward **production-ready, self-serve**:
 
-1. **#29 (open — proposed)** false-positive triage layer — meta-reviewer that
-   downgrades/reclassifies/rejects filed findings before they ship. The
-   `newsletter_subscribers` finding on usatopoint was real but filed with wrong
-   class + inflated severity; a triage pass would have caught it. Only ever
-   downgrades — never adds noise. Design in the issue body. Small slice (~1 file
-   in core + wire into scan-processor + UI section).
+1. ~~**#29** false-positive triage layer~~ — **shipped** (see § 6). Next slice
+   on this thread is optional UI polish: a dedicated "Needs your judgment"
+   section on Overview that surfaces `needs_review` findings + the triage
+   reason inline. Cheap follow-up when we get to #13.
 2. **#1** rotate GitHub App secret + private key — security, blocking prod, small.
 3. **#2** make the GitHub App public + dedicated org — unblocks true multi-user
    install (pairs with the closed #14).

@@ -10,7 +10,7 @@ import {
 } from "@kelp/core";
 import { getServerSupabase } from "./supabase/server";
 import { loadActiveTestConsent, getProjectConfigStatus, expireStuckScans } from "@kelp/worker";
-import type { Finding, FindingStatus, Project, Severity, VulnClass } from "./types";
+import type { Finding, FindingStatus, FindingTriage, Project, Severity, VulnClass } from "./types";
 
 // Loads the signed-in org's project + findings from the DB. Queries run through
 // the user's session, so RLS scopes them to orgs the user belongs to.
@@ -51,7 +51,7 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
   // shape.
   const agentFix = (raw as { fix?: unknown } | undefined)?.fix;
   if (typeof agentFix === "string" && agentFix.trim()) {
-    fixPrompt = agentFix.trim();
+    fixPrompt = unescapeFixText(agentFix.trim());
   } else if (row.vuln_class === "rls" && raw && looksLikeRlsFinding(raw)) {
     const r = raw as RlsFinding;
     fixPrompt = fixPromptForRls(r, "generic");
@@ -64,6 +64,14 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
     autofixable = s.confidence === "high";
   }
 
+  // Triage annotation (#29): surfaced so the UI can show WHY Kelp downgraded /
+  // reclassified. The evidence text carries "[Kelp confirmed: …]" (from the
+  // evidence gate) and "Kelp triage: …" (appended by applyTriage) — strip both
+  // from the user-facing explanation; the triage reason is shown separately.
+  const rawTriage = (raw as { triage?: unknown } | undefined)?.triage;
+  const triage = parseTriage(rawTriage);
+  const explanation = cleanExplanation(row.explanation);
+
   return {
     id: row.id,
     vulnClass: row.vuln_class,
@@ -71,7 +79,7 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
     status: STATUS_MAP[row.status] ?? "open",
     title: row.title,
     location: row.location ?? "",
-    explanation: row.explanation,
+    explanation,
     remediation:
       row.vuln_class === "bola"
         ? "Queued for review by the Kelp team before it is confirmed."
@@ -82,7 +90,57 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
     ...(fixPrompt ? { fixPrompt } : {}),
     ...(prUrl ? { prUrl } : {}),
     ...(autofixable ? { autofixable: true } : {}),
+    ...(triage ? { triage } : {}),
     detectedAt: "recent",
+  };
+}
+
+/** Autonomous-agent fix prompts sometimes arrive JSON-escaped (literal `\n`,
+ *  `\"`, `\\s`) because the agent hand-wrote them into a JSON tool call. Render
+ *  them as real newlines/quotes so the paste-ready prompt reads cleanly.
+ *  Single-backslash escapes first, then collapse doubled backslashes. */
+function unescapeFixText(s: string): string {
+  if (!/\\[nt"\\]/.test(s)) return s; // fast path: nothing escaped
+  return s
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, "\\");
+}
+
+/** Strip Kelp's internal evidence-gate + triage annotations from the
+ *  user-facing explanation. Keeps the substance, drops the plumbing. */
+function cleanExplanation(text: string): string {
+  return text
+    .replace(/\n*\[Kelp confirmed:[^\]]*\]/gi, "")
+    .replace(/\n*Kelp triage:[^\n]*/gi, "")
+    .trim();
+}
+
+/** Narrow the persisted triage jsonb into the view-layer FindingTriage. */
+function parseTriage(raw: unknown): FindingTriage | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const t = raw as Record<string, unknown>;
+  const action = t.action;
+  if (
+    action !== "keep" &&
+    action !== "downgrade_to_needs_review" &&
+    action !== "reclassify"
+  ) {
+    return undefined;
+  }
+  // A plain "keep" with no reclassification isn't worth surfacing.
+  if (action === "keep" && !t.originalVulnClass && !t.originalSeverity) return undefined;
+  return {
+    action,
+    reason: typeof t.reason === "string" ? t.reason : "",
+    ...(typeof t.originalVulnClass === "string"
+      ? { originalVulnClass: t.originalVulnClass as FindingTriage["originalVulnClass"] }
+      : {}),
+    ...(typeof t.originalSeverity === "string"
+      ? { originalSeverity: t.originalSeverity as FindingTriage["originalSeverity"] }
+      : {}),
   };
 }
 
@@ -121,7 +179,7 @@ export interface DashboardData {
   /** all projects the caller can see (for the top-bar switcher) */
   projectOptions: { id: string; name: string; repo: string | null }[];
   findings: Finding[];
-  summary: { score: number; critical: number; high: number; medium: number; resolved: number };
+  summary: { score: number | null; critical: number; high: number; medium: number; low: number; resolved: number };
   /** status of the most recent scan for the project ("queued" | "running" | … | null) */
   scanStatus: string | null;
   /** mode of the most recent scan — 'passive' | 'active_pentest' (#27). */
@@ -401,10 +459,20 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
     scanCostCents,
     scanIssues,
     summary: {
-      score: findings.length === 0 ? 100 : Math.max(5, 100 - penalty),
+      // A `null` score means "no successful scan yet, we don't know" — the
+      // dashboard renders it as `—`, not 100. A project with zero findings
+      // AFTER a successful scan is legitimately 100. Distinguishes "clean" from
+      // "unknown" — the latter was showing as 100/100 which was misleading.
+      score:
+        latestScan && (latestScan.status === "succeeded" || findings.length > 0)
+          ? findings.length === 0
+            ? 100
+            : Math.max(5, 100 - penalty)
+          : null,
       critical: activeBySeverity("critical"),
       high: activeBySeverity("high"),
       medium: activeBySeverity("medium"),
+      low: activeBySeverity("low"),
       resolved: findings.filter((f) => f.status === "resolved").length,
     },
     activePentest: {

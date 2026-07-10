@@ -9,6 +9,7 @@ import {
   listSupabaseProjects,
   createProjectAndEnqueueScan,
   detectAndStoreSupabaseBackend,
+  analyzeAndStoreBackendReport,
   getGithubInstallUrl,
   drainScans,
   type RepoOption,
@@ -116,8 +117,19 @@ export async function connectAndScanAction(input: {
   const inst = input.installationId;
   after(async () => {
     if (pid && repo && inst != null) {
-      await detectAndStoreSupabaseBackend({ orgId, projectId: pid, repoFullName: repo, installationId: inst })
-        .catch((e) => console.warn("backend auto-detect failed:", e instanceof Error ? e.message : e));
+      // Full hybrid analyzer: deterministic detection + LLM interpretation +
+      // anti-fabrication gate. Persists the whole BackendReport to
+      // projects.backend_report AND seeds the legacy fields (ref, anon key)
+      // when Supabase is detected. Falls back to deterministic-only on any
+      // failure — never blocks onboarding.
+      await analyzeAndStoreBackendReport({
+        orgId,
+        projectId: pid,
+        repoFullName: repo,
+        installationId: inst,
+      }).catch((e) =>
+        console.warn("backend analyzer failed:", e instanceof Error ? e.message : e),
+      );
     }
     await drainScans().catch((e) => console.error("scan processing failed:", e));
   });

@@ -9,7 +9,7 @@
 // (e.g. a scheduled MCP server) can reuse it.
 
 import type { DetectedFinding } from "../orchestrator.js";
-import type { Severity, VulnClass } from "../types.js";
+import type { FindingStatus, Severity, VulnClass } from "../types.js";
 
 /** Shared shape every specialist Report satisfies at minimum. */
 interface MinSpecialistReport {
@@ -20,6 +20,8 @@ interface MinSpecialistReport {
   /** endpoint or table — whichever the specialist reports on */
   endpoint?: string;
   table?: string;
+  /** Present when the triage layer (#29) touched this finding. */
+  triage?: { initialStatus?: FindingStatus | null };
   [k: string]: unknown;
 }
 
@@ -49,8 +51,14 @@ export function campaignFindingsToDetected(
           : typeof report.table === "string"
             ? report.table
             : null;
-      detected.push({
-        vulnClass: outcome.vulnClass,
+      // vulnClass on the finding wins over the outcome's class — the triage
+      // layer may have reclassified it away from the specialist's default.
+      const rawVulnClass =
+        typeof report.vulnClass === "string"
+          ? (report.vulnClass as VulnClass)
+          : outcome.vulnClass;
+      const df: DetectedFinding = {
+        vulnClass: rawVulnClass,
         severity: report.severity,
         fingerprint: report.fingerprint,
         title: report.title,
@@ -58,7 +66,11 @@ export function campaignFindingsToDetected(
         location,
         fixable: false,
         raw: report,
-      });
+      };
+      if (report.triage?.initialStatus) {
+        df.initialStatus = report.triage.initialStatus;
+      }
+      detected.push(df);
     }
   }
   return detected;

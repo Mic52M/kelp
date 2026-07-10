@@ -4,6 +4,7 @@ import { ProjectSwitcher } from "@/components/dashboard/ProjectSwitcher";
 import { ActivePentestButton } from "@/components/dashboard/ActivePentestButton";
 import { FindingCard } from "@/components/FindingCard";
 import { ScoreRing } from "@/components/ScoreRing";
+import { SeverityMeter } from "@/components/dashboard/SeverityMeter";
 import { ScanningView } from "@/components/ScanningView";
 import { AgentReportPanel } from "@/components/dashboard/AgentReportPanel";
 import { getServerSupabase } from "@/lib/supabase/server";
@@ -46,7 +47,12 @@ export default async function Dashboard({
             <span className="font-medium">No project yet</span>
           </div>
         )}
-        {project && <span className="text-xs text-fog-500">Last scan {project.lastScan}</span>}
+        {project && scanStatus !== null && (
+          <span className="text-xs text-fog-500">Last scan {project.lastScan}</span>
+        )}
+        {project && scanStatus === null && (
+          <span className="text-xs text-fog-500">No scan yet</span>
+        )}
         <div className="ml-auto flex items-center gap-3">
           {project ? (
             <>
@@ -117,21 +123,29 @@ export default async function Dashboard({
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-fog-300">
               {!project
                 ? "Connect a project to run your first scan."
-                : summary.critical > 0
-                  ? `${summary.critical} critical ${summary.critical === 1 ? "issue needs" : "issues need"} your attention right now.`
-                  : findings.length > 0
-                    ? "No critical issues — nice work. Review the items below."
-                    : "Nothing found in the last scan. You're clear."}
+                : scanStatus === null
+                  ? "No scan has been run yet — click Re-scan or Run active pen test to start."
+                  : summary.critical > 0
+                    ? `${summary.critical} critical ${summary.critical === 1 ? "issue needs" : "issues need"} your attention right now.`
+                    : findings.length > 0
+                      ? "No critical issues — nice work. Review the items below."
+                      : "Nothing found in the last scan. You're clear."}
             </p>
 
-            {/* Score + stats: one open surface, not four boxed cards */}
-            <div className="mt-10 flex flex-col items-start gap-10 sm:flex-row sm:items-center sm:gap-16">
+            {/* Score + severity distribution: one open surface, premium */}
+            <div className="mt-10 flex flex-col items-start gap-10 sm:flex-row sm:items-center sm:gap-14">
               <ScoreRing score={summary.score} />
-              <div className="grid w-full grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-4 sm:gap-x-14">
-                <Stat label="Critical" value={summary.critical} color="var(--color-crit)" />
-                <Stat label="High" value={summary.high} color="var(--color-high)" />
-                <Stat label="Medium" value={summary.medium} color="var(--color-med)" />
-                <Stat label="Resolved" value={summary.resolved} color="var(--color-ok)" />
+              <div className="w-full flex-1">
+                <SeverityMeter
+                  counts={{
+                    critical: summary.critical,
+                    high: summary.high,
+                    medium: summary.medium,
+                    low: summary.low ?? 0,
+                    resolved: summary.resolved,
+                  }}
+                  hasScan={scanStatus !== null}
+                />
               </div>
             </div>
 
@@ -174,8 +188,20 @@ export default async function Dashboard({
                   </div>
                 ))}
                 {active.length === 0 && project && (
-                  <div className="rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-14 text-center text-sm text-fog-400">
-                    No active findings on the last scan.
+                  <div className="rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-16 text-center">
+                    <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-aqua-500/10 text-aqua-300">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
+                        <path d="m4.5 10.5 3.5 3.5L15.5 6" />
+                      </svg>
+                    </div>
+                    <p className="mt-3.5 text-sm font-medium text-fog-200">
+                      {scanStatus === null ? "No scan run yet" : "No active findings"}
+                    </p>
+                    <p className="mt-1 text-[13px] text-fog-500">
+                      {scanStatus === null
+                        ? "Run a scan to see what Kelp finds."
+                        : "Kelp probed your project and everything held up."}
+                    </p>
                   </div>
                 )}
               </div>
@@ -213,13 +239,3 @@ export default async function Dashboard({
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div>
-      <div className="text-3xl font-semibold tabular-nums" style={{ color }}>
-        {value}
-      </div>
-      <div className="mt-1 text-xs uppercase tracking-wider text-fog-500">{label}</div>
-    </div>
-  );
-}
