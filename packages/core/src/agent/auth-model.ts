@@ -71,8 +71,24 @@ export interface AuthModelBrief {
 
 // ─── Static derivation ───────────────────────────────────────────────────────
 
-const SET_COOKIE_RE =
-  /(?:Set-Cookie['"\s:=]+["'`]|headers\.(?:set|append)\(\s*["'`]Set-Cookie["'`]|Response\([^)]*Set-Cookie|res\.cookie\s*\(|response\.cookies\.set\s*\()/i;
+// Match ONLY real header-write patterns, not bare mentions of the string
+// "Set-Cookie" (which appear in vendor lib comments / docs / node_modules-ish
+// files a vibe-coded repo can ship). A false positive here would flip the
+// primary auth mode to cookie_session and re-open CSRF findings on a
+// bearer-JWT app, so keep this tight.
+const SET_COOKIE_RE = new RegExp(
+  [
+    // res.cookie(...) / response.cookies.set(...) — Express / Next
+    /(?:^|[^a-zA-Z0-9_])(?:res|response)\s*\.\s*(?:cookie|cookies\s*\.\s*set)\s*\(/.source,
+    // headers.set/append("Set-Cookie", …) — Web fetch Response
+    /headers\s*\.\s*(?:set|append)\s*\(\s*["'`]Set-Cookie["'`]/i.source,
+    // Object-literal header map: "Set-Cookie": "…"
+    /["'`]Set-Cookie["'`]\s*:\s*["'`]/.source,
+    // Supabase SSR helper
+    /createServerClient\s*\(/.source,
+  ].join("|"),
+  "i",
+);
 
 /**
  * Detect whether the app EVER sets a session cookie. Supabase Auth itself

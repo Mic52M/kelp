@@ -268,6 +268,19 @@ function fingerprint(parts: string[]): string {
   return h.toString(16).padStart(8, "0");
 }
 
+/** Strip filler words + punctuation so cosmetic title variations ("BOLA on
+ *  orders" vs "cross-account read on orders" vs "Cross Account Read: Orders")
+ *  collapse to the same key. Prevents primary + reviewer follow-up from
+ *  double-filing the same underlying vuln. */
+function normalizeTitle(t: string): string {
+  return t
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\b(?:the|a|an|on|in|via|for|to|of|with|and|is|are|by|from|read|access|bug|issue|vulnerability|found|detected)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 class AutonomousExecutor implements SpecialistExecutor<AutonomousFinding> {
   readonly findings: AutonomousFinding[] = [];
   private readonly seen = new Set<string>();
@@ -365,7 +378,8 @@ class AutonomousExecutor implements SpecialistExecutor<AutonomousFinding> {
       }
     }
 
-    const fp = fingerprint([declaredClass, endpoint, title]);
+    const surface = str(i.surface) || "postgrest";
+    const fp = fingerprint([declaredClass, surface, endpoint, normalizeTitle(title)]);
     if (!this.seen.has(fp)) {
       this.seen.add(fp);
       this.findings.push({
@@ -375,7 +389,7 @@ class AutonomousExecutor implements SpecialistExecutor<AutonomousFinding> {
         title,
         evidence: `${description}\n\n[Kelp confirmed: ${confirmed.why}]`,
         endpoint,
-        surface: (str(i.surface) as AutonomousFinding["surface"]) || "postgrest",
+        surface: surface as AutonomousFinding["surface"],
         fix: str(i.fix),
       });
     }
