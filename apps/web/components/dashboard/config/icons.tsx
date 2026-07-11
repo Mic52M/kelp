@@ -11,9 +11,15 @@ const base = {
   strokeLinejoin: "round" as const,
 };
 
-export function CheckIcon({ className = "h-4 w-4" }: { className?: string }) {
+export function CheckIcon({
+  className = "h-4 w-4",
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   return (
-    <svg {...base} className={className} aria-hidden>
+    <svg {...base} className={className} style={style} aria-hidden>
       <path d="m4.5 10.5 3.5 3.5L15.5 6" />
     </svg>
   );

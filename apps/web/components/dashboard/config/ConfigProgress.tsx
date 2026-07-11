@@ -1,5 +1,3 @@
-import { CheckIcon, DotIcon } from "./icons";
-
 export interface ConfigStep {
   label: string;
   done: boolean;
@@ -7,10 +5,9 @@ export interface ConfigStep {
 }
 
 /**
- * Progress banner at the top of Configuration. Shows "X of N ready" plus a
- * horizontal step-list so the user always knows where they are. Anchor links
- * jump to the corresponding card. Non-sticky by design — pages that scroll
- * short benefit from anchoring the progress to the hero, not the viewport.
+ * Progress meter at the top of Configuration. "X of N ready" plus per-step
+ * anchors. Editorial anchor: hairline shell, mono eyebrow, Fraunces count,
+ * a single-pixel signal fill on the meter.
  */
 export function ConfigProgress({ steps }: { steps: readonly ConfigStep[] }) {
   const done = steps.filter((s) => s.done).length;
@@ -19,60 +16,82 @@ export function ConfigProgress({ steps }: { steps: readonly ConfigStep[] }) {
   const allDone = done === total;
 
   return (
-    <div className="rounded-2xl border border-line/70 bg-ink-900/40 px-6 py-5">
-      <div className="flex items-baseline justify-between gap-4">
-        <div>
-          <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-            Setup progress
+    <div className="border border-[color:var(--color-hair)] px-6 py-5">
+      <div className="flex items-baseline justify-between gap-6">
+        <div className="min-w-0">
+          <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+            § Setup progress
           </div>
-          <div className="mt-1 text-lg font-semibold tracking-tight text-fog-100">
+          <div className="mt-2 flex items-baseline gap-3 font-display text-[26px] leading-[1.1] text-[color:var(--color-paper-50)]">
             {allDone ? (
-              <span className="text-aqua-300">Ready to scan</span>
+              <span style={{ color: "var(--color-signal)" }}>Ready to scan</span>
             ) : (
               <>
-                <span className="text-aqua-300">{done}</span>
-                <span className="text-fog-500"> of </span>
-                <span>{total}</span>
-                <span className="text-fog-400"> steps done</span>
+                <span className="tabular">{done}</span>
+                <span className="font-mono text-[12px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+                  of
+                </span>
+                <span className="tabular">{total}</span>
+                <span className="font-mono text-[12px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)]">
+                  steps done
+                </span>
               </>
             )}
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-semibold tabular-nums text-fog-100">{percent}%</div>
+        <div className="shrink-0 text-right">
+          <div className="font-display tabular text-[30px] leading-none text-[color:var(--color-paper-50)]">
+            {percent}%
+          </div>
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-ink-800/70">
+      <div className="mt-5 h-px w-full bg-[color:var(--color-ink-800)]">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-aqua-500 to-aqua-300 transition-all duration-500"
-          style={{ width: `${percent}%` }}
+          className="h-px"
+          style={{
+            width: `${percent}%`,
+            background: "var(--color-signal)",
+            transition: "width 600ms cubic-bezier(0.2,0,0,1)",
+          }}
         />
       </div>
 
-      {/* Step chips */}
-      <ol className="mt-4 grid gap-2 sm:grid-cols-3">
+      <ol className="mt-6 grid gap-3 sm:grid-cols-3">
         {steps.map((s, i) => (
           <li key={s.label}>
             <a
               href={s.anchor}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors ${
-                s.done
-                  ? "border-aqua-600/25 bg-aqua-500/[0.05] text-fog-200 hover:bg-aqua-500/[0.09]"
-                  : "border-line/70 bg-ink-900/30 text-fog-300 hover:border-line hover:text-fog-100"
-              }`}
+              className="flex items-center gap-3 border px-3 py-2.5 transition-colors"
+              style={{
+                borderColor: s.done
+                  ? "var(--color-signal-dim)"
+                  : "var(--color-hair)",
+              }}
             >
               <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-                  s.done ? "bg-aqua-500/20 text-aqua-300" : "border border-line/80 text-fog-500"
-                }`}
-              >
-                {s.done ? <CheckIcon className="h-3 w-3" /> : <DotIcon className="h-1.5 w-1.5" />}
-              </span>
-              <span className="flex-1 truncate">
-                <span className="text-[10.5px] font-medium text-fog-500">Step {i + 1}</span>
-                <span className="ml-1.5">{s.label}</span>
+                className="inline-block"
+                style={{
+                  width: 2,
+                  height: 12,
+                  background: s.done
+                    ? "var(--color-signal)"
+                    : "var(--color-paper-600)",
+                }}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate">
+                <span className="block font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+                  Step {String(i + 1).padStart(2, "0")}
+                </span>
+                <span
+                  className="mt-1 block text-[13px]"
+                  style={{
+                    color: s.done ? "var(--color-paper-50)" : "var(--color-paper-300)",
+                  }}
+                >
+                  {s.label}
+                </span>
               </span>
             </a>
           </li>

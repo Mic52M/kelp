@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { configureActivePentestAction } from "@/app/dashboard/settings/actions";
+import { buttonClasses } from "@/components/Button";
 import { CardShell } from "./CardShell";
 import { UsersIcon, ChevronDownIcon, CopyIcon, CheckIcon } from "./icons";
 
@@ -13,21 +14,6 @@ export interface TestAccountsCardProps {
   testAccountBEmail: string | null;
 }
 
-/**
- * Step 2 — Test accounts. The user-facing HEART of the configuration: this
- * is what most users spend time on and what most users are unsure about. Two
- * design principles here:
- *
- * 1. Prominent guidance. "Why does Kelp need this?" is inline, plain-English,
- *    always visible — not buried in a `<details>`.
- * 2. Symmetric A/B input. Identical two-column layout with matching states
- *    ("Stored ✓" badges, placeholder that shows "•••••• (stored — leave
- *    blank to keep)").
- *
- * Two accounts are required because Kelp probes cross-account access
- * (accountA tries to read accountB's data). One account cannot expose that
- * class of bugs.
- */
 export function TestAccountsCard(props: TestAccountsCardProps) {
   const [state, action, pending] = useActionState<
     { ok: boolean; message: string } | null,
@@ -52,12 +38,12 @@ export function TestAccountsCard(props: TestAccountsCardProps) {
       status={status}
       statusLabel={done ? "Ready" : partial ? "One left" : "Needed"}
     >
-      <form action={action} className="space-y-5">
+      <form action={action} className="space-y-6">
         <input type="hidden" name="projectId" value={props.projectId} />
 
         <WhyExplainer done={done} />
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-6 sm:grid-cols-2">
           <AccountFieldset
             letter="A"
             stored={props.hasAccountA}
@@ -76,14 +62,14 @@ export function TestAccountsCard(props: TestAccountsCardProps) {
 
         <HowToGuide />
 
-        <div className="flex items-center justify-between pt-1">
-          <p className="text-[12px] text-fog-500">
-            Passwords are encrypted at rest. Leave a password blank to keep the stored one.
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[color:var(--color-hair)] pt-5">
+          <p className="max-w-md font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+            Passwords encrypted at rest · leave a password blank to keep the stored one
           </p>
           <button
             type="submit"
             disabled={pending}
-            className="shrink-0 whitespace-nowrap rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-4 py-2 text-sm font-medium text-ink-950 shadow-sm shadow-aqua-500/10 transition-all disabled:opacity-40"
+            className={buttonClasses("primary", "md", "cta-lift")}
           >
             {pending ? "Saving…" : "Save test accounts"}
           </button>
@@ -91,11 +77,11 @@ export function TestAccountsCard(props: TestAccountsCardProps) {
 
         {state && (
           <p
-            className={`rounded-lg border px-3 py-2 text-[12.5px] ${
-              state.ok
-                ? "border-aqua-600/30 bg-aqua-500/[0.06] text-aqua-300"
-                : "border-crit/30 bg-crit/[0.06] text-crit"
-            }`}
+            className="border-l px-4 py-2.5 font-mono text-[12px] leading-relaxed"
+            style={{
+              borderColor: state.ok ? "var(--color-signal)" : "var(--color-sev-crit)",
+              color: state.ok ? "var(--color-signal)" : "var(--color-sev-crit)",
+            }}
           >
             {state.message}
           </p>
@@ -105,31 +91,33 @@ export function TestAccountsCard(props: TestAccountsCardProps) {
   );
 }
 
-/** Concise "why we need this" block — always visible, not hidden in a details. */
 function WhyExplainer({ done }: { done: boolean }) {
   if (done) return null;
   return (
-    <div className="rounded-xl border border-line/60 bg-ink-950/40 p-4">
-      <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fog-500">
-        Why we need two
+    <div className="border-l border-[color:var(--color-hair-strong)] py-1 pl-5">
+      <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+        § Why we need two
       </div>
-      <ul className="mt-2 space-y-1.5 text-[13px] leading-relaxed text-fog-300">
-        <li className="flex gap-2.5">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-fog-500" />
+      <ul className="mt-3 space-y-2 text-[13px] leading-[1.7] text-[color:var(--color-paper-300)]">
+        <li className="flex gap-3">
+          <span className="mt-[10px] inline-block h-px w-3 shrink-0 bg-[color:var(--color-signal-dim)]" />
           <span>
-            Kelp signs in as <b>Account A</b> and tries to reach <b>Account B</b>'s data —
-            orders, profile, private tables.
+            Kelp signs in as{" "}
+            <span className="text-[color:var(--color-paper-50)]">Account A</span> and tries to reach{" "}
+            <span className="text-[color:var(--color-paper-50)]">Account B</span>'s data — orders,
+            profile, private tables.
           </span>
         </li>
-        <li className="flex gap-2.5">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-fog-500" />
+        <li className="flex gap-3">
+          <span className="mt-[10px] inline-block h-px w-3 shrink-0 bg-[color:var(--color-signal-dim)]" />
           <span>If anything leaks across, Kelp flags it as a broken-access-control bug.</span>
         </li>
-        <li className="flex gap-2.5">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-fog-500" />
+        <li className="flex gap-3">
+          <span className="mt-[10px] inline-block h-px w-3 shrink-0 bg-[color:var(--color-signal-dim)]" />
           <span>
-            Accounts stay untouched — Kelp only <span className="text-fog-100">reads</span>,
-            never writes to a real account's records.
+            Accounts stay untouched — Kelp only{" "}
+            <span className="text-[color:var(--color-paper-50)]">reads</span>, never writes to a real
+            account's records.
           </span>
         </li>
       </ul>
@@ -137,7 +125,6 @@ function WhyExplainer({ done }: { done: boolean }) {
   );
 }
 
-/** One column for A or B. Matches the visual language of the whole form. */
 function AccountFieldset({
   letter,
   stored,
@@ -153,33 +140,42 @@ function AccountFieldset({
 }) {
   return (
     <fieldset
-      className={`rounded-xl border p-4 transition-colors ${
-        stored ? "border-aqua-600/25 bg-aqua-500/[0.03]" : "border-line/60 bg-ink-950/40"
-      }`}
+      className="border p-5 transition-colors"
+      style={{
+        borderColor: stored ? "var(--color-signal-dim)" : "var(--color-hair)",
+      }}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
           <span
-            className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold ${
-              stored ? "bg-aqua-500/20 text-aqua-300" : "bg-ink-800 text-fog-400"
-            }`}
+            className="flex h-6 w-6 items-center justify-center font-mono text-[11px]"
+            style={{
+              border: "1px solid",
+              borderColor: stored ? "var(--color-signal)" : "var(--color-hair-strong)",
+              color: stored ? "var(--color-signal)" : "var(--color-paper-400)",
+            }}
           >
             {letter}
           </span>
-          <span className="text-[12.5px] font-medium text-fog-200">Account {letter}</span>
+          <span className="font-display text-[16px] text-[color:var(--color-paper-50)]">
+            Account {letter}
+          </span>
         </div>
         {stored && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-aqua-500/12 px-2 py-0.5 text-[10.5px] font-medium text-aqua-300">
+          <span
+            className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em]"
+            style={{ color: "var(--color-signal)" }}
+          >
             <CheckIcon className="h-3 w-3" />
             Stored
           </span>
         )}
       </div>
 
-      <div className="space-y-2.5">
+      <div className="space-y-4">
         <div>
           <label
-            className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-fog-500"
+            className="mb-2 block font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]"
             htmlFor={`${emailName}-input`}
           >
             Email
@@ -190,12 +186,12 @@ function AccountFieldset({
             type="email"
             placeholder={letter === "A" ? "alice@yourapp.dev" : "bob@yourapp.dev"}
             defaultValue={storedEmail ?? ""}
-            className="w-full rounded-lg border border-line bg-ink-950/60 px-3 py-2 text-sm text-fog-100 outline-none transition-colors placeholder:text-fog-600 focus:border-aqua-600/60"
+            className="w-full border-b border-[color:var(--color-hair)] bg-transparent px-0 py-2 font-mono text-[13px] text-[color:var(--color-paper-50)] outline-none transition-colors placeholder:text-[color:var(--color-paper-500)] focus:border-[color:var(--color-signal)]"
           />
         </div>
         <div>
           <label
-            className="mb-1 block text-[11px] font-medium uppercase tracking-wider text-fog-500"
+            className="mb-2 block font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]"
             htmlFor={`${passwordName}-input`}
           >
             Password
@@ -205,7 +201,7 @@ function AccountFieldset({
             name={passwordName}
             type="password"
             placeholder={stored ? "•••••• (leave blank to keep)" : "at least 8 characters"}
-            className="w-full rounded-lg border border-line bg-ink-950/60 px-3 py-2 text-sm text-fog-100 outline-none transition-colors placeholder:text-fog-600 focus:border-aqua-600/60"
+            className="w-full border-b border-[color:var(--color-hair)] bg-transparent px-0 py-2 font-mono text-[13px] text-[color:var(--color-paper-50)] outline-none transition-colors placeholder:text-[color:var(--color-paper-500)] focus:border-[color:var(--color-signal)]"
           />
         </div>
       </div>
@@ -213,64 +209,59 @@ function AccountFieldset({
   );
 }
 
-/**
- * How-to guide — collapsed by default so it doesn't wall of text the user,
- * but PROMINENT (styled button, clear label) so nobody misses it.
- */
 function HowToGuide() {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-xl border border-line/60 bg-ink-900/30">
+    <div className="border border-[color:var(--color-hair)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[color:var(--color-ink-850)]"
       >
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-fog-500/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-fog-400">
-            How to
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+            How-to
           </span>
-          <span className="text-[13px] font-medium text-fog-100">
+          <span className="text-[13px] text-[color:var(--color-paper-100)]">
             How do I create two test accounts?
           </span>
         </div>
         <ChevronDownIcon
-          className={`h-4 w-4 text-fog-400 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 text-[color:var(--color-paper-400)] transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && (
-        <div className="space-y-4 border-t border-line/60 px-4 pb-4 pt-4 text-[13px] leading-relaxed text-fog-300">
+        <div className="space-y-6 border-t border-[color:var(--color-hair)] px-5 pb-5 pt-5 text-[13px] leading-[1.7] text-[color:var(--color-paper-300)]">
           <div>
-            <div className="mb-1.5 text-[10.5px] font-medium uppercase tracking-[0.14em] text-fog-500">
-              Fastest — go through your own signup flow
+            <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+              § Fastest · go through your own signup flow
             </div>
-            <ol className="space-y-1.5 pl-4">
+            <ol className="mt-3 space-y-2 pl-4">
               <li className="list-decimal">
-                Open your deployed app (or dev site) and sign up as{" "}
-                <code className="rounded bg-ink-800/80 px-1 font-mono text-[11.5px] text-fog-200">
+                Open your deployed app and sign up as{" "}
+                <code className="bg-[color:var(--color-ink-800)] px-1 font-mono text-[11.5px] text-[color:var(--color-paper-100)]">
                   alice@yourapp.dev
                 </code>{" "}
                 — anything works, no need to be a real inbox.
               </li>
               <li className="list-decimal">
                 Sign up again as{" "}
-                <code className="rounded bg-ink-800/80 px-1 font-mono text-[11.5px] text-fog-200">
+                <code className="bg-[color:var(--color-ink-800)] px-1 font-mono text-[11.5px] text-[color:var(--color-paper-100)]">
                   bob@yourapp.dev
                 </code>{" "}
                 (an incognito window helps).
               </li>
               <li className="list-decimal">
-                Give each user something to own — create a post, place an order, whatever
-                your app does. Kelp probes access to real data, so accounts with data
-                surface more bugs.
+                Give each user something to own — create a post, place an order, whatever your app
+                does. Kelp probes access to real data, so accounts with data surface more bugs.
               </li>
               <li className="list-decimal">Paste both credentials above.</li>
             </ol>
           </div>
 
-          <div className="rounded-lg border border-line/50 bg-ink-950/40 p-3">
-            <div className="mb-1.5 flex items-center justify-between">
-              <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fog-500">
+          <div className="border border-[color:var(--color-hair)]">
+            <div className="flex items-center justify-between border-b border-[color:var(--color-hair)] px-4 py-2.5">
+              <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-400)]">
                 Or ask your AI coding tool
               </div>
               <CopyPromptButton
@@ -285,16 +276,18 @@ function HowToGuide() {
                 }
               />
             </div>
-            <p className="text-[12.5px] text-fog-400">
-              Paste the prompt into Lovable, Bolt, Cursor, or v0. Your AI tool will handle
-              the seed script for you.
+            <p className="px-4 py-3 text-[12.5px] text-[color:var(--color-paper-400)]">
+              Paste the prompt into Lovable, Bolt, Cursor, or v0. Your AI tool will handle the seed
+              script for you.
             </p>
           </div>
 
-          <div className="rounded-lg border-l-2 border-line pl-3">
-            <p className="text-[12px] text-fog-500">
-              <b className="text-fog-300">Do not paste real user credentials.</b> Kelp
-              probes read paths and could touch data owned by these accounts. Use throwaway
+          <div className="border-l border-[color:var(--color-sev-med)] pl-4">
+            <p className="text-[12px] text-[color:var(--color-paper-400)]">
+              <span className="text-[color:var(--color-paper-100)]">
+                Do not paste real user credentials.
+              </span>{" "}
+              Kelp probes read paths and could touch data owned by these accounts. Use throwaway
               accounts you create just for testing.
             </p>
           </div>
@@ -304,7 +297,6 @@ function HowToGuide() {
   );
 }
 
-/** Small copy-to-clipboard button used in the how-to guide. Feedback state. */
 function CopyPromptButton({ prompt }: { prompt: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -316,20 +308,23 @@ function CopyPromptButton({ prompt }: { prompt: string }) {
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         } catch {
-          /* clipboard blocked — silent no-op */
+          /* clipboard blocked */
         }
       }}
-      className="inline-flex items-center gap-1.5 rounded-md border border-line/60 px-2.5 py-1 text-[11px] font-medium text-fog-300 transition-colors hover:border-line hover:text-fog-100"
+      className="inline-flex items-center gap-1.5 border border-[color:var(--color-hair-strong)] px-2.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-100)] transition-colors hover:border-[color:var(--color-paper-400)]"
     >
       {copied ? (
         <>
-          <CheckIcon className="h-3 w-3 text-aqua-300" />
+          <CheckIcon
+            className="h-3 w-3"
+            style={{ color: "var(--color-signal)" } as React.CSSProperties}
+          />
           Copied
         </>
       ) : (
         <>
-          <CopyIcon className="h-3.5 w-3.5" />
-          Copy prompt
+          <CopyIcon className="h-3 w-3" />
+          Copy
         </>
       )}
     </button>

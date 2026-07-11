@@ -1,4 +1,4 @@
-import { PageHeader } from "@/components/dashboard/PageHeader";
+import { PageHero } from "@/components/dashboard/PageHeader";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { loadOrgPlan, stripeConfigured } from "@kelp/worker";
@@ -10,14 +10,14 @@ const TIERS = [
   {
     tier: "free" as const,
     name: "Free",
-    price: "€0",
+    price: "0",
     tagline: "One full scan, report only.",
     features: ["1 project", "All checks", "Findings report"],
   },
   {
     tier: "starter" as const,
     name: "Starter",
-    price: "€29",
+    price: "29",
     tagline: "Continuous cover for your app.",
     features: ["5 projects", "Continuous scanning", "Auto-fix (RLS & secrets)", "Re-scan on push"],
     highlight: true,
@@ -25,7 +25,7 @@ const TIERS = [
   {
     tier: "agency" as const,
     name: "Agency",
-    price: "€89",
+    price: "89",
     tagline: "For studios shipping many apps.",
     features: ["25 projects", "Everything in Starter", "Priority review", "Email alerts"],
   },
@@ -37,9 +37,10 @@ export default async function BillingPage({
   searchParams: Promise<BillingSearchParams>;
 }) {
   const supabase = await getServerSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // Look up the current plan so the "Current" badge and disabled state are real.
   let currentPlan: "free" | "starter" | "agency" = "free";
   if (user?.email) {
     const { orgId } = await ensureTenant({ id: user.id, email: user.email });
@@ -49,70 +50,90 @@ export default async function BillingPage({
   const sp = await searchParams;
 
   return (
-    <>
-      <PageHeader title="Billing" email={user?.email} />
-      <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-8">
-        <div className="mb-6">
-          <h2 className="text-lg font-medium">Choose your plan</h2>
-          <p className="mt-1 text-sm text-fog-400">
-            You're on the{" "}
-            <span className="text-fog-200">{TIERS.find((t) => t.tier === currentPlan)?.name}</span>{" "}
-            plan.
-            {currentPlan === "free" && " Upgrade for continuous scanning and one-click fixes."}
-          </p>
-        </div>
+    <div className="px-8 pb-24 pt-14">
+      <PageHero
+        label={`§ Billing · ${TIERS.find((t) => t.tier === currentPlan)?.name}`}
+        title="Choose your plan."
+        description={
+          currentPlan === "free"
+            ? "You're on the Free plan. Upgrade for continuous scanning and one-click fixes."
+            : "You're on a paid plan. Manage seats and cadence below."
+        }
+      />
 
+      <div className="mt-10 space-y-3">
         {sp.checkout === "success" && (
-          <div className="mb-6 rounded-xl border border-aqua-600/40 bg-aqua-500/[0.06] px-4 py-3 text-sm text-aqua-300">
+          <Notice tone="signal">
             Payment received. Your plan will update shortly — refresh if it doesn't appear right away.
-          </div>
+          </Notice>
         )}
         {sp.checkout === "cancelled" && (
-          <div className="mb-6 rounded-xl border border-line/70 bg-ink-900/40 px-4 py-3 text-sm text-fog-300">
-            Checkout cancelled — no charge was made.
-          </div>
+          <Notice tone="muted">Checkout cancelled — no charge was made.</Notice>
         )}
         {!stripeReady && (
-          <div className="mb-6 rounded-xl border border-line/70 bg-ink-900/40 px-4 py-3 text-sm text-fog-400">
+          <Notice tone="muted">
             Stripe isn't configured on this deployment yet. Upgrade buttons are inactive.
-          </div>
+          </Notice>
         )}
+      </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {TIERS.map((t) => {
-            const current = currentPlan === t.tier;
-            return (
-              <div
-                key={t.tier}
-                className={`relative rounded-2xl p-6 ${
-                  t.highlight
-                    ? "border border-aqua-600/50 bg-gradient-to-b from-aqua-500/[0.08] to-transparent"
-                    : "glass"
-                }`}
-              >
-                {current && (
-                  <div className="absolute -top-3 left-6 rounded-full border border-line bg-ink-800 px-2.5 py-0.5 text-xs text-fog-300">
-                    Current
-                  </div>
-                )}
-                <div className="text-sm text-fog-300">{t.name}</div>
-                <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-4xl font-semibold">{t.price}</span>
-                  <span className="text-sm text-fog-400">/mo</span>
+      <div className="mt-14 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
+        {TIERS.map((t) => {
+          const current = currentPlan === t.tier;
+          return (
+            <div
+              key={t.tier}
+              className="grid grid-cols-1 gap-8 py-10 lg:grid-cols-12 lg:items-start lg:gap-10"
+            >
+              <div className="lg:col-span-3">
+                <div className="flex items-center gap-3">
+                  <span className="font-display text-[28px] leading-none text-[color:var(--color-paper-50)]">
+                    {t.name}
+                  </span>
+                  {t.highlight && (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-signal)]">
+                      Recommended
+                    </span>
+                  )}
+                  {current && (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-400)]">
+                      Current
+                    </span>
+                  )}
                 </div>
-                <div className="mt-1 text-sm text-fog-400">{t.tagline}</div>
-                <ul className="mt-5 space-y-2.5 text-sm">
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="font-display tabular text-[44px] leading-none text-[color:var(--color-paper-50)]">
+                    €{t.price}
+                  </span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+                    /mo
+                  </span>
+                </div>
+              </div>
+              <div className="lg:col-span-6">
+                <p className="text-[14.5px] leading-[1.6] text-[color:var(--color-paper-300)]">
+                  {t.tagline}
+                </p>
+                <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
                   {t.features.map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-fog-300">
-                      <span className="text-aqua-400">✓</span>
-                      {f}
+                    <li
+                      key={f}
+                      className="flex items-start gap-2 font-mono text-[12.5px] text-[color:var(--color-paper-300)]"
+                    >
+                      <span
+                        aria-hidden
+                        className="mt-[7px] inline-block h-px w-3 bg-[color:var(--color-signal-dim)]"
+                      />
+                      <span>{f}</span>
                     </li>
                   ))}
                 </ul>
+              </div>
+              <div className="lg:col-span-3">
                 {t.tier === "free" ? (
                   <button
                     disabled
-                    className="mt-6 w-full rounded-lg border border-line bg-ink-800 px-4 py-2.5 text-center text-sm font-medium text-fog-50 opacity-40"
+                    className="mt-1 w-full border border-[color:var(--color-hair)] px-4 py-2.5 text-center font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]"
                   >
                     Free forever
                   </button>
@@ -125,14 +146,33 @@ export default async function BillingPage({
                   />
                 )}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
+      </div>
 
-        <p className="mt-6 text-center text-xs text-fog-500">
-          Secure checkout via Stripe.
-        </p>
-      </main>
-    </>
+      <p className="mt-10 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+        Secure checkout via Stripe
+      </p>
+    </div>
+  );
+}
+
+function Notice({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: "signal" | "muted";
+}) {
+  const color =
+    tone === "signal" ? "var(--color-signal)" : "var(--color-paper-300)";
+  return (
+    <div
+      className="border-l px-4 py-3 text-[13.5px] leading-relaxed"
+      style={{ borderColor: color, color }}
+    >
+      {children}
+    </div>
   );
 }

@@ -7,57 +7,49 @@ import { ChevronDownIcon } from "./icons";
 
 export interface AdvancedGroupProps {
   projectId: string;
-  /** True when the project has a Supabase ref set (auto-detected or manual).
-   *  Advanced credentials only apply once we know which Supabase project the
-   *  role/token belongs to. */
   supabaseLinked: boolean;
   hasReadonly: boolean;
   hasManagement: boolean;
 }
 
-/**
- * Optional deeper-integration credentials. Collapsed by default because
- * 90% of users (Lovable Cloud / Bolt / v0 auto-detect) never need to touch
- * these. Uses the same visual vocabulary as the required cards above.
- */
 export function AdvancedGroup(props: AdvancedGroupProps) {
   const [open, setOpen] = useState(false);
   const anyStored = props.hasReadonly || props.hasManagement;
 
   return (
-    <div className="rounded-2xl border border-line/60 bg-ink-900/20">
+    <div className="border border-[color:var(--color-hair)]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left"
+        className="flex w-full items-start justify-between gap-4 px-6 py-5 text-left transition-colors hover:bg-[color:var(--color-ink-850)]"
         aria-expanded={open}
       >
-        <div>
-          <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-            Advanced
+        <div className="min-w-0">
+          <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+            § Advanced · optional
           </div>
-          <div className="mt-0.5 flex items-center gap-2">
-            <span className="text-[14.5px] font-semibold text-fog-100">
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <span className="font-display text-[20px] leading-[1.15] text-[color:var(--color-paper-50)]">
               Deeper database access
             </span>
             {anyStored && (
-              <span className="rounded-full bg-fog-500/12 px-2 py-0.5 text-[10.5px] font-medium text-fog-300">
+              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-400)]">
                 Configured
               </span>
             )}
           </div>
-          <p className="mt-1 max-w-xl text-[12.5px] leading-relaxed text-fog-400">
-            Optional. Give Kelp a live database view for a deeper scan. You don't need this
-            on Lovable Cloud or if Kelp already auto-detected your backend above.
+          <p className="mt-3 max-w-xl text-[13px] leading-[1.65] text-[color:var(--color-paper-400)]">
+            Optional. Give Kelp a live database view for a deeper scan. You don't need this on
+            Lovable Cloud or if Kelp already auto-detected your backend above.
           </p>
         </div>
         <ChevronDownIcon
-          className={`h-4 w-4 shrink-0 text-fog-400 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`mt-2 h-4 w-4 shrink-0 text-[color:var(--color-paper-400)] transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
 
       {open && (
-        <div className="space-y-8 border-t border-line/60 px-6 py-6">
+        <div className="space-y-10 border-t border-[color:var(--color-hair)] px-6 py-8">
           {props.supabaseLinked ? (
             <>
               <SubSection
@@ -69,7 +61,7 @@ export function AdvancedGroup(props: AdvancedGroupProps) {
                   hasReadonly={props.hasReadonly}
                 />
               </SubSection>
-              <div className="h-px w-full bg-line/40" />
+              <div className="h-px w-full bg-[color:var(--color-hair)]" />
               <SubSection
                 label="Supabase Management token"
                 description="Legacy fallback. Account-level PAT — grants broader access than the read-only role. Prefer the role above."
@@ -81,9 +73,8 @@ export function AdvancedGroup(props: AdvancedGroupProps) {
               </SubSection>
             </>
           ) : (
-            <p className="text-[13px] text-fog-500">
-              Link a Supabase project first (see Step 1 above) to enable deeper database
-              credentials.
+            <p className="font-mono text-[12px] text-[color:var(--color-paper-500)]">
+              Link a Supabase project first (see Step 01 above) to enable deeper database credentials.
             </p>
           )}
         </div>
@@ -103,10 +94,10 @@ function SubSection({
 }) {
   return (
     <div>
-      <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-        {label}
+      <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+        § {label}
       </div>
-      <p className="mb-4 mt-1 max-w-xl text-[12.5px] leading-relaxed text-fog-400">
+      <p className="mb-5 mt-3 max-w-xl text-[13px] leading-[1.65] text-[color:var(--color-paper-400)]">
         {description}
       </p>
       {children}

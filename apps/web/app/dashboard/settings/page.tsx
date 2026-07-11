@@ -1,10 +1,7 @@
-// Post-#7 refactor: Settings is now account-only. Everything project-scoped
-// (Supabase read-only credentials, Management API token, active-testing
-// consent, deployed app URL + test accounts) moved to /dashboard/configuration
-// so the tester finds "the pentest inputs" in a page that actually says so.
+// Settings — account-only. Everything project-scoped lives under Configuration.
 
 import Link from "next/link";
-import { PageHeader, PageHero } from "@/components/dashboard/PageHeader";
+import { PageHero } from "@/components/dashboard/PageHeader";
 import { getServerSupabase } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {
@@ -14,38 +11,41 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
 
   return (
-    <>
-      <PageHeader title="Settings" email={user?.email} />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-8 py-14">
-        <PageHero
-          label="Workspace"
-          title="Settings"
-          description="Account-level details. Looking for pentest inputs (Supabase, consent, app URL, test accounts)? Those live under Configuration."
-        />
+    <div className="px-8 pb-24 pt-14">
+      <PageHero
+        label="§ Settings · workspace"
+        title="Settings."
+        description="Account-level details. Looking for pentest inputs (Supabase, consent, app URL, test accounts)? Those live under Configuration."
+      />
 
-        <div className="mt-12 space-y-8">
-          <Section label="Account" title="Sign-in details">
-            <div className="flex items-center justify-between rounded-xl border border-line/70 bg-ink-900/40 px-5 py-3.5">
-              <span className="text-sm text-fog-400">Email</span>
-              <span className="text-sm text-fog-100">{user?.email ?? "—"}</span>
+      <div className="mt-14 space-y-12">
+        <Section label="§ Account" title="Sign-in details">
+          <dl className="border-y border-[color:var(--color-hair)] divide-y divide-[color:var(--color-hair)]">
+            <div className="flex items-center justify-between py-4">
+              <dt className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+                Email
+              </dt>
+              <dd className="font-mono text-[13px] text-[color:var(--color-paper-50)]">
+                {user?.email ?? "—"}
+              </dd>
             </div>
-          </Section>
+          </dl>
+        </Section>
 
-          <Section
-            label="Per project"
-            title="Configure a project"
-            description="Data sources, consent, app URL, and test accounts are per-project — configure them from the Configuration route."
+        <Section
+          label="§ Per project"
+          title="Configure a project"
+          description="Data sources, consent, app URL, and test accounts are per-project — configure them from the Configuration route."
+        >
+          <Link
+            href="/dashboard/configuration"
+            className="inline-flex items-center gap-2 border border-[color:var(--color-hair-strong)] px-4 py-2.5 text-[13px] text-[color:var(--color-paper-50)] transition-colors hover:border-[color:var(--color-paper-300)]"
           >
-            <Link
-              href="/dashboard/configuration"
-              className="inline-flex items-center gap-2 rounded-lg border border-line/70 bg-ink-900/40 px-4 py-2.5 text-sm text-fog-100 transition-colors hover:border-aqua-600/50"
-            >
-              Open Configuration <span aria-hidden>→</span>
-            </Link>
-          </Section>
-        </div>
-      </main>
-    </>
+            Open Configuration <span aria-hidden>→</span>
+          </Link>
+        </Section>
+      </div>
+    </div>
   );
 }
 
@@ -62,14 +62,18 @@ function Section({
 }) {
   return (
     <section>
-      <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
         {label}
       </div>
-      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+      <h2 className="font-display mt-3 text-[26px] leading-[1.15] text-[color:var(--color-paper-50)]">
+        {title}
+      </h2>
       {description && (
-        <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-fog-400">{description}</p>
+        <p className="mt-3 max-w-xl text-[13.5px] leading-[1.65] text-[color:var(--color-paper-400)]">
+          {description}
+        </p>
       )}
-      <div className="mt-5">{children}</div>
+      <div className="mt-6">{children}</div>
     </section>
   );
 }

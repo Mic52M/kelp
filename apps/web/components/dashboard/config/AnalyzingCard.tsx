@@ -12,12 +12,6 @@ const STEPS = [
   "Preparing your setup",
 ];
 
-/**
- * Loading card shown when a project has no BackendReport yet. Kicks off
- * the analyzer in the background via a server action and cycles through
- * status steps. When the action returns, refreshes the page so the parent
- * server component re-renders with the fresh brief.
- */
 export function AnalyzingCard({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [stepIndex, setStepIndex] = useState(0);
@@ -49,19 +43,28 @@ export function AnalyzingCard({ projectId }: { projectId: string }) {
   }, [projectId, router]);
 
   return (
-    <section className="rounded-2xl border border-aqua-600/25 bg-gradient-to-br from-aqua-500/[0.06] to-aqua-500/[0.02] p-6">
-      <div className="flex items-start gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-aqua-500/15 text-aqua-300">
+    <section
+      className="border p-6"
+      style={{ borderColor: "var(--color-signal-dim)" }}
+    >
+      <div className="flex items-start gap-5">
+        <div
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border"
+          style={{ borderColor: "var(--color-signal-dim)", color: "var(--color-signal)" }}
+        >
           <DatabaseIcon />
         </div>
-        <div className="flex-1">
-          <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-aqua-300">
-            Analyzing your project
+        <div className="min-w-0 flex-1">
+          <div
+            className="font-mono text-[10.5px] uppercase tracking-[0.16em]"
+            style={{ color: "var(--color-signal)" }}
+          >
+            § Analyzing your project
           </div>
-          <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-fog-100">
+          <h2 className="font-display mt-3 text-[22px] leading-[1.15] text-[color:var(--color-paper-50)]">
             {error ? "Analysis paused" : "Kelp is looking at your repo"}
           </h2>
-          <p className="mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-fog-300">
+          <p className="mt-3 max-w-xl text-[13.5px] leading-[1.65] text-[color:var(--color-paper-300)]">
             {error
               ? "You can still finish setup manually below. Kelp will retry on your next visit."
               : "This takes a few seconds — we're identifying your backend, extracting the public config it committed, and mapping the auth flow."}
@@ -69,52 +72,69 @@ export function AnalyzingCard({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      <ol className="mt-6 space-y-2">
+      <ol className="mt-8 space-y-3">
         {STEPS.map((s, i) => {
           const state =
             i < stepIndex
               ? "done"
               : i === stepIndex && !error
                 ? "active"
-                : error && i >= stepIndex
-                  ? "idle"
-                  : "idle";
+                : "idle";
           return (
-            <li
-              key={s}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] transition-colors ${
-                state === "done"
-                  ? "text-fog-300"
-                  : state === "active"
-                    ? "bg-aqua-500/[0.06] text-fog-100"
-                    : "text-fog-500"
-              }`}
-            >
+            <li key={s} className="flex items-center gap-4 font-mono text-[12.5px]">
               <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-                  state === "done"
-                    ? "bg-aqua-500/20 text-aqua-300"
-                    : state === "active"
-                      ? "border border-aqua-500/40 text-aqua-300"
-                      : "border border-line/60 text-fog-500"
-                }`}
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center border"
+                style={{
+                  borderColor:
+                    state === "done"
+                      ? "var(--color-signal)"
+                      : state === "active"
+                        ? "var(--color-signal-dim)"
+                        : "var(--color-hair)",
+                  color:
+                    state === "done"
+                      ? "var(--color-signal)"
+                      : state === "active"
+                        ? "var(--color-signal)"
+                        : "var(--color-paper-500)",
+                }}
               >
                 {state === "done" ? (
                   <CheckIcon className="h-3 w-3" />
                 ) : state === "active" ? (
                   <Spinner />
                 ) : (
-                  <span className="h-1.5 w-1.5 rounded-full bg-fog-600" />
+                  <span
+                    className="inline-block h-1 w-1"
+                    style={{ background: "var(--color-paper-600)" }}
+                  />
                 )}
               </span>
-              <span>{s}</span>
+              <span
+                style={{
+                  color:
+                    state === "done"
+                      ? "var(--color-paper-300)"
+                      : state === "active"
+                        ? "var(--color-paper-50)"
+                        : "var(--color-paper-500)",
+                }}
+              >
+                {s}
+              </span>
             </li>
           );
         })}
       </ol>
 
       {error && (
-        <p className="mt-4 rounded-lg border border-crit/30 bg-crit/[0.06] px-3 py-2 text-[12.5px] text-crit">
+        <p
+          className="mt-6 border-l px-4 py-2.5 font-mono text-[12px] leading-relaxed"
+          style={{
+            borderColor: "var(--color-sev-crit)",
+            color: "var(--color-sev-crit)",
+          }}
+        >
           {error}
         </p>
       )}

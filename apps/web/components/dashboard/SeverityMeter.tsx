@@ -1,6 +1,5 @@
-// Segmented severity distribution + legend for the Overview hero. Reads like
-// Linear/Sentry's issue-mix bars: a single proportional bar plus a clean
-// legend. When there are no active findings it shows a calm "all clear" state.
+// Editorial severity distribution — a single hairline meter with segmented
+// tone bands, plus a numeric legend. No pills, no colored bubbles.
 
 interface Counts {
   critical: number;
@@ -11,10 +10,10 @@ interface Counts {
 }
 
 const SEGMENTS = [
-  { key: "critical", label: "Critical", color: "var(--color-crit)" },
-  { key: "high", label: "High", color: "var(--color-high)" },
-  { key: "medium", label: "Medium", color: "var(--color-med)" },
-  { key: "low", label: "Low", color: "var(--color-low)" },
+  { key: "critical", label: "Critical", short: "C", color: "var(--color-sev-crit)" },
+  { key: "high",     label: "High",     short: "H", color: "var(--color-sev-high)" },
+  { key: "medium",   label: "Medium",   short: "M", color: "var(--color-sev-med)"  },
+  { key: "low",      label: "Low",      short: "L", color: "var(--color-sev-low)"  },
 ] as const;
 
 export function SeverityMeter({ counts, hasScan }: { counts: Counts; hasScan: boolean }) {
@@ -22,14 +21,13 @@ export function SeverityMeter({ counts, hasScan }: { counts: Counts; hasScan: bo
 
   return (
     <div className="w-full">
-      {/* The bar */}
-      <div className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-ink-800/70">
+      <div className="flex h-[3px] w-full overflow-hidden bg-[color:var(--color-ink-800)]">
         {activeTotal === 0 ? (
           <div
-            className="h-full w-full rounded-full"
+            className="h-full w-full"
             style={{
               background: hasScan
-                ? "linear-gradient(90deg, var(--color-aqua-600), var(--color-aqua-400))"
+                ? "var(--color-signal)"
                 : "var(--color-ink-700)",
             }}
           />
@@ -40,7 +38,7 @@ export function SeverityMeter({ counts, hasScan }: { counts: Counts; hasScan: bo
             return (
               <div
                 key={s.key}
-                className="h-full rounded-sm transition-all"
+                className="h-full"
                 style={{
                   width: `${(n / activeTotal) * 100}%`,
                   backgroundColor: s.color,
@@ -52,23 +50,30 @@ export function SeverityMeter({ counts, hasScan }: { counts: Counts; hasScan: bo
         )}
       </div>
 
-      {/* Legend */}
-      <div className="mt-5 grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-5">
+      <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-5">
         {SEGMENTS.map((s) => (
-          <LegendItem key={s.key} label={s.label} value={counts[s.key]} color={s.color} />
+          <LegendItem
+            key={s.key}
+            short={s.short}
+            label={s.label}
+            value={counts[s.key]}
+            color={s.color}
+          />
         ))}
-        <LegendItem label="Resolved" value={counts.resolved} color="var(--color-aqua-500)" muted />
+        <LegendItem short="R" label="Resolved" value={counts.resolved} color="var(--color-signal-dim)" muted />
       </div>
     </div>
   );
 }
 
 function LegendItem({
+  short,
   label,
   value,
   color,
   muted,
 }: {
+  short: string;
   label: string;
   value: number;
   color: string;
@@ -79,17 +84,21 @@ function LegendItem({
     <div>
       <div className="flex items-baseline gap-2">
         <span
-          className="h-2 w-2 shrink-0 rounded-full"
-          style={{ backgroundColor: active ? color : "var(--color-ink-600)" }}
-        />
+          className="font-mono text-[11px] tabular"
+          style={{ color: active && !muted ? color : "var(--color-paper-500)" }}
+        >
+          {short}
+        </span>
         <span
-          className="text-2xl font-semibold tabular-nums"
-          style={{ color: active && !muted ? color : "var(--color-fog-400)" }}
+          className="font-display tabular text-[32px] leading-none"
+          style={{ color: active && !muted ? "var(--color-paper-50)" : "var(--color-paper-400)" }}
         >
           {value}
         </span>
       </div>
-      <div className="mt-1 pl-4 text-[11px] uppercase tracking-wider text-fog-500">{label}</div>
+      <div className="mt-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+        {label}
+      </div>
     </div>
   );
 }

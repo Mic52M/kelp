@@ -1,5 +1,5 @@
-// Coherent empty state for list surfaces (Projects, Findings, …).
-// Restrained: a subtle icon block, a title, one line of context, one primary CTA.
+// Empty state — hairline box, mono eyebrow, editorial voice. No decorative
+// icons unless a page passes one explicitly.
 
 import Link from "next/link";
 import { buttonClasses } from "./Button";
@@ -8,38 +8,34 @@ interface EmptyStateProps {
   title: string;
   body: string;
   cta?: { href: string; label: string };
-  /** small illustrative glyph (SVG element) shown above the title */
   icon?: React.ReactNode;
+  eyebrow?: string;
 }
 
-const DEFAULT_ICON = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="h-6 w-6"
-  >
-    <path d="M12 2L4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4z" />
-  </svg>
-);
-
-export function EmptyState({ title, body, cta, icon }: EmptyStateProps) {
+export function EmptyState({ title, body, cta, icon, eyebrow = "Nothing here yet" }: EmptyStateProps) {
   return (
-    <div className="rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-16 text-center">
-      <div className="mx-auto mb-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-line bg-ink-800/60 text-aqua-400">
-        {icon ?? DEFAULT_ICON}
+    <div className="border border-[color:var(--color-hair)] px-8 py-16">
+      <div className="mx-auto max-w-md text-center">
+        {icon && (
+          <div className="mx-auto mb-6 flex h-10 w-10 items-center justify-center border border-[color:var(--color-hair-strong)] text-[color:var(--color-paper-300)]">
+            {icon}
+          </div>
+        )}
+        <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+          {eyebrow}
+        </div>
+        <h3 className="font-display mt-4 text-[26px] leading-[1.15] text-[color:var(--color-paper-50)]">
+          {title}
+        </h3>
+        <p className="mx-auto mt-3 max-w-sm text-[13.5px] leading-[1.65] text-[color:var(--color-paper-300)]">
+          {body}
+        </p>
+        {cta && (
+          <Link href={cta.href} className={buttonClasses("primary", "md", "mt-7")}>
+            {cta.label}
+          </Link>
+        )}
       </div>
-      <h3 className="text-base font-semibold text-fog-50">{title}</h3>
-      <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-fog-400">{body}</p>
-      {cta && (
-        <Link href={cta.href} className={buttonClasses("primary", "md", "mt-5")}>
-          {cta.label}
-        </Link>
-      )}
     </div>
   );
 }

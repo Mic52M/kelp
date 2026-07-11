@@ -1,280 +1,332 @@
 import Link from "next/link";
 import { buttonClasses } from "@/components/Button";
-import { CheckPreview } from "@/components/CheckPreview";
-import { CountUp } from "@/components/CountUp";
-import { GridParallax } from "@/components/GridParallax";
-import { HeroSpotlight } from "@/components/HeroSpotlight";
 import { Logo } from "@/components/Logo";
 import { Reveal } from "@/components/Reveal";
-import { ScanConsole } from "@/components/ScanConsole";
-import { scanSteps } from "@/lib/mock";
+import { CountUp } from "@/components/CountUp";
+
+/* ── Copy ──────────────────────────────────────────────────────────────────── */
 
 const checks = [
   {
-    tag: "RLS",
-    title: "Missing Row Level Security",
-    body: "We read your Supabase schema and catch tables anyone can read or write — then generate the owner-scoped policy for you to review.",
+    tag: "RLS-001",
+    title: "Row-Level Security, checked policy-by-policy.",
+    body:
+      "Kelp reads your Supabase schema and finds the tables and columns anyone can read or write. Fixes ship as an owner-scoped policy you can review before running.",
   },
   {
-    tag: "Secrets",
-    title: "Leaked keys & credentials",
-    body: "Service_role keys, Stripe and AWS secrets committed to your frontend. We open a pull request that moves them to env vars and flag rotation.",
+    tag: "SEC-002",
+    title: "Secrets exfiltrated by the frontend.",
+    body:
+      "Service-role keys, Stripe secrets, and OpenAI tokens committed to the client bundle. Kelp opens a pull request that moves them to env vars and flags rotation.",
   },
   {
-    tag: "BOLA",
-    title: "Broken object authorization",
-    body: "With your consent, we actively test whether one user can reach another user's data by ID — the exact flaw behind the Lovable and Moltbook breaches.",
+    tag: "BOLA-003",
+    title: "Broken object authorization, actively probed.",
+    body:
+      "With your consent, one authenticated user tries to reach another's data by ID. This is the exact failure behind the public breaches of Lovable and Moltbook apps.",
   },
 ];
 
 const steps = [
-  { n: "01", t: "Connect", d: "Sign in with GitHub and link your Supabase project. Minimal scopes, no service_role key required." },
-  { n: "02", t: "Scan", d: "Kelp reads your schema and code and runs authorized tests — live, in under ten minutes." },
-  { n: "03", t: "Fix", d: "Review a plain-language report, apply ready-made fixes with one click, and stay covered on every push." },
+  { n: "01", t: "Connect", d: "Sign in with GitHub and link your Supabase project. Scoped tokens only — the service_role key stays in your project." },
+  { n: "02", t: "Scan",    d: "Kelp reads your schema and code, then runs authorized probes. Every request is logged in your audit trail." },
+  { n: "03", t: "Fix",     d: "Read a plain-language report, apply ready-made fixes with one click, and stay covered on every push to main." },
 ];
 
-const ecosystem = [
-  "Lovable",
-  "Bolt.new",
-  "Replit",
-  "Cursor",
-  "v0",
-  "Windsurf",
-  "Firebase Studio",
-  "Supabase",
-  "GitHub",
-  "Vercel",
-  "Next.js",
-  "React",
+const stack = [
+  "Lovable", "Bolt.new", "Replit", "Cursor", "v0", "Windsurf", "Firebase Studio", "Supabase", "GitHub", "Vercel",
 ];
 
 const faqs = [
   {
-    q: "Do I need to give Kelp my Supabase service_role key?",
-    a: "No. Kelp connects with a scoped Management API token, and we're moving to a per-project read-only Postgres role. The service_role key stays in your project.",
+    q: "Do I need to give Kelp my Supabase service-role key?",
+    a: "No. Kelp connects with a scoped Management API token, and we are moving to a per-project read-only Postgres role. Your service-role key never leaves your project.",
   },
   {
     q: "Will Kelp change anything in my code without asking?",
-    a: "Never. Fixes for secrets are opened as pull requests against a fresh kelp/… branch, never pushed to your default branch. RLS fixes are proposed as migrations you review and run yourself.",
+    a: "Never. Fixes for secrets are opened as pull requests against a fresh kelp/… branch, never pushed to your default branch. Database fixes are proposed as migrations you review and run yourself.",
   },
   {
-    q: "How is active testing (BOLA) safe?",
-    a: "Live tests only run through a hard consent gate you explicitly accept per project — no consent, no probe. Every request is logged in your audit trail, and evidence is stored as category + count, never raw customer data.",
+    q: "How is active testing safe on my production app?",
+    a: "Every campaign runs through a hard consent gate you accept per project — no consent, no probe. Evidence is stored as category plus count, never raw customer data, and every request is auditable.",
   },
   {
     q: "Does Kelp claim to find every vulnerability?",
-    a: "No. We deliberately cover a small set of high-impact classes with high precision — the ones that actually breach AI-generated apps. We'd rather ship real fixes for RLS, exposed secrets, and BOLA than a 40-page report of maybes.",
+    a: "No. We cover a small set of high-impact classes with high precision — the ones that actually breach AI-generated apps. Real fixes for RLS, secrets, and broken authorization beat a forty-page report of maybes.",
   },
 ];
 
-function FooterCol({ title, links }: { title: string; links: [string, string][] }) {
+const tiers = [
+  { name: "Free",    price: "0",  cadence: "one scan",          tag: "One full scan, report only.",     features: ["1 project", "All three checks", "Full findings report"], cta: "Start free scan", href: "/onboarding" },
+  { name: "Starter", price: "29", cadence: "per month",         tag: "Continuous cover for your app.",  features: ["1 project", "Continuous scanning", "Auto-fix for RLS & secrets", "Re-scan on every push"], cta: "Choose Starter", href: "/onboarding", featured: true },
+  { name: "Agency",  price: "89", cadence: "per month",         tag: "For studios shipping many apps.", features: ["Up to 5 projects", "Everything in Starter", "Priority human review", "Email alerts"], cta: "Choose Agency", href: "/onboarding" },
+];
+
+/* ── Small primitives, inlined ─────────────────────────────────────────────── */
+
+function Eyebrow({ n, children }: { n?: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div className="mb-4 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-400">
-        {title}
-      </div>
-      <ul className="space-y-2 text-sm text-fog-400">
-        {links.map(([label, href]) => (
-          <li key={label}>
-            <a href={href} className="transition-colors hover:text-fog-50">
-              {label}
-            </a>
-          </li>
-        ))}
-      </ul>
+    <div className="eyebrow flex items-center gap-3">
+      {n && <span className="text-[color:var(--color-signal-dim)]">{n}</span>}
+      <span className="h-px w-6 bg-[color:var(--color-hair-strong)]" aria-hidden />
+      <span>{children}</span>
     </div>
   );
 }
 
-const tiers = [
-  { name: "Free", price: "€0", tagline: "One full scan, report only.", features: ["1 project", "All three checks", "Full findings report"], cta: "Start free scan", highlight: false },
-  { name: "Starter", price: "€29", tagline: "Continuous cover for your app.", features: ["1 project", "Continuous scanning", "Auto-fix for RLS & secrets", "Re-scan on every push"], cta: "Choose Starter", highlight: true },
-  { name: "Agency", price: "€89", tagline: "For studios shipping many apps.", features: ["Up to 5 projects", "Everything in Starter", "Priority human review", "Email alerts"], cta: "Choose Agency", highlight: false },
-];
+function SectionHead({
+  eyebrow,
+  eyebrowIndex,
+  title,
+  kicker,
+}: {
+  eyebrow: string;
+  eyebrowIndex: string;
+  title: string;
+  kicker?: string;
+}) {
+  return (
+    <div className="max-w-3xl">
+      <Reveal>
+        <Eyebrow n={eyebrowIndex}>{eyebrow}</Eyebrow>
+      </Reveal>
+      <Reveal delay={80}>
+        <h2 className="font-display mt-6 text-[40px] leading-[1.05] text-[color:var(--color-paper-50)] sm:text-[48px]">
+          {title}
+        </h2>
+      </Reveal>
+      {kicker && (
+        <Reveal delay={160}>
+          <p className="mt-5 max-w-2xl text-[15.5px] leading-[1.65] text-[color:var(--color-paper-300)]">
+            {kicker}
+          </p>
+        </Reveal>
+      )}
+    </div>
+  );
+}
+
+/* ── Hero "wire dispatch" — data-first, no window chrome, cascade reveal ─── */
+
+function WireDispatch() {
+  const lines: [string, string, boolean?][] = [
+    ["01", "supabase.tables → 14  ·  functions → 6  ·  policies → 22"],
+    ["02", "rls  profiles.email     — READ open to anon"],
+    ["03", "rls  invoices.*         — no policy, table is exposed"],
+    ["04", "sec  VITE_SERVICE_ROLE  — committed at src/lib/db.ts:14"],
+    ["05", "bola get-order          — returns row for auth.uid() != row.owner"],
+    ["06", "──────────────────────────────────────────────────────────"],
+    ["07", "4 findings · 2 auto-fixable · report ready · 00:07.4", true],
+  ];
+  return (
+    <div className="relative overflow-hidden border border-[color:var(--color-hair-strong)] bg-[color:var(--color-ink-900)]">
+      <Reveal delay={520}>
+        <div className="flex items-center justify-between border-b border-[color:var(--color-hair)] px-4 py-2.5">
+          <div className="eyebrow flex items-center gap-2">
+            <span className="inline-block h-1.5 w-1.5 animate-pulse-soft bg-[color:var(--color-signal)]" />
+            <span>scan/roamly-app</span>
+          </div>
+          <div className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+            Supabase · Live
+          </div>
+        </div>
+      </Reveal>
+      <div className="font-mono text-[12.5px] leading-[1.85]">
+        {lines.map(([n, l, isFinal], i) => {
+          const isSep = l.startsWith("──");
+          const tone = isSep
+            ? "text-[color:var(--color-hair-strong)]"
+            : isFinal
+              ? "text-[color:var(--color-signal)]"
+              : "text-[color:var(--color-paper-100)]";
+          return (
+            <Reveal key={n} delay={620 + i * 110} y={4}>
+              <div className="grid grid-cols-[3rem_1fr] gap-4 border-b border-[color:var(--color-hair)] px-4 py-2 last:border-b-0">
+                <span className="tabular text-[color:var(--color-paper-600)]">{n}</span>
+                <span className={tone}>
+                  {l}
+                  {isFinal && <span className="caret-blink" aria-hidden />}
+                </span>
+              </div>
+            </Reveal>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Page ──────────────────────────────────────────────────────────────────── */
 
 export default function Landing() {
   return (
-    <main className="relative">
-      {/* Nav */}
-      <header className="relative z-20 mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <Logo />
-        <nav className="hidden items-center gap-8 text-sm text-fog-300 md:flex">
-          <a href="#checks" className="transition-colors hover:text-fog-50">What we check</a>
-          <a href="#how" className="transition-colors hover:text-fog-50">How it works</a>
-          <a href="#pricing" className="transition-colors hover:text-fog-50">Pricing</a>
+    <main className="relative min-h-screen">
+      {/* The single signature — a hairline filament tracing the left rail,
+          close to the viewport edge on wide displays. */}
+      <div className="pointer-events-none absolute inset-y-0 left-6 hidden xl:block">
+        <div className="filament" />
+      </div>
+
+      {/* Top rail */}
+      <header className="mx-auto flex max-w-[1120px] items-center justify-between px-6 pt-8 pb-6">
+        <Link href="/" aria-label="Kelp home">
+          <Logo />
+        </Link>
+        <nav className="hidden items-center gap-9 text-[13.5px] text-[color:var(--color-paper-300)] md:flex">
+          <a href="#checks" className="transition-colors hover:text-[color:var(--color-paper-50)]">What we check</a>
+          <a href="#how" className="transition-colors hover:text-[color:var(--color-paper-50)]">How it works</a>
+          <a href="#pricing" className="transition-colors hover:text-[color:var(--color-paper-50)]">Pricing</a>
         </nav>
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="text-sm text-fog-300 transition-colors hover:text-fog-50">
+        <div className="flex items-center gap-5">
+          <Link
+            href="/dashboard"
+            className="text-[13.5px] text-[color:var(--color-paper-300)] transition-colors hover:text-[color:var(--color-paper-50)]"
+          >
             Sign in
           </Link>
-          <Link href="/onboarding" className={buttonClasses("primary")}>
+          <Link href="/onboarding" className={buttonClasses("primary", "md", "cta-lift")}>
             Start free scan
           </Link>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="aurora hero-glow" />
-        <GridParallax />
-        <HeroSpotlight />
-        <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-12 px-6 pb-24 pt-16 lg:grid-cols-2 lg:pt-24">
-          <div>
+      {/* Hairline under the rail */}
+      <div className="mx-auto max-w-[1120px] px-6">
+        <div className="h-px w-full bg-[color:var(--color-hair)]" />
+      </div>
+
+      {/* ── HERO ─────────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-[1120px] px-6 pt-24 pb-28 sm:pt-32">
+        <div className="grid gap-14 lg:grid-cols-12 lg:gap-16">
+          <div className="lg:col-span-7">
             <Reveal>
-              <div className="inline-flex items-center gap-2 rounded-full border border-line bg-ink-800/60 px-3 py-1 text-xs text-fog-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-aqua-400 animate-pulse-soft" />
-                Built for Lovable · Bolt · Replit · Cursor + Supabase
-              </div>
+              <Eyebrow n="§ 00">Security review · vibe-coded apps</Eyebrow>
             </Reveal>
-            <Reveal delay={80}>
-              <h1 className="mt-5 text-balance text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.4rem]">
-                Ship your app without <span className="accent-text">shipping its security holes.</span>
+            <Reveal delay={120} duration={720}>
+              <h1 className="font-display mt-8 text-[56px] leading-[0.98] text-[color:var(--color-paper-50)] sm:text-[72px] lg:text-[84px]">
+                Ship the app.<br />
+                <span className="italic text-[color:var(--color-paper-300)]">Not</span> its holes.
               </h1>
             </Reveal>
-            <Reveal delay={160}>
-              <p className="mt-5 max-w-lg text-lg leading-relaxed text-fog-300">
-                Up to 62% of AI-generated code ships with a security flaw. Kelp finds the ones
-                that matter in your Supabase app — missing RLS, leaked keys, broken
-                authorization — and hands you the fix. No security team required.
+            <Reveal delay={280}>
+              <p className="mt-8 max-w-[560px] text-[17px] leading-[1.6] text-[color:var(--color-paper-300)]">
+                62% of Lovable, Bolt and Replit projects ship with a security flaw. Kelp finds the ones
+                that matter in your Supabase app — missing policies, exposed keys, broken authorization —
+                and hands you the fix. No security team required.
               </p>
             </Reveal>
-            <Reveal delay={240}>
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <Link
-                  href="/onboarding"
-                  className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-aqua-400 to-aqua-600 px-5 py-3 text-sm font-semibold text-ink-950 transition-all hover:shadow-[0_0_32px_-4px_rgba(52,230,207,0.55)] hover:-translate-y-0.5"
-                >
-                  <span className="relative z-10">Scan my app free</span>
-                  <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
+            <Reveal delay={400}>
+              <div className="mt-11 flex flex-wrap items-center gap-4">
+                <Link href="/onboarding" className={buttonClasses("primary", "lg", "cta-lift")}>
+                  Scan my app free
                 </Link>
-                <a
-                  href="#how"
-                  className="rounded-xl border border-line bg-ink-800/50 px-5 py-3 text-sm font-medium text-fog-50 transition-all hover:-translate-y-0.5 hover:border-white/10 hover:bg-ink-700"
-                >
-                  See how it works
+                <a href="#how" className={buttonClasses("secondary", "lg", "cta-lift")}>
+                  How it works
                 </a>
               </div>
             </Reveal>
-            <Reveal delay={320}>
-              <p className="mt-4 text-xs text-fog-500">
-                No credit card. First scan in under 10 minutes. We never claim 100% coverage —
-                we cover specific vulnerability classes with high precision.
+            <Reveal delay={520}>
+              <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-2 text-[12px] font-mono uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+                <span>No credit card</span>
+                <span aria-hidden className="h-1 w-1 bg-[color:var(--color-paper-600)]" />
+                <span>First scan under 10 min</span>
+                <span aria-hidden className="h-1 w-1 bg-[color:var(--color-paper-600)]" />
+                <span>Read-only by default</span>
+              </div>
+            </Reveal>
+          </div>
+
+          <div className="lg:col-span-5">
+            <WireDispatch />
+            <Reveal delay={1520}>
+              <p className="mt-4 text-[12px] font-mono uppercase tracking-[0.12em] text-[color:var(--color-paper-500)]">
+                An excerpt from an actual dispatch. Nothing invented, nothing dramatised.
               </p>
             </Reveal>
           </div>
-
-          <Reveal delay={200}>
-            <div className="relative">
-              <ScanConsole steps={scanSteps} />
-            </div>
-          </Reveal>
-        </div>
-
-        {/* Scroll cue — restrained, fades out after a couple of viewports */}
-        <div className="pointer-events-none absolute bottom-6 left-1/2 z-10 -translate-x-1/2 text-fog-500 opacity-60">
-          <svg width="20" height="30" viewBox="0 0 20 30" fill="none" className="animate-pulse-soft">
-            <rect x="1" y="1" width="18" height="28" rx="9" stroke="currentColor" strokeWidth="1.5" />
-            <circle cx="10" cy="9" r="1.5" fill="currentColor">
-              <animate attributeName="cy" from="9" to="20" dur="1.6s" repeatCount="indefinite" />
-              <animate attributeName="opacity" from="1" to="0" dur="1.6s" repeatCount="indefinite" />
-            </circle>
-          </svg>
         </div>
       </section>
 
-      {/* Ecosystem marquee — the whole vibe-coding surface Kelp covers, drifting
-          left continuously. A silent flex that this is a real ecosystem, not a
-          one-tool integration. */}
-      <section className="relative z-10 border-b border-line/70 py-8">
-        <Reveal>
-          <div className="mb-4 text-center text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-            Built for the tools you already ship with
-          </div>
-        </Reveal>
-        <div className="marquee-mask relative overflow-hidden">
-          <div className="flex w-max animate-marquee items-center gap-10">
-            {[...ecosystem, ...ecosystem].map((name, i) => (
-              <div
-                key={`${name}-${i}`}
-                className="flex shrink-0 items-center gap-2 rounded-full border border-line bg-ink-800/50 px-4 py-1.5 text-sm text-fog-300"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-aqua-400/70" />
-                {name}
+      {/* ── STAT STRIP ───────────────────────────────────────────────────── */}
+      <section className="border-y border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/40">
+        <div className="mx-auto grid max-w-[1120px] grid-cols-1 divide-y divide-[color:var(--color-hair)] px-6 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          {[
+            { count: 62,   fmt: "percent" as const,     label: "of AI-generated apps ship a security flaw" },
+            { count: 3,    fmt: "plain" as const,       label: "classes covered end-to-end, with real evidence" },
+            { count: 10,   fmt: "lessThanMin" as const, label: "median time to first actionable fix" },
+          ].map((k, i) => (
+            <Reveal key={k.label} delay={i * 90}>
+              <div className="px-6 py-10 sm:px-10">
+                <CountUp
+                  to={k.count}
+                  format={k.fmt}
+                  duration={1600}
+                  className="font-display tabular text-[44px] leading-none text-[color:var(--color-paper-50)]"
+                />
+                <div className="mt-4 text-[13.5px] leading-snug text-[color:var(--color-paper-400)]">
+                  {k.label}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Stat strip — numbers count up as they enter view */}
-      <section className="relative z-10 border-y border-line/70 bg-ink-900/40">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px px-6 md:grid-cols-4">
-          {([
-            { to: 62, format: "rangeUpToPct", small: "of AI-generated code has a vulnerability" },
-            { to: 5600, format: "plus", small: "public vibe-coded apps scanned by researchers" },
-            { to: 2000, format: "plus", small: "critical issues those scans surfaced" },
-            { to: 10, format: "lessThanMin", small: "from sign-up to your first real result" },
-          ] as const).map((stat, i) => (
-            <Reveal key={stat.small} delay={i * 80} className="py-8 text-center">
-              <CountUp to={stat.to} format={stat.format} className="text-2xl font-semibold accent-text" />
-              <div className="mx-auto mt-1 max-w-[15rem] text-xs text-fog-400">{stat.small}</div>
             </Reveal>
           ))}
         </div>
       </section>
 
-      {/* Checks */}
-      <section id="checks" className="mx-auto max-w-6xl px-6 py-24">
-        <div className="max-w-2xl">
-          <Reveal>
-            <div className="text-sm font-medium text-aqua-400">What Kelp checks</div>
-          </Reveal>
-          <Reveal delay={60}>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-              The three classes that actually get apps breached.
-            </h2>
-          </Reveal>
-          <Reveal delay={140}>
-            <p className="mt-3 text-fog-300">
-              Not a 40-page report. The specific, high-impact flaws behind the incidents you
-              read about — each with a fix, not just a finding.
-            </p>
-          </Reveal>
-        </div>
-        <div className="mt-12 grid gap-4 md:grid-cols-3">
+      {/* ── WHAT WE CHECK ────────────────────────────────────────────────── */}
+      <section id="checks" className="mx-auto max-w-[1120px] px-6 pt-28 pb-24">
+        <SectionHead
+          eyebrowIndex="§ 01"
+          eyebrow="Coverage"
+          title="Three classes. Real evidence. No wall of warnings."
+          kicker="We cover the vulnerabilities that actually breach AI-generated apps, and we ship a fix for each. Everything else is honestly out of scope."
+        />
+        <div className="mt-16 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
           {checks.map((c, i) => (
-            <Reveal key={c.tag} delay={i * 120}>
-              <div className="card-shine group glass h-full rounded-2xl p-6 transition-all duration-500 hover:-translate-y-1 hover:border-aqua-600/40 hover:shadow-[0_20px_60px_-30px_rgba(52,230,207,0.4)]">
-                <div className="inline-flex rounded-md border border-line bg-ink-800 px-2 py-0.5 font-mono text-xs text-aqua-400 transition-colors group-hover:border-aqua-600/40 group-hover:text-aqua-300">
-                  {c.tag}
+            <Reveal key={c.tag} delay={i * 90}>
+              <div className="grid grid-cols-1 gap-6 py-10 lg:grid-cols-12 lg:gap-10">
+                <div className="lg:col-span-3">
+                  <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-signal-dim)]">
+                    {c.tag}
+                  </div>
+                  <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+                    Class {String(i + 1).padStart(2, "0")}
+                  </div>
                 </div>
-                <h3 className="mt-4 text-lg font-medium">{c.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-fog-300">{c.body}</p>
-                <CheckPreview tag={c.tag as "RLS" | "Secrets" | "BOLA"} />
+                <div className="lg:col-span-9">
+                  <h3 className="font-display text-[26px] leading-[1.15] text-[color:var(--color-paper-50)]">
+                    {c.title}
+                  </h3>
+                  <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.7] text-[color:var(--color-paper-300)]">
+                    {c.body}
+                  </p>
+                </div>
               </div>
             </Reveal>
           ))}
         </div>
       </section>
 
-      {/* How it works */}
-      <section id="how" className="border-t border-line/70 bg-ink-900/30">
-        <div className="mx-auto max-w-6xl px-6 py-24">
-          <Reveal>
-            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-              From sign-up to fixed in three steps.
-            </h2>
-          </Reveal>
-          <div className="mt-12 grid gap-8 md:grid-cols-3">
+      {/* ── HOW IT WORKS ─────────────────────────────────────────────────── */}
+      <section id="how" className="border-y border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/40">
+        <div className="mx-auto max-w-[1120px] px-6 py-24">
+          <SectionHead
+            eyebrowIndex="§ 02"
+            eyebrow="How it works"
+            title="Connect, scan, fix. In that order."
+          />
+          <div className="mt-16 grid grid-cols-1 gap-y-12 md:grid-cols-3 md:gap-x-10 md:gap-y-0 md:divide-x md:divide-[color:var(--color-hair)]">
             {steps.map((s, i) => (
-              <Reveal key={s.n} delay={i * 140}>
-                <div className="group relative">
-                  <div className="font-mono text-sm text-aqua-400 transition-colors group-hover:text-aqua-300">
-                    {s.n}
+              <Reveal key={s.n} delay={i * 100}>
+                <div className="md:px-8 first:md:pl-0 last:md:pr-0">
+                  <div className="font-mono tabular text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-signal-dim)]">
+                    Step {s.n}
                   </div>
-                  <div className="mt-2 h-px w-full bg-gradient-to-r from-aqua-500/40 to-transparent transition-all duration-500 group-hover:from-aqua-400/60" />
-                  <h3 className="mt-4 text-xl font-medium">{s.t}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-fog-300">{s.d}</p>
+                  <h3 className="font-display mt-5 text-[28px] leading-[1.1] text-[color:var(--color-paper-50)]">
+                    {s.t}
+                  </h3>
+                  <p className="mt-4 text-[14.5px] leading-[1.7] text-[color:var(--color-paper-300)]">
+                    {s.d}
+                  </p>
                 </div>
               </Reveal>
             ))}
@@ -282,167 +334,167 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* FAQ */}
-      <section className="border-t border-line/70">
-        <div className="mx-auto max-w-4xl px-6 py-24">
-          <Reveal>
-            <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-              Common questions
-            </div>
-          </Reveal>
-          <Reveal delay={60}>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Things founders ask before their first scan.
-            </h2>
-          </Reveal>
-          <div className="mt-12 divide-y divide-line/70 border-y border-line/70">
-            {faqs.map((faq, i) => (
-              <Reveal key={faq.q} delay={i * 80}>
-                <details className="group py-6 [&_summary::-webkit-details-marker]:hidden">
-                  <summary className="flex cursor-pointer items-center justify-between gap-6 list-none">
-                    <span className="text-[15px] font-medium text-fog-50 transition-colors group-hover:text-aqua-300">
-                      {faq.q}
-                    </span>
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-line text-fog-400 transition-all group-open:rotate-45 group-open:border-aqua-600/50 group-open:text-aqua-400">
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                        <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                  </summary>
-                  <p className="animate-rise mt-4 max-w-3xl text-sm leading-relaxed text-fog-300">
-                    {faq.a}
-                  </p>
-                </details>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section id="pricing" className="mx-auto max-w-6xl px-6 py-24">
+      {/* ── ECOSYSTEM ────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-[1120px] px-6 py-16">
         <Reveal>
-          <div className="text-center">
-            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-              Priced for indie builders, not enterprises.
-            </h2>
-            <p className="mt-3 text-fog-300">
-              Start free. Upgrade when you want continuous cover and one-click fixes.
-            </p>
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--color-paper-500)]">
+              Built for the AI-native stack
+            </div>
+            <div className="flex flex-wrap gap-x-7 gap-y-3">
+              {stack.map((s) => (
+                <span
+                  key={s}
+                  className="stack-name font-mono text-[12.5px] text-[color:var(--color-paper-300)]"
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
           </div>
         </Reveal>
-        <div className="mt-12 grid gap-4 md:grid-cols-3">
-          {tiers.map((t, i) => (
-            <Reveal key={t.name} delay={i * 100}>
-              <div
-                className={`card-shine relative h-full rounded-2xl p-6 transition-all duration-500 hover:-translate-y-1 ${
-                  t.highlight
-                    ? "border border-aqua-600/50 bg-gradient-to-b from-aqua-500/[0.08] to-transparent hover:shadow-[0_24px_80px_-30px_rgba(52,230,207,0.45)]"
-                    : "glass hover:border-white/10 hover:shadow-[0_20px_60px_-30px_rgba(0,0,0,0.6)]"
-                }`}
-              >
-                {t.highlight && (
-                  <div className="absolute -top-3 left-6 rounded-full bg-aqua-500 px-2.5 py-0.5 text-xs font-medium text-ink-950 shadow-[0_0_18px_-2px_rgba(52,230,207,0.7)]">
-                    Most popular
+      </section>
+
+      {/* ── PRICING ──────────────────────────────────────────────────────── */}
+      <section id="pricing" className="border-y border-[color:var(--color-hair)]">
+        <div className="mx-auto max-w-[1120px] px-6 py-24">
+          <SectionHead
+            eyebrowIndex="§ 03"
+            eyebrow="Pricing"
+            title="Simple, per-project, no seat count."
+            kicker="Every plan gets the same three checks. Paid plans add continuous cover, auto-fix, and priority review."
+          />
+          <div className="mt-14 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
+            {tiers.map((t, i) => (
+              <Reveal key={t.name} delay={i * 90}>
+                <div className="grid grid-cols-1 gap-8 py-10 lg:grid-cols-12 lg:items-center lg:gap-10">
+                  <div className="lg:col-span-3">
+                    <div className="flex items-center gap-3">
+                      <span className="font-display text-[28px] leading-none text-[color:var(--color-paper-50)]">
+                        {t.name}
+                      </span>
+                      {t.featured && (
+                        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-signal)]">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <span className="font-display tabular text-[44px] leading-none text-[color:var(--color-paper-50)]">
+                        €{t.price}
+                      </span>
+                      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+                        {t.cadence}
+                      </span>
+                    </div>
                   </div>
-                )}
-                <div className="text-sm text-fog-300">{t.name}</div>
-                <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-4xl font-semibold">{t.price}</span>
-                  <span className="text-sm text-fog-400">/mo</span>
+                  <div className="lg:col-span-6">
+                    <p className="text-[14.5px] leading-[1.6] text-[color:var(--color-paper-300)]">
+                      {t.tag}
+                    </p>
+                    <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+                      {t.features.map((f) => (
+                        <li
+                          key={f}
+                          className="flex items-start gap-2 font-mono text-[12.5px] text-[color:var(--color-paper-300)]"
+                        >
+                          <span
+                            aria-hidden
+                            className="mt-[7px] inline-block h-px w-3 bg-[color:var(--color-signal-dim)]"
+                          />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="lg:col-span-3 lg:text-right">
+                    <Link
+                      href={t.href}
+                      className={buttonClasses(t.featured ? "primary" : "secondary", "lg", "cta-lift")}
+                    >
+                      {t.cta}
+                    </Link>
+                  </div>
                 </div>
-                <div className="mt-1 text-sm text-fog-400">{t.tagline}</div>
-                <ul className="mt-5 space-y-2.5 text-sm">
-                  {t.features.map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-fog-300">
-                      <span className="text-aqua-400">✓</span>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href="/onboarding"
-                  className={`mt-6 block rounded-lg px-4 py-2.5 text-center text-sm font-medium transition-all hover:-translate-y-0.5 ${
-                    t.highlight
-                      ? "bg-gradient-to-r from-aqua-400 to-aqua-600 text-ink-950 hover:shadow-[0_0_24px_-4px_rgba(52,230,207,0.6)]"
-                      : "border border-line bg-ink-800 text-fog-50 hover:bg-ink-700"
-                  }`}
-                >
-                  {t.cta}
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── FAQ ──────────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-[1120px] px-6 py-24">
+        <SectionHead
+          eyebrowIndex="§ 04"
+          eyebrow="Questions"
+          title="What people ask before they connect a repo."
+        />
+        <div className="mt-14 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
+          {faqs.map((f, i) => (
+            <Reveal key={f.q} delay={i * 80}>
+              <div className="grid grid-cols-1 gap-6 py-10 lg:grid-cols-12 lg:gap-10">
+                <div className="lg:col-span-2">
+                  <div className="font-mono tabular text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+                    Q · {String(i + 1).padStart(2, "0")}
+                  </div>
+                </div>
+                <div className="lg:col-span-10">
+                  <h3 className="font-display text-[22px] leading-[1.2] text-[color:var(--color-paper-50)]">
+                    {f.q}
+                  </h3>
+                  <p className="mt-3 max-w-[70ch] text-[14.5px] leading-[1.7] text-[color:var(--color-paper-300)]">
+                    {f.a}
+                  </p>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* ── CLOSING CTA ──────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-[1120px] px-6 pb-28">
+        <Reveal>
+          <div className="border border-[color:var(--color-hair-strong)] px-8 py-14 sm:px-14 sm:py-20">
+            <div className="grid gap-10 lg:grid-cols-12">
+              <div className="lg:col-span-8">
+                <Eyebrow n="§ 05">Ready</Eyebrow>
+                <h2 className="font-display mt-6 text-[42px] leading-[1.05] text-[color:var(--color-paper-50)] sm:text-[52px]">
+                  Scan your app before your users do.
+                </h2>
+                <p className="mt-5 max-w-[52ch] text-[15.5px] leading-[1.6] text-[color:var(--color-paper-300)]">
+                  Connect a GitHub repo, accept the consent, and see your first findings within ten minutes.
+                  Free plan is a real full scan, not a teaser.
+                </p>
+              </div>
+              <div className="flex items-end lg:col-span-4 lg:justify-end">
+                <Link href="/onboarding" className={buttonClasses("primary", "lg", "cta-lift")}>
+                  Start free scan
                 </Link>
               </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* Final CTA — Vercel/Linear-style "one last big ask before you leave" */}
-      <section className="relative overflow-hidden border-t border-line/70">
-        <div className="aurora hero-glow" />
-        <div className="grid-texture absolute inset-0 opacity-40" />
-        <div className="relative z-10 mx-auto max-w-4xl px-6 py-28 text-center">
-          <Reveal>
-            <div className="mb-4 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-              Free forever tier
             </div>
-          </Reveal>
-          <Reveal delay={80}>
-            <h2 className="text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
-              Find the holes before <span className="accent-text">someone else does.</span>
-            </h2>
-          </Reveal>
-          <Reveal delay={160}>
-            <p className="mx-auto mt-5 max-w-lg text-lg leading-relaxed text-fog-300">
-              Ten minutes. No credit card. One honest report of what an attacker
-              would actually reach in your app.
-            </p>
-          </Reveal>
-          <Reveal delay={240}>
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                href="/onboarding"
-                className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-aqua-400 to-aqua-600 px-6 py-3.5 text-sm font-semibold text-ink-950 transition-all hover:-translate-y-0.5 hover:shadow-[0_0_36px_-4px_rgba(52,230,207,0.65)]"
-              >
-                <span className="relative z-10">Start free scan</span>
-                <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
-              </Link>
-              <a
-                href="#pricing"
-                className="rounded-xl border border-line bg-ink-800/50 px-6 py-3.5 text-sm font-medium text-fog-50 transition-all hover:-translate-y-0.5 hover:border-white/10 hover:bg-ink-700"
-              >
-                Compare plans
-              </a>
-            </div>
-          </Reveal>
-          <Reveal delay={320}>
-            <p className="mt-6 text-xs text-fog-500">
-              First scan in under 10 minutes · No card · Cancel anytime on paid tiers.
-            </p>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-line/70 bg-ink-900/30">
-        <div className="mx-auto max-w-6xl px-6 py-14">
-          <div className="grid gap-10 md:grid-cols-4">
-            <div>
-              <Logo />
-              <p className="mt-4 max-w-xs text-xs leading-relaxed text-fog-500">
-                Security for the way you build now — self-serve pen testing for
-                vibe-coded apps.
-              </p>
-            </div>
-            <FooterCol title="Product" links={[["What we check", "#checks"], ["How it works", "#how"], ["Pricing", "#pricing"], ["Start free scan", "/onboarding"]]} />
-            <FooterCol title="Company" links={[["Blog", "#"], ["Changelog", "#"], ["Careers", "#"], ["Contact", "mailto:hello@kelp.dev"]]} />
-            <FooterCol title="Legal" links={[["Privacy", "#"], ["Terms", "#"], ["Security", "#"], ["Responsible disclosure", "#"]]} />
           </div>
-          <div className="mt-14 flex flex-col items-start justify-between gap-4 border-t border-line/70 pt-8 text-xs text-fog-500 sm:flex-row sm:items-center">
-            <span>© 2026 Kelp. Security for the way you build now.</span>
-            <span className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 animate-pulse-soft rounded-full bg-aqua-400" />
-              All systems operational
+        </Reveal>
+      </section>
+
+      {/* ── FOOTER ───────────────────────────────────────────────────────── */}
+      <footer className="border-t border-[color:var(--color-hair)]">
+        <div className="mx-auto flex max-w-[1120px] flex-col gap-8 px-6 py-12 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <Logo />
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+              Made in Europe
             </span>
+          </div>
+          <nav className="flex flex-wrap gap-x-7 gap-y-2 font-mono text-[12px] text-[color:var(--color-paper-400)]">
+            <a href="#checks" className="hover:text-[color:var(--color-paper-50)]">Coverage</a>
+            <a href="#how" className="hover:text-[color:var(--color-paper-50)]">How</a>
+            <a href="#pricing" className="hover:text-[color:var(--color-paper-50)]">Pricing</a>
+            <Link href="/dashboard" className="hover:text-[color:var(--color-paper-50)]">Dashboard</Link>
+            <a href="mailto:hello@kelp.dev" className="hover:text-[color:var(--color-paper-50)]">Contact</a>
+          </nav>
+          <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+            © 2026 Kelp Labs
           </div>
         </div>
       </footer>

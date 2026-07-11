@@ -13,12 +13,6 @@ export interface ConsentCardProps {
   version: string;
 }
 
-/**
- * Step 3 — Consent. Wrapper card giving the legal block a clean shell + a
- * short human explanation before dropping the user into the (long) consent
- * text. The full form / signed-record UX lives in ActiveTestingConsentForm;
- * we don't duplicate it here.
- */
 export function ConsentCard(props: ConsentCardProps) {
   const c = props.consents[0];
   const done = c?.status === "granted";
@@ -39,13 +33,13 @@ export function ConsentCard(props: ConsentCardProps) {
       statusLabel={done ? "Granted" : "Needed"}
     >
       {!done && (
-        <div className="mb-4 rounded-xl border border-line/60 bg-ink-950/40 p-4">
-          <div className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-fog-500">
-            What you're agreeing to, in one line
+        <div className="mb-6 border-l border-[color:var(--color-hair-strong)] py-1 pl-5">
+          <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+            § What you're agreeing to, in one line
           </div>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-fog-300">
-            You own (or have written permission for) this project, and you authorize Kelp to
-            send simulated attack traffic to it. Full text below — take a minute to skim it.
+          <p className="mt-3 text-[13px] leading-[1.7] text-[color:var(--color-paper-300)]">
+            You own (or have written permission for) this project, and you authorize Kelp to send
+            simulated attack traffic to it. Full text below — take a minute to skim it.
           </p>
         </div>
       )}

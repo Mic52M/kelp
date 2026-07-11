@@ -12,39 +12,45 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center px-6">
-      <div className="aurora" />
-      <div className="relative z-10 w-full max-w-sm">
-        <div className="mb-8 flex justify-center">
-          <Link href="/">
+      <div className="pointer-events-none absolute inset-y-0 left-8 hidden xl:block">
+        <div className="filament" />
+      </div>
+
+      <div className="relative w-full max-w-md">
+        <div className="mb-10 flex justify-center">
+          <Link href="/" aria-label="Kelp home">
             <Logo />
           </Link>
         </div>
 
-        <div className="glass rounded-2xl p-7">
-          <h1 className="text-xl font-semibold">
-            {mode === "signin" ? "Sign in to Kelp" : "Create your account"}
+        <div className="border border-[color:var(--color-hair)] px-8 py-9">
+          <div className="eyebrow flex items-center gap-3">
+            <span className="h-px w-6 bg-[color:var(--color-hair-strong)]" aria-hidden />
+            <span>{mode === "signin" ? "Return" : "Get started"}</span>
+          </div>
+          <h1 className="font-display mt-4 text-[30px] leading-[1.1] text-[color:var(--color-paper-50)]">
+            {mode === "signin" ? "Sign in to Kelp." : "Create your account."}
           </h1>
-          <p className="mt-1 text-sm text-fog-400">
+          <p className="mt-3 text-[13.5px] leading-[1.6] text-[color:var(--color-paper-300)]">
             {mode === "signin"
-              ? "Welcome back — pick up where you left off."
-              : "Start with one free security scan."}
+              ? "Welcome back. Pick up where you left off."
+              : "Start with one free security scan — no card, no time limit."}
           </p>
 
-          <form action={formAction} className="mt-6 space-y-3">
+          <form action={formAction} className="mt-8 space-y-5">
             <input type="hidden" name="mode" value={mode} />
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-fog-400">Email</label>
+            <Field label="Email">
               <input
                 name="email"
                 type="email"
                 autoComplete="email"
                 required
                 placeholder="you@company.com"
-                className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-aqua-600/60"
+                className="w-full border border-[color:var(--color-hair)] bg-transparent px-0 py-2 text-[14px] text-[color:var(--color-paper-50)] outline-none transition-colors focus:border-[color:var(--color-signal)] placeholder:text-[color:var(--color-paper-500)]"
+                style={{ borderWidth: "0 0 1px 0" }}
               />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-fog-400">Password</label>
+            </Field>
+            <Field label="Password">
               <input
                 name="password"
                 type="password"
@@ -52,26 +58,33 @@ export default function LoginPage() {
                 required
                 minLength={8}
                 placeholder="••••••••"
-                className="w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-aqua-600/60"
+                className="w-full border border-[color:var(--color-hair)] bg-transparent px-0 py-2 text-[14px] text-[color:var(--color-paper-50)] outline-none transition-colors focus:border-[color:var(--color-signal)] placeholder:text-[color:var(--color-paper-500)]"
+                style={{ borderWidth: "0 0 1px 0" }}
               />
-            </div>
+            </Field>
 
             {state?.error && (
-              <p className="rounded-lg border border-[color:var(--color-crit)]/30 bg-[color:var(--color-crit)]/10 px-3 py-2 text-xs text-[color:var(--color-crit)]">
+              <p
+                className="border-l px-4 py-2 font-mono text-[12px] leading-relaxed"
+                style={{
+                  borderColor: "var(--color-sev-crit)",
+                  color: "var(--color-sev-crit)",
+                }}
+              >
                 {state.error}
               </p>
             )}
 
-            <Button type="submit" size="lg" disabled={pending} className="w-full">
+            <Button type="submit" size="lg" disabled={pending} className="mt-2 w-full">
               {pending ? "…" : mode === "signin" ? "Sign in" : "Create account"}
             </Button>
           </form>
 
-          <div className="mt-5 text-center text-xs text-fog-400">
+          <div className="mt-8 text-center font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
             {mode === "signin" ? "New to Kelp?" : "Already have an account?"}{" "}
             <button
               onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-              className="text-aqua-400 transition-colors hover:text-aqua-300"
+              className="text-[color:var(--color-signal)] transition-colors hover:text-[color:var(--color-paper-50)]"
             >
               {mode === "signin" ? "Create an account" : "Sign in"}
             </button>
@@ -79,5 +92,16 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <div className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+        {label}
+      </div>
+      {children}
+    </label>
   );
 }

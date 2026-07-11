@@ -1,9 +1,6 @@
 "use client";
 
-// "How the pen test ran" panel — shows per-agent evidence of what the
-// autonomous squad actually did on the most recent active_pentest scan.
-// Purpose: turn a "0 findings" result from "did anything happen?" into "here's
-// exactly what the agents tried, and why they concluded it was clean".
+// "How the pen test ran" panel — editorial anchor, per-agent evidence.
 
 import { useState } from "react";
 import type { PersistedAgentReport } from "@/lib/data";
@@ -34,34 +31,32 @@ export function AgentReportPanel({ report }: { report: PersistedAgentReport }) {
   const tokens = total.inputTokens + total.outputTokens;
   return (
     <section className="mt-16">
-      <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-        How the pen test ran
+      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+        § How the pen test ran
       </div>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Agent report</h2>
-        <div className="flex items-center gap-2 text-[12.5px] text-fog-400">
-          <Metric>{report.outcomes.length} agents</Metric>
-          <span className="text-line">·</span>
-          <Metric>{money(total.estimatedCostUsd)}</Metric>
-          <span className="text-line">·</span>
-          <Metric>{tokens.toLocaleString()} tokens</Metric>
+      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-4">
+        <h2 className="font-display text-[28px] leading-[1.15] text-[color:var(--color-paper-50)]">
+          Agent report
+        </h2>
+        <div className="flex items-center gap-3 font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)]">
+          <span className="tabular">{report.outcomes.length} agents</span>
+          <span className="text-[color:var(--color-paper-600)]">·</span>
+          <span className="tabular">{money(total.estimatedCostUsd)}</span>
+          <span className="text-[color:var(--color-paper-600)]">·</span>
+          <span className="tabular">{tokens.toLocaleString()} tokens</span>
         </div>
       </div>
-      <p className="mt-1.5 max-w-2xl text-[13.5px] leading-relaxed text-fog-400">
-        Each agent reasons over its own attack surface, probes real endpoints, and
-        loops. Open one to see its exact steps — evidence the scan did the work.
+      <p className="mt-3 max-w-2xl text-[13.5px] leading-[1.65] text-[color:var(--color-paper-400)]">
+        Each agent reasons over its own attack surface, probes real endpoints, and loops. Open one
+        to see its exact steps — evidence the scan did the work.
       </p>
-      <div className="mt-6 space-y-3">
+      <div className="mt-8 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
         {report.outcomes.map((o) => (
           <AgentRow key={o.name} o={o} />
         ))}
       </div>
     </section>
   );
-}
-
-function Metric({ children }: { children: React.ReactNode }) {
-  return <span className="tabular-nums">{children}</span>;
 }
 
 function AgentRow({ o }: { o: PersistedAgentReport["outcomes"][number] }) {
@@ -80,60 +75,84 @@ function AgentRow({ o }: { o: PersistedAgentReport["outcomes"][number] }) {
       ? "found"
       : "clean";
 
+  const color =
+    state === "error"
+      ? "var(--color-sev-crit)"
+      : state === "found"
+        ? "var(--color-sev-high)"
+        : "var(--color-signal)";
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-line/70 bg-ink-900/40 transition-colors hover:border-line">
+    <div>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-white/[0.015]"
+        className="flex w-full items-start gap-5 py-5 text-left transition-colors"
       >
-        <StatusDot state={state} count={o.findingsCount} />
+        <span
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center border font-mono text-[11px] tabular"
+          style={{ borderColor: color, color }}
+          aria-hidden
+        >
+          {state === "error" ? "!" : state === "found" ? o.findingsCount : "✓"}
+        </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-[15px] font-medium text-fog-50">{label}</span>
+          <div className="flex flex-wrap items-baseline gap-3">
+            <span className="font-display text-[18px] leading-[1.2] text-[color:var(--color-paper-50)]">
+              {label}
+            </span>
             {followup && (
-              <span className="rounded-full border border-violet-500/40 bg-violet-500/[0.08] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-violet-300">
-                reviewer
+              <span
+                className="font-mono text-[10px] uppercase tracking-[0.16em]"
+                style={{ color: "var(--color-paper-400)" }}
+              >
+                Reviewer
               </span>
             )}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-fog-400">
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11.5px] text-[color:var(--color-paper-400)]">
             {sub && (
               <>
-                <span className="truncate">{sub}</span>
-                <span className="text-line">·</span>
+                <span>{sub}</span>
+                <span className="text-[color:var(--color-paper-600)]">·</span>
               </>
             )}
             <span>{o.steps} steps</span>
-            <span className="text-line">·</span>
-            <span className="tabular-nums">
+            <span className="text-[color:var(--color-paper-600)]">·</span>
+            <span className="tabular">
               {tokens.toLocaleString()} tokens · {money(cost)}
             </span>
           </div>
         </div>
         <ChevronIcon
-          className={`h-4 w-4 shrink-0 text-fog-500 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`mt-2 h-3.5 w-3.5 shrink-0 text-[color:var(--color-paper-500)] transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && (
-        <div className="animate-rise border-t border-line/60 px-5 py-5 text-sm text-fog-300">
+        <div className="animate-rise pb-6">
           {o.error && (
-            <p className="mb-4 rounded-lg border border-crit/30 bg-crit/[0.06] px-3 py-2 text-[13px] text-crit">
+            <p
+              className="mb-4 border-l px-4 py-2.5 font-mono text-[12px] leading-relaxed"
+              style={{ borderColor: "var(--color-sev-crit)", color: "var(--color-sev-crit)" }}
+            >
               {o.error}
             </p>
           )}
           {o.transcript.length === 0 ? (
-            <p className="text-fog-500">The agent finished without narrating any steps.</p>
+            <p className="font-mono text-[12px] text-[color:var(--color-paper-500)]">
+              The agent finished without narrating any steps.
+            </p>
           ) : (
-            <ol className="relative space-y-0 border-l border-line/50 pl-5">
+            <ol className="relative space-y-0 border-l border-[color:var(--color-hair-strong)] pl-6">
               {o.transcript.map((step, i) => (
-                <li key={i} className="relative pb-4 last:pb-0">
-                  <span className="absolute -left-[23px] top-1 flex h-3 w-3 items-center justify-center rounded-full border border-line bg-ink-900">
-                    <span className="h-1 w-1 rounded-full bg-fog-500" />
-                  </span>
-                  <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-fog-500">
-                    Step {i + 1}
+                <li key={i} className="relative pb-5 last:pb-0">
+                  <span
+                    className="absolute -left-[3px] top-1.5 inline-block h-1 w-1"
+                    style={{ background: "var(--color-signal-dim)" }}
+                  />
+                  <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+                    Step {String(i + 1).padStart(2, "0")}
                   </div>
-                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-fog-200">
+                  <p className="whitespace-pre-wrap text-[13px] leading-[1.7] text-[color:var(--color-paper-100)]">
                     {step}
                   </p>
                 </li>
@@ -143,21 +162,6 @@ function AgentRow({ o }: { o: PersistedAgentReport["outcomes"][number] }) {
         </div>
       )}
     </div>
-  );
-}
-
-function StatusDot({ state, count }: { state: "error" | "found" | "clean"; count: number }) {
-  const styles = {
-    error: "border-crit/50 text-crit",
-    found: "border-[color:var(--color-high)]/50 text-[color:var(--color-high)]",
-    clean: "border-aqua-600/40 text-aqua-400",
-  }[state];
-  return (
-    <span
-      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-medium ${styles}`}
-    >
-      {state === "error" ? "!" : state === "found" ? count : "✓"}
-    </span>
   );
 }
 

@@ -1,8 +1,7 @@
 import { EmptyState } from "@/components/EmptyState";
 import { FindingCard } from "@/components/FindingCard";
-import { PageHeader, PageHero } from "@/components/dashboard/PageHeader";
+import { PageHero } from "@/components/dashboard/PageHeader";
 import { ProjectSwitcher } from "@/components/dashboard/ProjectSwitcher";
-import { getServerSupabase } from "@/lib/supabase/server";
 import { loadDashboard } from "@/lib/data";
 
 export default async function FindingsPage({
@@ -10,31 +9,23 @@ export default async function FindingsPage({
 }: {
   searchParams?: Promise<{ project?: string }>;
 }) {
-  const supabase = await getServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const params = (await searchParams) ?? {};
   const { project, projectOptions, findings } = await loadDashboard(params.project);
   const active = findings.filter((f) => f.status !== "resolved");
   const resolved = findings.filter((f) => f.status === "resolved");
 
   return (
-    <>
-      <PageHeader
-        title="Findings"
-        email={user?.email}
-        action={
-          project && (
-            <ProjectSwitcher
-              current={{ id: project.id, name: project.name, repo: project.repo }}
-              options={projectOptions}
-            />
-          )
-        }
-      />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-14">
+    <div className="px-8 pb-24">
+      {project && (
+        <div className="flex items-center gap-4 border-b border-[color:var(--color-hair)] py-5">
+          <ProjectSwitcher
+            current={{ id: project.id, name: project.name, repo: project.repo }}
+            options={projectOptions}
+          />
+        </div>
+      )}
+
+      <div className="pt-14">
         {!project ? (
           <EmptyState
             title="No findings yet"
@@ -44,8 +35,8 @@ export default async function FindingsPage({
         ) : (
           <>
             <PageHero
-              label={project.name}
-              title="Active issues"
+              label={`§ Findings · ${project.name}`}
+              title="Active issues."
               description={
                 active.length === 0
                   ? "You're clear on the last scan — nothing to fix right now."
@@ -53,7 +44,7 @@ export default async function FindingsPage({
               }
             />
 
-            <div className="mt-10 space-y-3">
+            <div className="mt-14 space-y-3">
               {active.map((f, i) => (
                 <div
                   key={f.id}
@@ -64,36 +55,38 @@ export default async function FindingsPage({
                 </div>
               ))}
               {active.length === 0 && (
-                <div className="rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-14 text-center text-sm text-fog-400">
-                  No active findings — you're clear on the last scan.
+                <div className="border border-[color:var(--color-hair)] px-6 py-14 text-center">
+                  <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+                    Clear
+                  </div>
+                  <p className="mt-3 font-display text-[22px] leading-[1.2] text-[color:var(--color-paper-50)]">
+                    No active findings.
+                  </p>
+                  <p className="mt-2 text-[13px] text-[color:var(--color-paper-400)]">
+                    You're clear on the last scan.
+                  </p>
                 </div>
               )}
             </div>
 
             {resolved.length > 0 && (
-              <div className="mt-16">
-                <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-                  Resolved
+              <section className="mt-16">
+                <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+                  § Resolved
                 </div>
-                <h2 className="text-2xl font-semibold tracking-tight text-fog-300">
+                <h2 className="font-display mt-3 text-[26px] leading-[1.15] text-[color:var(--color-paper-300)]">
                   Fixed on the last scan
                 </h2>
                 <div className="mt-6 space-y-3 opacity-70">
-                  {resolved.map((f, i) => (
-                    <div
-                      key={f.id}
-                      className="animate-rise"
-                      style={{ animationDelay: `${(active.length + i) * 60}ms`, animationFillMode: "both" }}
-                    >
-                      <FindingCard finding={f} />
-                    </div>
+                  {resolved.map((f) => (
+                    <FindingCard key={f.id} finding={f} />
                   ))}
                 </div>
-              </div>
+              </section>
             )}
           </>
         )}
-      </main>
-    </>
+      </div>
+    </div>
   );
 }

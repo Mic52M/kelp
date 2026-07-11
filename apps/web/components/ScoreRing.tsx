@@ -1,60 +1,60 @@
-/**
- * Circular security-posture score, 0–100. Color shifts red → amber → aqua.
- * A `null` score means "no successful scan yet — we don't know", rendered as
- * a muted "—" instead of a misleading 100. Anything else is a real score.
- */
-export function ScoreRing({ score }: { score: number | null }) {
-  const r = 46;
-  const circ = 2 * Math.PI * r;
+// Security posture score rendered as a display-serif number with a hairline
+// meter beneath it. Replaces the previous circular ring — this reads like an
+// editorial data point instead of a dashboard gauge.
 
+export function ScoreRing({ score }: { score: number | null }) {
   if (score === null) {
     return (
-      <div className="relative h-32 w-32 shrink-0">
-        <svg viewBox="0 0 110 110" className="h-full w-full">
-          <circle
-            cx="55"
-            cy="55"
-            r={r}
-            fill="none"
-            stroke="var(--color-ink-700)"
-            strokeWidth="8"
-            strokeDasharray="4 6"
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-3xl font-semibold text-fog-500">—</span>
-          <span className="text-[11px] text-fog-500">no scan yet</span>
+      <div className="w-full max-w-[280px]">
+        <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+          Posture · not scanned
         </div>
+        <div className="mt-3 flex items-baseline gap-3">
+          <span className="font-display tabular text-[64px] leading-none text-[color:var(--color-paper-500)]">
+            —
+          </span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+            / 100
+          </span>
+        </div>
+        <div className="mt-6 h-px w-full bg-[color:var(--color-hair)]" />
       </div>
     );
   }
 
   const clamped = Math.max(0, Math.min(100, score));
-  const dash = (clamped / 100) * circ;
   const color =
-    clamped >= 75 ? "var(--color-ok)" : clamped >= 50 ? "var(--color-med)" : "var(--color-crit)";
+    clamped >= 75
+      ? "var(--color-sev-ok)"
+      : clamped >= 50
+        ? "var(--color-sev-med)"
+        : "var(--color-sev-crit)";
 
   return (
-    <div className="relative h-32 w-32 shrink-0">
-      <svg viewBox="0 0 110 110" className="h-full w-full -rotate-90">
-        <circle cx="55" cy="55" r={r} fill="none" stroke="var(--color-ink-700)" strokeWidth="8" />
-        <circle
-          cx="55"
-          cy="55"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${circ}`}
-          style={{ transition: "stroke-dasharray 1s ease" }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-semibold" style={{ color }}>
+    <div className="w-full max-w-[280px]">
+      <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+        Posture · out of 100
+      </div>
+      <div className="mt-3 flex items-baseline gap-3">
+        <span
+          className="font-display tabular text-[80px] leading-none"
+          style={{ color }}
+        >
           {clamped}
         </span>
-        <span className="text-[11px] text-fog-400">/ 100</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+          / 100
+        </span>
+      </div>
+      <div className="mt-6 h-px w-full bg-[color:var(--color-hair)]">
+        <div
+          className="h-px"
+          style={{
+            width: `${clamped}%`,
+            background: color,
+            transition: "width 800ms cubic-bezier(0.2,0,0,1)",
+          }}
+        />
       </div>
     </div>
   );

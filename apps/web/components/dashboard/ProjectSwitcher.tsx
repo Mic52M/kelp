@@ -1,8 +1,3 @@
-// Chip in the dashboard top-bar that lets the user switch which project is being
-// shown. Persists the selection in the URL (?project=<id>) so a shared/reloaded
-// link stays on the same project. Without a selection, the newest project wins
-// (see loadDashboard).
-
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -39,21 +34,25 @@ export function ProjectSwitcher({
         type="button"
         onClick={() => hasChoice && setOpen((v) => !v)}
         disabled={!hasChoice}
-        className={`flex items-center gap-2 rounded-lg border border-line bg-ink-800/60 px-3 py-1.5 text-sm ${
-          hasChoice ? "transition-colors hover:bg-ink-700/60" : "cursor-default"
+        className={`flex items-center gap-3 border border-[color:var(--color-hair)] bg-transparent px-3 py-1.5 text-[13px] transition-colors ${
+          hasChoice
+            ? "hover:border-[color:var(--color-hair-strong)]"
+            : "cursor-default"
         }`}
       >
-        <span className="h-2 w-2 rounded-full bg-aqua-400" />
-        <span className="font-medium">{current.name}</span>
-        <span className="font-mono text-xs text-fog-500">{current.repo}</span>
+        <span className="inline-block h-1.5 w-1.5 bg-[color:var(--color-signal)]" aria-hidden />
+        <span className="text-[color:var(--color-paper-50)]">{current.name}</span>
+        <span className="font-mono text-[11.5px] text-[color:var(--color-paper-500)]">
+          {current.repo}
+        </span>
         {hasChoice && (
           <svg
             aria-hidden
-            className={`h-3.5 w-3.5 text-fog-400 transition-transform ${open ? "rotate-180" : ""}`}
+            className={`h-3 w-3 text-[color:var(--color-paper-400)] transition-transform ${open ? "rotate-180" : ""}`}
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
@@ -65,28 +64,41 @@ export function ProjectSwitcher({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-20 mt-1.5 w-72 overflow-hidden rounded-lg border border-line bg-ink-900/95 shadow-xl backdrop-blur">
-            {options.map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => select(o.id)}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-white/[0.03] ${
-                  o.id === current.id ? "bg-white/[0.02]" : ""
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${o.id === current.id ? "bg-aqua-400" : "bg-fog-600"}`}
-                />
-                <span className="min-w-0 flex-1 truncate">
-                  <span className="font-medium">{o.name}</span>
-                  {o.repo && (
-                    <span className="ml-2 font-mono text-xs text-fog-500">{o.repo}</span>
+          <div className="absolute left-0 top-full z-20 mt-1 w-80 overflow-hidden border border-[color:var(--color-hair-strong)] bg-[color:var(--color-ink-900)]">
+            {options.map((o) => {
+              const isCurrent = o.id === current.id;
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => select(o.id)}
+                  className="flex w-full items-center gap-3 border-b border-[color:var(--color-hair)] px-3 py-2.5 text-left text-[13px] last:border-b-0 hover:bg-[color:var(--color-ink-850)]"
+                >
+                  <span
+                    className="inline-block h-1.5 w-1.5 shrink-0"
+                    style={{
+                      background: isCurrent
+                        ? "var(--color-signal)"
+                        : "var(--color-paper-600)",
+                    }}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="text-[color:var(--color-paper-50)]">{o.name}</span>
+                    {o.repo && (
+                      <span className="ml-2 font-mono text-[11.5px] text-[color:var(--color-paper-500)]">
+                        {o.repo}
+                      </span>
+                    )}
+                  </span>
+                  {isCurrent && (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-signal)]">
+                      Current
+                    </span>
                   )}
-                </span>
-                {o.id === current.id && <span className="text-xs text-aqua-400">current</span>}
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </>
       )}

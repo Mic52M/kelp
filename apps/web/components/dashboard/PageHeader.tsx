@@ -1,6 +1,8 @@
-// Minimal top-bar shown on every dashboard subpage. Just utility chrome — the
-// page's real hero (big heading + label) lives inside the page body so it gets
-// the same weight as Overview.
+// Editorial page hero — Fraunces title, mono eyebrow, hairline rule.
+// Kept as two exports to preserve compatibility with existing pages:
+//   PageHeader  — thin top-strip label used at the very top of some pages
+//   PageHero    — the big page opener (Fraunces headline)
+
 export function PageHeader({
   title,
   email,
@@ -11,21 +13,22 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <header className="flex items-center gap-4 border-b border-line/70 px-8 py-4">
-      <h1 className="text-[13px] font-medium uppercase tracking-[0.14em] text-fog-500">
+    <header className="flex items-center gap-4 border-b border-[color:var(--color-hair)] px-8 py-4">
+      <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
         {title}
-      </h1>
-      <div className="ml-auto flex items-center gap-3">
+      </span>
+      <div className="ml-auto flex items-center gap-4">
         {action}
-        {email && <span className="hidden text-xs text-fog-400 sm:inline">{email}</span>}
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-aqua-500 to-violet-500" />
+        {email && (
+          <span className="hidden font-mono text-[11.5px] text-[color:var(--color-paper-400)] sm:inline">
+            {email}
+          </span>
+        )}
       </div>
     </header>
   );
 }
 
-// Big page hero used at the top of each dashboard subpage body. Same visual
-// register as the Overview title so the app reads as one product.
 export function PageHero({
   label,
   title,
@@ -39,13 +42,16 @@ export function PageHero({
 }) {
   return (
     <div className="flex items-end justify-between gap-8">
-      <div>
-        <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-          {label}
+      <div className="min-w-0">
+        <div className="eyebrow flex items-center gap-3">
+          <span className="h-px w-6 bg-[color:var(--color-hair-strong)]" aria-hidden />
+          <span>{label}</span>
         </div>
-        <h2 className="text-4xl font-semibold tracking-tight sm:text-[42px]">{title}</h2>
+        <h2 className="font-display mt-5 text-[40px] leading-[1.05] text-[color:var(--color-paper-50)] sm:text-[48px]">
+          {title}
+        </h2>
         {description && (
-          <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-fog-300">
+          <p className="mt-4 max-w-xl text-[14.5px] leading-[1.65] text-[color:var(--color-paper-300)]">
             {description}
           </p>
         )}

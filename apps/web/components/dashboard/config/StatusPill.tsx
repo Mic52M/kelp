@@ -1,12 +1,6 @@
-import { CheckIcon, CircleIcon } from "./icons";
+// Status marker rendered as a mono chip with a leading tick, editorial anchor.
+// done · needed · optional — differentiated by tone only, never a colored bubble.
 
-/**
- * Reusable status pill used in the Configuration page. Three shapes:
- *  · done — subtle aqua, check icon
- *  · needed — amber, "Needed" label
- *  · optional — muted, "Optional" label
- * Kept tiny (11px) so multiple can sit in the same row without dominating.
- */
 export function StatusPill({
   status,
   label,
@@ -14,25 +8,36 @@ export function StatusPill({
   status: "done" | "needed" | "optional";
   label?: string;
 }) {
-  if (status === "done") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-aqua-500/12 px-2 py-0.5 text-[11px] font-medium text-aqua-300">
-        <CheckIcon className="h-3 w-3" />
-        {label ?? "Ready"}
-      </span>
-    );
-  }
-  if (status === "needed") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/12 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-        <CircleIcon className="h-3 w-3" />
-        {label ?? "Needed"}
-      </span>
-    );
-  }
+  const map = {
+    done: {
+      color: "var(--color-signal)",
+      text: label ?? "Ready",
+    },
+    needed: {
+      color: "var(--color-sev-high)",
+      text: label ?? "Needed",
+    },
+    optional: {
+      color: "var(--color-paper-500)",
+      text: label ?? "Optional",
+    },
+  } as const;
+  const s = map[status];
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-line/70 px-2 py-0.5 text-[11px] font-medium text-fog-500">
-      {label ?? "Optional"}
+    <span
+      className="inline-flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.16em]"
+      style={{ color: s.color }}
+    >
+      <span
+        className="inline-block"
+        style={{
+          width: 2,
+          height: 8,
+          background: s.color,
+        }}
+        aria-hidden
+      />
+      {s.text}
     </span>
   );
 }

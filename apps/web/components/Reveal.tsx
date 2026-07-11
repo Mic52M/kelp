@@ -1,7 +1,5 @@
-// Reveal-on-scroll primitive. Detects when the child enters the viewport and
-// applies the reveal animation. Restrained by default (16px lift + fade over
-// 700ms), staggerable via `delay`. Follows prefers-reduced-motion: if the user
-// asked for reduced motion, we show the content immediately without animation.
+// Reveal-on-scroll primitive — opacity + 8px lift over 500ms. No blur (dated,
+// cheap-feeling). Respects prefers-reduced-motion. Staggerable via `delay`.
 
 "use client";
 
@@ -13,18 +11,27 @@ interface RevealProps {
   delay?: number;
   /** intersection ratio at which we trigger — lower = fires earlier */
   threshold?: number;
-  /** extra classes appended to the wrapper */
+  /** initial y offset in pixels (default 8) */
+  y?: number;
+  /** total duration in ms (default 520) */
+  duration?: number;
   className?: string;
 }
 
-export function Reveal({ children, delay = 0, threshold = 0.15, className = "" }: RevealProps) {
+export function Reveal({
+  children,
+  delay = 0,
+  threshold = 0.12,
+  y = 8,
+  duration = 520,
+  className = "",
+}: RevealProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // Respect the OS preference — no distracting motion for users who opt out.
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduced) {
       setVisible(true);
@@ -39,7 +46,7 @@ export function Reveal({ children, delay = 0, threshold = 0.15, className = "" }
           }
         }
       },
-      { threshold, rootMargin: "0px 0px -60px 0px" },
+      { threshold, rootMargin: "0px 0px -40px 0px" },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -50,11 +57,12 @@ export function Reveal({ children, delay = 0, threshold = 0.15, className = "" }
       ref={ref}
       style={{
         transitionDelay: visible ? `${delay}ms` : "0ms",
+        transitionDuration: `${duration}ms`,
+        transform: visible ? "translateY(0)" : `translateY(${y}px)`,
+        opacity: visible ? 1 : 0,
         willChange: "opacity, transform",
       }}
-      className={`transition-all duration-700 ease-out ${
-        visible ? "opacity-100 translate-y-0 blur-0" : "opacity-0 translate-y-4 blur-[2px]"
-      } ${className}`}
+      className={`transition-all ease-[cubic-bezier(0.2,0,0,1)] ${className}`}
     >
       {children}
     </div>

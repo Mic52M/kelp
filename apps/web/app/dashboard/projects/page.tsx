@@ -1,63 +1,69 @@
 import Link from "next/link";
 import { Button, buttonClasses } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
-import { PageHeader, PageHero } from "@/components/dashboard/PageHeader";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { PageHero } from "@/components/dashboard/PageHeader";
 import { loadProjects } from "@/lib/data";
 import { rescanAction, resetStuckScanAction } from "../actions";
 
 export default async function ProjectsPage() {
-  const supabase = await getServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
   const projects = await loadProjects();
 
   return (
-    <>
-      <PageHeader title="Projects" email={user?.email} />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-14">
-        {projects.length === 0 ? (
-          <EmptyState
-            title="No projects yet"
-            body="Connect a GitHub repository or a Supabase project to run your first Kelp scan."
-            cta={{ href: "/onboarding", label: "Connect your first project" }}
+    <div className="px-8 pb-24 pt-14">
+      {projects.length === 0 ? (
+        <EmptyState
+          title="No projects yet"
+          body="Connect a GitHub repository or a Supabase project to run your first Kelp scan."
+          cta={{ href: "/onboarding", label: "Connect your first project" }}
+        />
+      ) : (
+        <>
+          <PageHero
+            label="§ Projects · workspace"
+            title="Projects."
+            description={`${projects.length} connected ${projects.length === 1 ? "project" : "projects"} — re-scan any of them or connect a new one.`}
+            action={
+              <Link href="/onboarding" className={buttonClasses("primary")}>
+                Connect project
+              </Link>
+            }
           />
-        ) : (
-          <>
-            <PageHero
-              label="Workspace"
-              title="Projects"
-              description={`${projects.length} connected ${projects.length === 1 ? "project" : "projects"} — re-scan any of them or connect a new one.`}
-              action={
-                <Link href="/onboarding" className={buttonClasses("primary")}>
-                  Connect project
-                </Link>
-              }
-            />
 
-            <div className="mt-10 space-y-3">
-            {projects.map((p, i) => {
+          <div className="mt-14 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
+            {projects.map((p) => {
               const scanning = p.scanStatus === "queued" || p.scanStatus === "running";
               return (
                 <div
                   key={p.id}
-                  className="glass animate-rise flex items-center gap-4 rounded-2xl px-5 py-4 transition-all hover:-translate-y-0.5 hover:border-white/10 hover:shadow-[0_20px_60px_-40px_rgba(0,0,0,0.9)]"
-                  style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
+                  className="grid grid-cols-1 items-center gap-4 py-5 lg:grid-cols-12"
                 >
-                  <span className={`h-2 w-2 rounded-full ${scanning ? "bg-aqua-400 animate-pulse-soft" : "bg-fog-600"}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[15px] font-medium">{p.name}</div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-fog-500">
-                      {p.repo && <span className="font-mono">{p.repo}</span>}
-                      {p.repo && p.supabaseRef && <span className="text-line">·</span>}
-                      {p.supabaseRef && <span className="font-mono">Supabase {p.supabaseRef}</span>}
+                  <div className="flex items-center gap-3 lg:col-span-1">
+                    <span
+                      className="inline-block h-1.5 w-1.5"
+                      style={{
+                        background: scanning
+                          ? "var(--color-signal)"
+                          : "var(--color-paper-600)",
+                      }}
+                      aria-hidden
+                    />
+                  </div>
+                  <div className="min-w-0 lg:col-span-6">
+                    <div className="font-display text-[18px] leading-[1.2] text-[color:var(--color-paper-50)]">
+                      {p.name}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11.5px] text-[color:var(--color-paper-500)]">
+                      {p.repo && <span>{p.repo}</span>}
+                      {p.repo && p.supabaseRef && <span aria-hidden>·</span>}
+                      {p.supabaseRef && <span>Supabase · {p.supabaseRef}</span>}
                     </div>
                   </div>
-                  <span className="shrink-0 text-sm text-fog-400">
-                    {p.activeFindings} {p.activeFindings === 1 ? "finding" : "findings"}
-                  </span>
-                  <div className="shrink-0 flex flex-col items-end gap-1">
+                  <div className="lg:col-span-2 lg:text-right">
+                    <span className="font-mono tabular text-[12px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)]">
+                      {p.activeFindings} {p.activeFindings === 1 ? "finding" : "findings"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 lg:col-span-3 lg:justify-end">
                     <form action={rescanAction}>
                       <input type="hidden" name="projectId" value={p.id} />
                       <Button type="submit" variant="secondary" size="sm" disabled={scanning}>
@@ -69,7 +75,7 @@ export default async function ProjectsPage() {
                         <input type="hidden" name="projectId" value={p.id} />
                         <button
                           type="submit"
-                          className="text-[10.5px] text-fog-500 underline decoration-fog-700 underline-offset-2 transition-colors hover:text-fog-300"
+                          className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)] underline decoration-[color:var(--color-hair-strong)] underline-offset-4 transition-colors hover:text-[color:var(--color-paper-300)]"
                         >
                           Reset if stuck
                         </button>
@@ -79,10 +85,9 @@ export default async function ProjectsPage() {
                 </div>
               );
             })}
-            </div>
-          </>
-        )}
-      </main>
-    </>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

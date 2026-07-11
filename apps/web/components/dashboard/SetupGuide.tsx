@@ -1,9 +1,7 @@
 "use client";
 
-// Inline "How do I get this?" collapsible shown under each Settings input.
-// Three zones — what it is, where to get it (per platform tabs), or a
-// paste-ready AI prompt. Zero JS for the open/close (uses <details>), just
-// a small state for the platform tab selector.
+// Inline "How do I get this?" collapsible shown under each setup input.
+// Editorial anchor — hairline shell, mono eyebrow, hairline "tabs".
 
 import { useState } from "react";
 import { CopyBlock } from "./CopyBlock";
@@ -20,29 +18,42 @@ export function SetupGuide({
   const active = content.platforms.find((p) => p.platform === platform) ?? content.platforms[0];
 
   return (
-    <details className="group mt-2 rounded-xl border border-line/60 bg-ink-900/30 open:border-line/80">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-ink-900/60">
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-fog-500/10 px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wider text-fog-400">
-            How to
+    <details className="group border border-[color:var(--color-hair)]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[color:var(--color-ink-850)]">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+            How-to
           </span>
-          <span className="text-[13px] font-medium text-fog-100">{title}</span>
+          <span className="text-[13px] text-[color:var(--color-paper-100)]">{title}</span>
         </div>
-        <span className="text-fog-400 transition-transform group-open:rotate-180" aria-hidden>
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+        <span
+          className="text-[color:var(--color-paper-400)] transition-transform group-open:rotate-180"
+          aria-hidden
+        >
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-3.5 w-3.5"
+          >
             <path d="m6 8 4 4 4-4" />
           </svg>
         </span>
       </summary>
 
-      <div className="border-t border-line/60 px-4 pb-4 pt-4 text-sm leading-relaxed text-fog-300">
-        <p className="text-[13px] text-fog-200">{content.whatIsIt}</p>
+      <div className="space-y-6 border-t border-[color:var(--color-hair)] px-5 pb-5 pt-5">
+        <p className="text-[13px] leading-[1.7] text-[color:var(--color-paper-100)]">
+          {content.whatIsIt}
+        </p>
 
-        <div className="mt-4">
-          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-            Where to get it
+        <div>
+          <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+            § Where to get it
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="mt-3 flex flex-wrap gap-2">
             {content.platforms.map((p) => {
               const on = p.platform === (active?.platform ?? content.platforms[0]?.platform);
               return (
@@ -50,11 +61,13 @@ export function SetupGuide({
                   key={p.platform}
                   type="button"
                   onClick={() => setPlatform(p.platform)}
-                  className={`rounded-full px-3 py-1 text-[11px] transition-colors ${
-                    on
-                      ? "bg-aqua-500/15 text-aqua-300"
-                      : "border border-line/70 bg-ink-900/60 text-fog-400 hover:text-fog-200"
-                  }`}
+                  className="border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors"
+                  style={{
+                    borderColor: on
+                      ? "var(--color-signal-dim)"
+                      : "var(--color-hair)",
+                    color: on ? "var(--color-signal)" : "var(--color-paper-400)",
+                  }}
                 >
                   {p.platform}
                 </button>
@@ -62,7 +75,7 @@ export function SetupGuide({
             })}
           </div>
           {active && (
-            <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[13px] text-fog-300">
+            <ol className="mt-4 list-decimal space-y-2 pl-5 text-[13px] leading-[1.7] text-[color:var(--color-paper-300)]">
               {active.steps.map((s, i) => (
                 <li key={i}>{s}</li>
               ))}
@@ -73,7 +86,8 @@ export function SetupGuide({
               href={active.link.href}
               target="_blank"
               rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-1 text-[12px] text-aqua-400 hover:text-aqua-300"
+              className="mt-4 inline-flex items-center gap-1 font-mono text-[11.5px] uppercase tracking-[0.14em] transition-colors"
+              style={{ color: "var(--color-signal)" }}
             >
               {active.link.label} <span aria-hidden>↗</span>
             </a>
@@ -81,11 +95,9 @@ export function SetupGuide({
         </div>
 
         {content.prompt && (
-          <div className="mt-5">
-            <div className="mb-1.5 flex items-baseline justify-between">
-              <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-                Or paste this into {content.prompt.target}
-              </div>
+          <div>
+            <div className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+              § Or paste this into {content.prompt.target}
             </div>
             <CopyBlock
               label={`Paste into ${content.prompt.target}`}
@@ -96,9 +108,9 @@ export function SetupGuide({
         )}
 
         {content.secondary && (
-          <div className="mt-4">
-            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-              Doing it by hand? Paste this into {content.secondary.target}
+          <div>
+            <div className="mb-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+              § Doing it by hand? Paste this into {content.secondary.target}
             </div>
             <CopyBlock
               label={`Paste into ${content.secondary.target}`}
@@ -109,7 +121,7 @@ export function SetupGuide({
         )}
 
         {content.caveat && (
-          <p className="mt-4 border-l-2 border-line/60 pl-3 text-[12px] text-fog-500">
+          <p className="border-l border-[color:var(--color-hair-strong)] pl-4 text-[12px] leading-[1.7] text-[color:var(--color-paper-500)]">
             {content.caveat}
           </p>
         )}

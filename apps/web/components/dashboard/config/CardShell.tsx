@@ -2,10 +2,9 @@ import type { ReactNode } from "react";
 import { StatusPill } from "./StatusPill";
 
 /**
- * Shared shell for the three primary Configuration cards. Ensures the same
- * hierarchy (icon → title → status pill → description → body) so scanning
- * the page feels consistent. Cards get an `id` for anchor navigation from
- * the progress banner.
+ * Shared shell for Configuration cards. Editorial anchor — hairline border,
+ * mono eyebrow, Fraunces title, StatusPill inline. Anchor id preserved for
+ * the progress banner jumps.
  */
 export function CardShell({
   id,
@@ -31,35 +30,45 @@ export function CardShell({
   return (
     <section
       id={id}
-      className="scroll-mt-20 rounded-2xl border border-line/70 bg-ink-900/40"
+      className="scroll-mt-24 border border-[color:var(--color-hair)] bg-transparent"
     >
-      <header className="flex items-start gap-4 border-b border-line/60 px-6 py-5">
+      <header className="flex items-start gap-5 border-b border-[color:var(--color-hair)] px-6 py-5">
         <div
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-            status === "done"
-              ? "bg-aqua-500/12 text-aqua-300"
-              : status === "needed"
-                ? "bg-amber-500/12 text-amber-300"
-                : "bg-ink-800/70 text-fog-400"
-          }`}
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border"
+          style={{
+            borderColor:
+              status === "done"
+                ? "var(--color-signal-dim)"
+                : status === "needed"
+                  ? "var(--color-sev-high)"
+                  : "var(--color-hair-strong)",
+            color:
+              status === "done"
+                ? "var(--color-signal)"
+                : status === "needed"
+                  ? "var(--color-sev-high)"
+                  : "var(--color-paper-400)",
+          }}
         >
           {icon}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-[10.5px] font-medium uppercase tracking-[0.14em] text-fog-500">
-            Step {step}
+          <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+            § Step {String(step).padStart(2, "0")}
           </div>
-          <div className="mt-0.5 flex items-center gap-3">
-            <h2 className="text-lg font-semibold tracking-tight text-fog-100">{title}</h2>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <h2 className="font-display text-[22px] leading-[1.15] text-[color:var(--color-paper-50)]">
+              {title}
+            </h2>
             <StatusPill status={status} label={statusLabel} />
           </div>
-          <p className="mt-1.5 max-w-xl text-[13.5px] leading-relaxed text-fog-400">
+          <p className="mt-3 max-w-xl text-[13.5px] leading-[1.65] text-[color:var(--color-paper-400)]">
             {description}
           </p>
         </div>
         {headerRight && <div className="shrink-0">{headerRight}</div>}
       </header>
-      <div className="px-6 py-5">{children}</div>
+      <div className="px-6 py-6">{children}</div>
     </section>
   );
 }

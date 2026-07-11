@@ -3,8 +3,7 @@
 // Repo-first onboarding. Connecting a project just links a GitHub repository —
 // no API-key prompts. Kelp reads the repo, auto-detects the Supabase backend
 // (URL + anon key + schema, even for Lovable Cloud), and sends the user to
-// Configuration to finish (test accounts + consent). Everything credential-
-// related now lives in Configuration, not here.
+// Configuration to finish (test accounts + consent).
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -73,7 +72,6 @@ export default function Onboarding() {
       repoFullName: selectedRepo.fullName,
       installationId: selectedRepo.installationId ?? null,
     });
-    // On success the action redirects to Configuration; only errors return here.
     setSubmitting(false);
     setSubmitError(res.error);
   }
@@ -84,93 +82,125 @@ export default function Onboarding() {
 
   return (
     <div className="relative min-h-screen">
-      <div className="aurora" />
-      <header className="relative z-10 mx-auto flex max-w-3xl items-center justify-between px-6 py-6">
-        <Link href="/">
+      <div className="pointer-events-none absolute inset-y-0 left-[max(1.5rem,calc(50%-560px))] hidden xl:block">
+        <div className="filament" />
+      </div>
+
+      <header className="mx-auto flex max-w-3xl items-center justify-between px-6 py-8">
+        <Link href="/" aria-label="Kelp home">
           <Logo />
         </Link>
-        <span className="text-sm text-fog-400">Connect a project</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+          Connect a project
+        </span>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-3xl px-6 pb-24">
-        <div className="glass rounded-2xl p-7">
-          <div className="animate-rise">
-            <h1 className="text-xl font-semibold">Connect a repository</h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-fog-300">
-              Pick the repo of the app you want to secure. Kelp reads the code to
-              map your backend — it auto-detects Supabase (including Lovable
-              Cloud) from the source. You'll finish setup in Configuration; no
-              API keys needed here.
-            </p>
+      <div className="mx-auto max-w-3xl px-6">
+        <div className="h-px w-full bg-[color:var(--color-hair)]" />
+      </div>
 
-            <div className="mt-6">
-              {!repos && (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <Button onClick={startInstall} disabled={installing} size="lg">
-                    {installing ? "Redirecting to GitHub…" : "Install the Kelp GitHub App"}
-                  </Button>
-                  <Button onClick={loadRepos} disabled={loadingRepos} variant="tertiary">
-                    {loadingRepos ? "Loading…" : "Already installed? Load my repositories"}
-                  </Button>
-                </div>
-              )}
-              {installNote && (
-                <p className="mt-3 rounded-lg border border-aqua-600/40 bg-aqua-500/[0.08] px-3 py-2 text-xs text-aqua-300">
-                  {installNote}
-                </p>
-              )}
-              {repoError && <ErrorNote>{repoError}</ErrorNote>}
+      <main className="mx-auto max-w-3xl px-6 pb-24 pt-16">
+        <div className="eyebrow flex items-center gap-3">
+          <span className="h-px w-6 bg-[color:var(--color-hair-strong)]" aria-hidden />
+          <span>§ Onboarding · Step 01</span>
+        </div>
+        <h1 className="font-display mt-6 text-[44px] leading-[1.05] text-[color:var(--color-paper-50)] sm:text-[52px]">
+          Connect a repository.
+        </h1>
+        <p className="mt-5 max-w-xl text-[15px] leading-[1.65] text-[color:var(--color-paper-300)]">
+          Pick the repo of the app you want to secure. Kelp reads the code to map your backend —
+          it auto-detects Supabase (including Lovable Cloud) from the source. You'll finish setup
+          in Configuration; no API keys needed here.
+        </p>
 
-              {repos && (
-                <>
-                  <input
-                    value={repoFilter}
-                    onChange={(e) => setRepoFilter(e.target.value)}
-                    placeholder={`Filter ${repos.length} repositories…`}
-                    className="mb-2 w-full rounded-lg border border-line bg-ink-900 px-3.5 py-2 text-sm outline-none focus:border-aqua-600/60"
-                  />
-                  <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                    {filteredRepos.map((r) => (
-                      <button
-                        key={r.fullName}
-                        onClick={() => setSelectedRepo(selectedRepo?.fullName === r.fullName ? null : r)}
-                        className={`flex w-full items-center justify-between rounded-lg border px-3.5 py-2.5 text-left text-sm transition-colors ${
-                          selectedRepo?.fullName === r.fullName
-                            ? "border-aqua-600/50 bg-aqua-500/10 text-fog-50"
-                            : "border-line bg-ink-900/50 text-fog-300 hover:border-line hover:bg-white/[0.02]"
-                        }`}
-                      >
-                        <span className="truncate font-mono">{r.fullName}</span>
-                        {selectedRepo?.fullName === r.fullName && <span className="text-aqua-400">✓</span>}
-                      </button>
-                    ))}
-                    {filteredRepos.length === 0 && (
-                      <p className="px-1 py-4 text-sm text-fog-500">No repositories match.</p>
-                    )}
-                    {repos.length === 0 && (
-                      <div className="px-1 py-4 text-sm text-fog-500">
-                        No repositories yet.{" "}
-                        <button onClick={startInstall} className="text-aqua-400 hover:text-aqua-300">
-                          Install the Kelp GitHub App
-                        </button>{" "}
-                        and grant it access to a repo.
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {submitError && <ErrorNote>{submitError}</ErrorNote>}
-
-            <div className="mt-7 flex items-center justify-between border-t border-line/70 pt-5">
-              <Link href="/dashboard" className="text-sm text-fog-400 hover:text-fog-200">
-                Skip for now
-              </Link>
-              <Button onClick={connect} disabled={!selectedRepo || submitting} size="lg">
-                {submitting ? "Connecting…" : "Connect & continue"}
+        <div className="mt-12 border border-[color:var(--color-hair)] p-8">
+          {!repos && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Button onClick={startInstall} disabled={installing} size="lg">
+                {installing ? "Redirecting to GitHub…" : "Install the Kelp GitHub App"}
+              </Button>
+              <Button onClick={loadRepos} disabled={loadingRepos} variant="tertiary">
+                {loadingRepos ? "Loading…" : "Already installed? Load my repositories"}
               </Button>
             </div>
+          )}
+          {installNote && (
+            <p
+              className="mt-4 border-l px-4 py-2.5 font-mono text-[12px] leading-relaxed"
+              style={{ borderColor: "var(--color-signal-dim)", color: "var(--color-signal)" }}
+            >
+              {installNote}
+            </p>
+          )}
+          {repoError && <ErrorNote>{repoError}</ErrorNote>}
+
+          {repos && (
+            <>
+              <div className="mb-4 font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+                Repositories
+              </div>
+              <input
+                value={repoFilter}
+                onChange={(e) => setRepoFilter(e.target.value)}
+                placeholder={`Filter ${repos.length} repositories…`}
+                className="mb-3 w-full border-b border-[color:var(--color-hair)] bg-transparent px-0 py-2 text-[14px] text-[color:var(--color-paper-50)] outline-none transition-colors focus:border-[color:var(--color-signal)] placeholder:text-[color:var(--color-paper-500)]"
+              />
+              <div className="max-h-72 divide-y divide-[color:var(--color-hair)] overflow-y-auto border-y border-[color:var(--color-hair)]">
+                {filteredRepos.map((r) => {
+                  const isSelected = selectedRepo?.fullName === r.fullName;
+                  return (
+                    <button
+                      key={r.fullName}
+                      onClick={() =>
+                        setSelectedRepo(isSelected ? null : r)
+                      }
+                      className="flex w-full items-center justify-between px-3 py-2.5 text-left font-mono text-[13px] transition-colors hover:bg-[color:var(--color-ink-850)]"
+                      style={{
+                        color: isSelected ? "var(--color-paper-50)" : "var(--color-paper-300)",
+                      }}
+                    >
+                      <span className="truncate">{r.fullName}</span>
+                      {isSelected && (
+                        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-signal)]">
+                          Selected
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+                {filteredRepos.length === 0 && (
+                  <p className="px-3 py-4 font-mono text-[12px] text-[color:var(--color-paper-500)]">
+                    No repositories match.
+                  </p>
+                )}
+                {repos.length === 0 && (
+                  <div className="px-3 py-4 font-mono text-[12px] text-[color:var(--color-paper-500)]">
+                    No repositories yet.{" "}
+                    <button
+                      onClick={startInstall}
+                      className="text-[color:var(--color-signal)] hover:text-[color:var(--color-paper-50)]"
+                    >
+                      Install the Kelp GitHub App
+                    </button>{" "}
+                    and grant it access to a repo.
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {submitError && <ErrorNote>{submitError}</ErrorNote>}
+
+          <div className="mt-8 flex items-center justify-between border-t border-[color:var(--color-hair)] pt-6">
+            <Link
+              href="/dashboard"
+              className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)] transition-colors hover:text-[color:var(--color-paper-50)]"
+            >
+              Skip for now
+            </Link>
+            <Button onClick={connect} disabled={!selectedRepo || submitting} size="lg">
+              {submitting ? "Connecting…" : "Connect & continue"}
+            </Button>
           </div>
         </div>
       </main>
@@ -180,7 +210,10 @@ export default function Onboarding() {
 
 function ErrorNote({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-3 rounded-lg border border-[color:var(--color-crit)]/30 bg-[color:var(--color-crit)]/10 px-3 py-2 text-xs text-[color:var(--color-crit)]">
+    <p
+      className="mt-4 border-l px-4 py-2.5 font-mono text-[12px] leading-relaxed"
+      style={{ borderColor: "var(--color-sev-crit)", color: "var(--color-sev-crit)" }}
+    >
       {children}
     </p>
   );

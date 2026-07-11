@@ -1,10 +1,10 @@
-// Unified button primitive — the single source of truth for CTAs.
+// Editorial-industrial button primitive.
 //
-// Three intents: `primary` (aqua gradient, one per screen — the action that
-// commits/advances/pays), `secondary` (dark ghost-line, non-destructive
-// alternates like Re-scan/Dismiss), `tertiary` (subtle text-only for
-// low-emphasis affordances). `buttonClasses` is exported so <Link>/<a> can
-// wear the same skin without a wrapper element.
+// primary = the single kelp-signal action per view (Start / Run / Save).
+// secondary = ghost with hairline border for reversible alternates.
+// tertiary = text-only, for low-emphasis links inside prose.
+//
+// No gradients, no shadows, no rounded pills. Square-cornered, tight.
 
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 
@@ -12,20 +12,23 @@ export type ButtonVariant = "primary" | "secondary" | "tertiary";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const BASE =
-  "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aqua-500/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-950 " +
-  "disabled:opacity-50 disabled:pointer-events-none";
+  "inline-flex items-center justify-center gap-2 font-medium transition-colors " +
+  "focus-visible:outline focus-visible:outline-1 focus-visible:outline-[color:var(--color-signal)] focus-visible:outline-offset-2 " +
+  "disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap";
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-gradient-to-r from-aqua-400 to-aqua-600 text-ink-950 hover:opacity-90",
-  secondary: "border border-line bg-ink-800 text-fog-50 hover:bg-ink-700",
-  tertiary: "text-fog-300 hover:text-fog-50",
+  primary:
+    "bg-[color:var(--color-signal)] text-[color:var(--color-signal-ink)] hover:bg-[color:var(--color-paper-50)]",
+  secondary:
+    "border border-[color:var(--color-hair-strong)] bg-transparent text-[color:var(--color-paper-50)] hover:border-[color:var(--color-paper-300)]",
+  tertiary:
+    "text-[color:var(--color-paper-300)] hover:text-[color:var(--color-paper-50)]",
 };
 
 const SIZE: Record<ButtonSize, string> = {
-  sm: "px-3 py-1.5 text-xs",
-  md: "px-3.5 py-2 text-sm",
-  lg: "px-5 py-2.5 text-sm font-semibold",
+  sm: "h-8 px-3 text-[13px] rounded-[2px]",
+  md: "h-9 px-4 text-[13px] rounded-[2px]",
+  lg: "h-11 px-5 text-sm rounded-[2px]",
 };
 
 export function buttonClasses(

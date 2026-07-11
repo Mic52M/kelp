@@ -26,16 +26,21 @@ export default async function Dashboard({
   }
 
   const params = (await searchParams) ?? {};
-  const { project, projectOptions, findings, summary, scanStatus, scanMode, scanIssues, activePentest, agentReport } =
-    await loadDashboard(params.project);
+  const {
+    project,
+    projectOptions,
+    findings,
+    summary,
+    scanStatus,
+    scanMode,
+    scanIssues,
+    activePentest,
+    agentReport,
+  } = await loadDashboard(params.project);
   const scanning = scanStatus === "queued" || scanStatus === "running";
   const openActive = findings.filter(
     (f) => f.status !== "resolved" && f.status !== "needs_review",
   );
-  // "This scan" = findings the latest scan re-detected. "Previous scans" =
-  // findings still open but not re-touched by the latest run (autonomous
-  // scans don't auto-resolve — this section keeps them visible + labeled
-  // instead of mixing them with what the fresh run just filed).
   const active = openActive.filter((f) => f.fromLatestScan);
   const carryover = openActive.filter((f) => !f.fromLatestScan);
   const needsJudgment = findings.filter((f) => f.status === "needs_review");
@@ -43,25 +48,30 @@ export default async function Dashboard({
   const hasScanEver = scanStatus !== null;
 
   return (
-    <>
-      {/* Topbar */}
-      <header className="flex items-center gap-4 border-b border-line/70 px-8 py-4">
+    <div className="px-8 pb-24">
+      {/* Context bar — project switcher + last-scan meta + primary actions.
+          The global TopNav lives above this. */}
+      <div className="flex flex-wrap items-center gap-4 border-b border-[color:var(--color-hair)] py-5">
         {project ? (
           <ProjectSwitcher
             current={{ id: project.id, name: project.name, repo: project.repo }}
             options={projectOptions}
           />
         ) : (
-          <div className="flex items-center gap-2 rounded-lg border border-line bg-ink-800/60 px-3 py-1.5 text-sm">
-            <span className="h-2 w-2 rounded-full bg-fog-600" />
-            <span className="font-medium">No project yet</span>
+          <div className="flex items-center gap-3 border border-[color:var(--color-hair)] px-3 py-1.5 text-[13px]">
+            <span className="inline-block h-1.5 w-1.5 bg-[color:var(--color-paper-600)]" aria-hidden />
+            <span className="text-[color:var(--color-paper-300)]">No project yet</span>
           </div>
         )}
         {project && scanStatus !== null && (
-          <span className="text-xs text-fog-500">Last scan {project.lastScan}</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+            Last scan · {project.lastScan}
+          </span>
         )}
         {project && scanStatus === null && (
-          <span className="text-xs text-fog-500">No scan yet</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+            No scan yet
+          </span>
         )}
         <div className="ml-auto flex items-center gap-3">
           {project ? (
@@ -83,39 +93,32 @@ export default async function Dashboard({
               Connect a project
             </Link>
           )}
-          {user?.email && (
-            <span className="hidden text-xs text-fog-400 sm:inline">{user.email}</span>
-          )}
-          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-aqua-500 to-violet-500" />
         </div>
-      </header>
+      </div>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-14">
-        {/* Section label — Resend-style tiny uppercase */}
-        <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-          Overview
+      <main className="pt-14">
+        <div className="eyebrow flex items-center gap-3">
+          <span className="h-px w-6 bg-[color:var(--color-hair-strong)]" aria-hidden />
+          <span>§ Overview</span>
         </div>
 
         {scanning ? (
           <>
-            {/* Full-space scanning takeover (#7 tail): the old ScoreRing/stats
-                and Findings list are hidden while a scan runs so the user's
-                attention is on progress, not stale numbers. */}
-            <h1 className="text-4xl font-semibold tracking-tight sm:text-[42px]">
-              {scanMode === "active_pentest" ? "Running the pen test" : "Scanning your project"}
+            <h1 className="font-display mt-6 text-[52px] leading-[1.02] text-[color:var(--color-paper-50)]">
+              {scanMode === "active_pentest" ? "Running the pen test." : "Scanning your project."}
             </h1>
-            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-fog-300">
+            <p className="mt-5 max-w-xl text-[15px] leading-[1.65] text-[color:var(--color-paper-300)]">
               We'll refresh this page automatically the moment the scan finishes.
             </p>
-            <div className="mt-10">
+            <div className="mt-12">
               <ScanningView status={scanStatus} mode={scanMode} />
               {project && (
-                <div className="mt-8 text-center">
+                <div className="mt-10 text-center">
                   <form action={resetStuckScanAction} className="inline-block">
                     <input type="hidden" name="projectId" value={project.id} />
                     <button
                       type="submit"
-                      className="text-[12px] text-fog-500 underline decoration-fog-700 underline-offset-2 transition-colors hover:text-fog-300"
+                      className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)] underline decoration-[color:var(--color-hair-strong)] underline-offset-4 transition-colors hover:text-[color:var(--color-paper-300)]"
                     >
                       Scan feels stuck? Reset it
                     </button>
@@ -126,11 +129,10 @@ export default async function Dashboard({
           </>
         ) : (
           <>
-            {/* Hero — big title with accent gradient, one-line context */}
-            <h1 className="text-4xl font-semibold tracking-tight sm:text-[42px]">
-              Security posture
+            <h1 className="font-display mt-6 text-[52px] leading-[1.02] text-[color:var(--color-paper-50)]">
+              Security posture.
             </h1>
-            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-fog-300">
+            <p className="mt-5 max-w-xl text-[15px] leading-[1.65] text-[color:var(--color-paper-300)]">
               {!project
                 ? "Connect a project to run your first scan."
                 : scanStatus === null
@@ -142,217 +144,214 @@ export default async function Dashboard({
                       : "Nothing found in the last scan. You're clear."}
             </p>
 
-            {/* Score + severity distribution: one open surface, premium */}
-            <div className="mt-10 flex flex-col items-start gap-10 sm:flex-row sm:items-center sm:gap-14">
-              <ScoreRing score={summary.score} />
-              <div className="w-full flex-1">
-                <SeverityMeter
-                  counts={{
-                    critical: summary.critical,
-                    high: summary.high,
-                    medium: summary.medium,
-                    low: summary.low ?? 0,
-                    resolved: summary.resolved,
-                  }}
-                  hasScan={scanStatus !== null}
-                />
+            {/* Score + severity distribution, side by side on wide viewports. */}
+            <div className="mt-14 grid grid-cols-1 gap-12 border-b border-[color:var(--color-hair)] pb-14 lg:grid-cols-12 lg:gap-16">
+              <div className="lg:col-span-4">
+                <ScoreRing score={summary.score} />
+              </div>
+              <div className="lg:col-span-8">
+                <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+                  Distribution
+                </div>
+                <div className="mt-4">
+                  <SeverityMeter
+                    counts={{
+                      critical: summary.critical,
+                      high: summary.high,
+                      medium: summary.medium,
+                      low: summary.low ?? 0,
+                      resolved: summary.resolved,
+                    }}
+                    hasScan={scanStatus !== null}
+                  />
+                </div>
               </div>
             </div>
-
-            {/* Subtle rule separating hero from list — Resend uses these a lot */}
-            <div className="mt-14 h-px w-full bg-gradient-to-r from-transparent via-line to-transparent" />
 
             {scanIssues.length > 0 && (
               <div className="mt-10 space-y-2">
                 {scanIssues.map((issue) => (
                   <div
                     key={issue}
-                    className="flex items-start gap-2.5 rounded-xl border border-[color:var(--color-high)]/25 bg-[color:var(--color-high)]/[0.06] px-4 py-3 text-sm text-fog-200"
+                    className="flex items-start gap-3 border-l px-4 py-3 text-[13.5px] leading-relaxed"
+                    style={{
+                      borderColor: "var(--color-sev-high)",
+                      color: "var(--color-paper-200, var(--color-paper-100))",
+                    }}
                   >
-                    <span className="mt-0.5 text-[color:var(--color-high)]">!</span>
-                    <span>{issue}</span>
+                    <span className="font-mono" style={{ color: "var(--color-sev-high)" }}>!</span>
+                    <span className="text-[color:var(--color-paper-100)]">{issue}</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Findings — split into "this scan" vs "previous scans" so the
-                fresh run is unambiguous. Carryover section only renders when
-                there's actually carryover to show. */}
-            <div className="mt-14">
-              <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-                Findings
-                {hasScanEver && carryover.length > 0 && (
-                  <span className="rounded-full border border-aqua-600/40 bg-aqua-500/[0.08] px-2 py-0.5 text-[10px] font-medium tracking-normal text-aqua-300">
-                    this scan
-                  </span>
-                )}
-              </div>
-              <div className="flex items-baseline justify-between">
-                <h2 className="text-2xl font-semibold tracking-tight">
-                  {carryover.length > 0 ? "From this scan" : "Active issues"}
-                </h2>
-                <span className="text-sm text-fog-400">
-                  {active.length} {active.length === 1 ? "finding" : "findings"}
-                </span>
-              </div>
-              {carryover.length > 0 && (
-                <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-fog-400">
-                  What the most recent pen test just filed. Older findings that
-                  weren&rsquo;t re-detected sit below — kept visible so nothing
-                  gets silently dropped.
-                </p>
-              )}
-              <div className="mt-6 space-y-3">
-                {active.map((f, i) => (
-                  <div
-                    key={f.id}
-                    className="animate-rise"
-                    style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
-                  >
-                    <FindingCard finding={f} />
-                  </div>
-                ))}
-                {active.length === 0 && project && (
-                  <div className="rounded-2xl border border-line/60 bg-ink-900/30 px-6 py-16 text-center">
-                    <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-aqua-500/10 text-aqua-300">
-                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden>
-                        <path d="m4.5 10.5 3.5 3.5L15.5 6" />
-                      </svg>
-                    </div>
-                    <p className="mt-3.5 text-sm font-medium text-fog-200">
-                      {scanStatus === null
-                        ? "No scan run yet"
-                        : carryover.length > 0
-                          ? "This scan filed nothing new"
-                          : "No active findings"}
-                    </p>
-                    <p className="mt-1 text-[13px] text-fog-500">
-                      {scanStatus === null
-                        ? "Run a scan to see what Kelp finds."
-                        : carryover.length > 0
-                          ? "Everything below is carryover from earlier scans."
-                          : "Kelp probed your project and everything held up."}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {carryover.length > 0 && (
-              <div className="mt-16">
-                <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden>
-                    <path d="M10 3.5v6l4 2M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
-                  </svg>
-                  Previous scans
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <h2 className="text-2xl font-semibold tracking-tight text-fog-200">Carryover</h2>
-                  <span className="text-sm text-fog-400">
-                    {carryover.length} {carryover.length === 1 ? "finding" : "findings"}
-                  </span>
-                </div>
-                <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-fog-400">
-                  Filed by earlier runs and still open — the latest scan didn&rsquo;t
-                  re-detect them. That could mean the code changed, the agent
-                  chased different leads, or the finding really is fixed. Kelp
-                  won&rsquo;t auto-close them; use <span className="text-fog-200">Mark resolved</span> or
-                  {" "}<span className="text-fog-200">False positive</span> to clean up.
-                </p>
-                <div className="mt-6 space-y-3 opacity-90">
-                  {carryover.map((f, i) => (
+            <FindingsSection
+              eyebrow={`§ Findings · ${carryover.length > 0 ? "this scan" : "active"}`}
+              title={carryover.length > 0 ? "From this scan" : "Active issues"}
+              count={active.length}
+              description={
+                carryover.length > 0
+                  ? "What the most recent pen test just filed. Older findings that weren't re-detected sit below — kept visible so nothing gets silently dropped."
+                  : undefined
+              }
+            >
+              {active.length > 0 ? (
+                <div className="mt-6 space-y-3">
+                  {active.map((f, i) => (
                     <div
                       key={f.id}
                       className="animate-rise"
-                      style={{
-                        animationDelay: `${(active.length + i) * 60}ms`,
-                        animationFillMode: "both",
-                      }}
+                      style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
                     >
                       <FindingCard finding={f} />
                     </div>
                   ))}
                 </div>
-              </div>
+              ) : project ? (
+                <QuietEmpty
+                  title={
+                    scanStatus === null
+                      ? "No scan run yet"
+                      : carryover.length > 0
+                        ? "This scan filed nothing new"
+                        : "No active findings"
+                  }
+                  body={
+                    scanStatus === null
+                      ? "Run a scan to see what Kelp finds."
+                      : carryover.length > 0
+                        ? "Everything below is carryover from earlier scans."
+                        : "Kelp probed your project and everything held up."
+                  }
+                />
+              ) : null}
+            </FindingsSection>
+
+            {carryover.length > 0 && (
+              <FindingsSection
+                eyebrow="§ Findings · previous scans"
+                title="Carryover"
+                count={carryover.length}
+                description={
+                  <>
+                    Filed by earlier runs and still open — the latest scan didn't
+                    re-detect them. Kelp won't auto-close them; use{" "}
+                    <span className="text-[color:var(--color-paper-100)]">Mark resolved</span> or{" "}
+                    <span className="text-[color:var(--color-paper-100)]">False positive</span> to
+                    clean up.
+                  </>
+                }
+              >
+                <div className="mt-6 space-y-3 opacity-90">
+                  {carryover.map((f) => (
+                    <FindingCard key={f.id} finding={f} />
+                  ))}
+                </div>
+              </FindingsSection>
             )}
 
             {needsJudgment.length > 0 && (
-              <div className="mt-16">
-                <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-violet-300">
-                  <svg
-                    viewBox="0 0 20 20"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-3.5 w-3.5"
-                    aria-hidden
-                  >
-                    <path d="M10 3v14M6 6l-3 5a3 3 0 0 0 6 0L6 6ZM14 6l-3 5a3 3 0 0 0 6 0l-3-5ZM5 17h10" />
-                  </svg>
-                  Needs your judgment
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <h2 className="text-2xl font-semibold tracking-tight">Kelp isn't sure</h2>
-                  <span className="text-sm text-fog-400">
-                    {needsJudgment.length}{" "}
-                    {needsJudgment.length === 1 ? "finding" : "findings"}
-                  </span>
-                </div>
-                <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-fog-400">
-                  Kelp reviewed these after the scan and downgraded them — the
-                  evidence held up, but the impact under this app's auth model
-                  wasn't clear-cut. Read Kelp's reason inside each card, then
-                  mark them fixed or dismiss.
-                </p>
+              <FindingsSection
+                eyebrow="§ Needs your judgment"
+                title="Kelp isn't sure"
+                count={needsJudgment.length}
+                accent="var(--color-sev-med)"
+                description="Kelp reviewed these after the scan and downgraded them — the evidence held up, but the impact under this app's auth model wasn't clear-cut. Read the reason inside each, then mark them fixed or dismiss."
+              >
                 <div className="mt-6 space-y-3">
-                  {needsJudgment.map((f, i) => (
-                    <div
-                      key={f.id}
-                      className="animate-rise"
-                      style={{
-                        animationDelay: `${(active.length + i) * 60}ms`,
-                        animationFillMode: "both",
-                      }}
-                    >
-                      <FindingCard finding={f} defaultOpen />
-                    </div>
+                  {needsJudgment.map((f) => (
+                    <FindingCard key={f.id} finding={f} defaultOpen />
                   ))}
                 </div>
-              </div>
+              </FindingsSection>
             )}
 
             {resolved.length > 0 && (
-              <div className="mt-16">
-                <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-                  Resolved
-                </div>
-                <h2 className="text-2xl font-semibold tracking-tight text-fog-300">
-                  Fixed on the last scan
-                </h2>
+              <FindingsSection
+                eyebrow="§ Resolved"
+                title="Fixed on the last scan"
+                count={resolved.length}
+                muted
+              >
                 <div className="mt-6 space-y-3 opacity-70">
-                  {resolved.map((f, i) => (
-                    <div
-                      key={f.id}
-                      className="animate-rise"
-                      style={{ animationDelay: `${(active.length + i) * 60}ms`, animationFillMode: "both" }}
-                    >
-                      <FindingCard finding={f} />
-                    </div>
+                  {resolved.map((f) => (
+                    <FindingCard key={f.id} finding={f} />
                   ))}
                 </div>
-              </div>
+              </FindingsSection>
             )}
 
             {agentReport && agentReport.outcomes.length > 0 && (
-              <AgentReportPanel report={agentReport} />
+              <div className="mt-16">
+                <AgentReportPanel report={agentReport} />
+              </div>
             )}
           </>
         )}
       </main>
-    </>
+    </div>
   );
 }
 
+function FindingsSection({
+  eyebrow,
+  title,
+  count,
+  description,
+  accent,
+  muted,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  count: number;
+  description?: React.ReactNode;
+  accent?: string;
+  muted?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-16">
+      <div
+        className="font-mono text-[11px] uppercase tracking-[0.16em]"
+        style={{ color: accent ?? "var(--color-paper-500)" }}
+      >
+        {eyebrow}
+      </div>
+      <div className="mt-3 flex items-baseline justify-between gap-6">
+        <h2
+          className="font-display text-[30px] leading-[1.1]"
+          style={{ color: muted ? "var(--color-paper-300)" : "var(--color-paper-50)" }}
+        >
+          {title}
+        </h2>
+        <span className="font-mono tabular text-[12px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+          {count} {count === 1 ? "finding" : "findings"}
+        </span>
+      </div>
+      {description && (
+        <p className="mt-4 max-w-2xl text-[13.5px] leading-[1.65] text-[color:var(--color-paper-400)]">
+          {description}
+        </p>
+      )}
+      {children}
+    </section>
+  );
+}
+
+function QuietEmpty({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="mt-6 border border-[color:var(--color-hair)] px-6 py-14 text-center">
+      <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+        Clear
+      </div>
+      <h3 className="font-display mt-3 text-[22px] leading-[1.2] text-[color:var(--color-paper-50)]">
+        {title}
+      </h3>
+      <p className="mx-auto mt-2 max-w-md text-[13px] leading-[1.65] text-[color:var(--color-paper-400)]">
+        {body}
+      </p>
+    </div>
+  );
+}

@@ -1,22 +1,27 @@
 import { Suspense } from "react";
-import { Sidebar } from "@/components/dashboard/Sidebar";
+import { TopNav } from "@/components/dashboard/TopNav";
+import { getServerSupabase } from "@/lib/supabase/server";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
-    <div className="relative flex min-h-screen">
-      {/* Ambient background — the same aurora + fine grid the landing uses, so
-          the dashboard reads as part of the same product, not a plain admin. */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="aurora" />
-        <div className="grid-texture absolute inset-0 opacity-40" />
-      </div>
-
-      {/* Sidebar uses useSearchParams (to carry ?project across nav) which forces
-          a CSR bailout — Suspense keeps every dashboard subroute prerender-safe. */}
-      <Suspense fallback={<aside className="hidden w-60 shrink-0 border-r border-line/70 bg-ink-900/40 lg:block" />}>
-        <Sidebar />
+    <div className="relative min-h-screen">
+      <Suspense
+        fallback={
+          <div className="sticky top-0 z-30 h-16 border-b border-[color:var(--color-hair)] bg-[color:var(--color-ink-950)]/85 backdrop-blur" />
+        }
+      >
+        <TopNav email={user?.email ?? null} />
       </Suspense>
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col">{children}</div>
+      <div className="mx-auto min-w-0 max-w-[1240px]">{children}</div>
     </div>
   );
 }

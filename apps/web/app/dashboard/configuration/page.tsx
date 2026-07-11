@@ -11,7 +11,7 @@
 //     each input is prominent, not buried.
 
 import Link from "next/link";
-import { PageHeader } from "@/components/dashboard/PageHeader";
+import { buttonClasses } from "@/components/Button";
 import { ProjectSwitcher } from "@/components/dashboard/ProjectSwitcher";
 import { BackendCard } from "@/components/dashboard/config/BackendCard";
 import { TestAccountsCard } from "@/components/dashboard/config/TestAccountsCard";
@@ -48,12 +48,9 @@ export default async function ConfigurationPage({
 
   if (projects.length === 0) {
     return (
-      <>
-        <PageHeader title="Configuration" email={user?.email} />
-        <main className="mx-auto w-full max-w-3xl flex-1 px-8 py-14">
-          <EmptyProjects />
-        </main>
-      </>
+      <div className="px-8 pb-24 pt-14">
+        <EmptyProjects />
+      </div>
     );
   }
 
@@ -131,35 +128,29 @@ export default async function ConfigurationPage({
     .map((s) => ({ label: s.label, anchor: s.anchor }));
 
   return (
-    <>
-      <PageHeader title="Configuration" email={user?.email} />
-
-      <header className="flex items-center gap-4 border-b border-line/70 px-8 py-4">
+    <div className="px-8 pb-24">
+      <div className="flex flex-wrap items-center gap-4 border-b border-[color:var(--color-hair)] py-5">
         <ProjectSwitcher
           current={{ id: current.id, name: current.name, repo: current.repo ?? "" }}
           options={projectOptions}
         />
-        <span className="text-xs text-fog-500">
-          Configuration is scoped to the selected project.
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+          Scoped to selected project
         </span>
-      </header>
+      </div>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-8 py-12">
-        {/* Hero — short, human. No feature list. */}
-        <div className="mb-8">
-          <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
-            Setup
-          </div>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-[34px]">
-            Get{" "}
-            <span className="text-fog-100">{current.name}</span>{" "}
-            <span className="text-fog-400">ready to scan</span>
-          </h1>
-          <p className="mt-2.5 max-w-xl text-[14.5px] leading-relaxed text-fog-400">
-            Three quick steps. Save each one as you go — you can pause and pick up any
-            time.
-          </p>
+      <main className="mx-auto max-w-3xl pt-14">
+        <div className="eyebrow flex items-center gap-3">
+          <span className="h-px w-6 bg-[color:var(--color-hair-strong)]" aria-hidden />
+          <span>§ Setup</span>
         </div>
+        <h1 className="font-display mt-5 text-[44px] leading-[1.05] text-[color:var(--color-paper-50)] sm:text-[48px]">
+          Get <span className="text-[color:var(--color-paper-50)]">{current.name}</span>{" "}
+          <span className="italic text-[color:var(--color-paper-400)]">ready to scan</span>.
+        </h1>
+        <p className="mt-5 max-w-xl text-[14.5px] leading-[1.65] text-[color:var(--color-paper-300)]">
+          Three quick steps. Save each one as you go — you can pause and pick up any time.
+        </p>
 
         {/* Kelp's read on the connected repo. Renders null when no report yet. */}
         {backendReport && (
@@ -237,24 +228,23 @@ export default async function ConfigurationPage({
           </>
         )}
       </main>
-    </>
+    </div>
   );
 }
 
 function EmptyProjects() {
   return (
-    <div className="rounded-2xl border border-line/70 bg-ink-900/40 p-10 text-center">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-fog-500/10 text-fog-400">
-        <span className="text-xl">+</span>
+    <div className="mx-auto max-w-2xl border border-[color:var(--color-hair)] px-10 py-16 text-center">
+      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+        § Empty
       </div>
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight">No project yet</h1>
-      <p className="mt-2 text-sm text-fog-400">
+      <h1 className="font-display mt-4 text-[36px] leading-[1.1] text-[color:var(--color-paper-50)]">
+        No project yet.
+      </h1>
+      <p className="mx-auto mt-3 max-w-md text-[14px] leading-[1.65] text-[color:var(--color-paper-300)]">
         Connect one to start. Configuration is scoped per-project.
       </p>
-      <Link
-        href="/onboarding"
-        className="mt-6 inline-flex rounded-lg bg-gradient-to-r from-aqua-400 to-aqua-600 px-4 py-2.5 text-sm font-medium text-ink-950"
-      >
+      <Link href="/onboarding" className={buttonClasses("primary", "lg", "mt-7")}>
         Connect a project
       </Link>
     </div>

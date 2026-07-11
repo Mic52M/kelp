@@ -1,41 +1,77 @@
 @import "tailwindcss";
 
 /* ── Kelp design tokens ──────────────────────────────────────────────────────
-   Dark, premium, distinctive. Accent is a deep aqua→emerald ("kelp underwater")
-   with a violet secondary for depth. Not a generic SaaS blue. */
+   Editorial-industrial, ink-dark. Warm monochrome, one signal accent.
+   No gradients, no glow, no glass. Structure carries the identity — a display
+   serif for voice, a mono for data, a compact sans for UI. */
 @theme {
-  --color-ink-950: #05070a;
-  --color-ink-900: #080b11;
-  --color-ink-850: #0b0f16;
-  --color-ink-800: #0f141d;
-  --color-ink-700: #161c28;
-  --color-ink-600: #1f2634;
-  --color-line: #212a38;
+  /* Warm ink — never pure black, never cool. Base holds the whole app. */
+  --color-ink-1000: #050506;
+  --color-ink-950: #0a0a0c;   /* body background */
+  --color-ink-900: #0e0e11;   /* raised surface (nav, cards) */
+  --color-ink-850: #131317;
+  --color-ink-800: #181820;
+  --color-ink-700: #22222c;   /* input/track */
+  --color-ink-600: #2e2e39;
 
-  --color-aqua-400: #34e6cf;
-  --color-aqua-500: #14d3bb;
-  --color-aqua-600: #0bb6a3;
-  --color-violet-400: #a78bfa;
-  --color-violet-500: #8b5cf6;
+  /* Hairlines. One-pixel, low-contrast — structure over decoration. */
+  --color-hair: rgba(255, 244, 224, 0.08);
+  --color-hair-strong: rgba(255, 244, 224, 0.14);
+  --color-line: rgba(255, 244, 224, 0.08);
 
-  --color-fog-50: #f3f7f8;
-  --color-fog-300: #9fb0bd;
-  --color-fog-400: #7b8b99;
-  --color-fog-500: #5d6b78;
+  /* Cream text — warm, not gray-on-black flatness. */
+  --color-paper-50: #f5efe4;    /* primary text */
+  --color-paper-100: #ebe4d6;
+  --color-paper-300: #b5ad9d;   /* body prose */
+  --color-paper-400: #8b8474;   /* secondary */
+  --color-paper-500: #6b6558;   /* muted / meta */
+  --color-paper-600: #4c473d;   /* faint / hairline label */
 
-  --color-crit: #ff5c6a;
-  --color-high: #ff9f45;
-  --color-med: #ffd45c;
-  --color-low: #62b6ff;
-  --color-ok: #34e6cf;
+  /* One signal color. Kelp — a luminous algal green. Used ONCE per view for
+     the primary action or the single most important number. Never gradients. */
+  --color-signal: #b8f2c9;
+  --color-signal-ink: #08110b;
+  --color-signal-dim: #547763;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* Severity palette — desaturated, editorial, not neon. Each is a single
+     tone; use with tabular numerals + monospace label, not colored pills. */
+  --color-sev-crit: #e46b6b;
+  --color-sev-high: #d99b5c;
+  --color-sev-med: #d6c37a;
+  --color-sev-low: #7fa3c9;
+  --color-sev-ok: #9fc4a8;
+
+  /* Fonts — bound to :root via next/font in layout.tsx. */
+  --font-sans: var(--font-inter-tight), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-fraunces), "Times New Roman", Georgia, serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ── Compatibility aliases ────────────────────────────────────────────────
+     Old token names (aqua/violet/fog) remap onto the new editorial palette so
+     yet-unmigrated pages continue to render coherently until each is rebuilt
+     under the anchor. Everything eventually goes away. */
+  --color-aqua-400: #b8f2c9;
+  --color-aqua-500: #b8f2c9;
+  --color-aqua-600: #547763;
+  --color-violet-400: #b5ad9d;
+  --color-violet-500: #8b8474;
+
+  --color-fog-50: #f5efe4;
+  --color-fog-100: #ebe4d6;
+  --color-fog-200: #d3ccbc;
+  --color-fog-300: #b5ad9d;
+  --color-fog-400: #8b8474;
+  --color-fog-500: #6b6558;
+
+  --color-crit: #e46b6b;
+  --color-high: #d99b5c;
+  --color-med:  #d6c37a;
+  --color-low:  #7fa3c9;
+  --color-ok:   #9fc4a8;
 }
 
 * {
-  border-color: var(--color-line);
+  border-color: var(--color-hair);
 }
 
 html {
@@ -44,207 +80,250 @@ html {
 
 body {
   background: var(--color-ink-950);
-  color: var(--color-fog-50);
+  color: var(--color-paper-50);
   font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11", "tnum" 0;
   -webkit-font-smoothing: antialiased;
-  letter-spacing: -0.011em;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.008em;
 }
 
-/* Ambient background glow used behind heroes and panels. Now breathing —
-   the two orbs drift in scale and opacity to give the surface a subtle
-   feeling of "always alive" without ever crossing into distracting. */
-.aurora {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 0;
-}
-.aurora::before,
-.aurora::after {
-  content: "";
-  position: absolute;
-  width: 55rem;
-  height: 55rem;
-  border-radius: 9999px;
-  filter: blur(120px);
-  opacity: 0.22;
-}
-.aurora::before {
-  background: radial-gradient(circle, var(--color-aqua-500), transparent 60%);
-  top: -22rem;
-  left: -10rem;
-  animation: aurora-drift-a 18s ease-in-out infinite;
-}
-.aurora::after {
-  background: radial-gradient(circle, var(--color-violet-500), transparent 60%);
-  top: -14rem;
-  right: -14rem;
-  opacity: 0.16;
-  animation: aurora-drift-b 22s ease-in-out infinite;
-}
-@keyframes aurora-drift-a {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.22; }
-  50%      { transform: translate(3rem, 2rem) scale(1.08); opacity: 0.28; }
-}
-@keyframes aurora-drift-b {
-  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.16; }
-  50%      { transform: translate(-2rem, 3rem) scale(1.1); opacity: 0.22; }
+/* Display headings — Fraunces high-contrast serif carries voice. Optical size
+   set high for display use; light weight to feel editorial, not marketing. */
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 96, "SOFT" 30;
+  letter-spacing: -0.028em;
 }
 
-/* Card that "shines" once when it appears — a Resend-style single sweep of
-   the accent gradient across the border. Restrained, doesn't loop. */
-.card-shine {
-  position: relative;
-  isolation: isolate;
+/* Mono runs everywhere data lives — findings, cost, endpoints, timestamps.
+   Tabular numerals enforced so columns line up without effort. */
+.font-mono,
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum", "zero", "ss02";
+  letter-spacing: -0.005em;
 }
-.card-shine::before {
-  content: "";
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Editorial small-caps eyebrow label. Used for section markers. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-paper-500);
+}
+
+/* The single signature — a hairline "kelp filament" that traces the left
+   margin. A luminous droplet slowly flows down its length once every 12s.
+   Never repeated, never decorated. */
+.filament {
   position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
   background: linear-gradient(
-    120deg,
-    transparent 20%,
-    rgba(52, 230, 207, 0.35),
-    transparent 60%
+    to bottom,
+    transparent 0%,
+    var(--color-signal-dim) 8%,
+    var(--color-hair-strong) 35%,
+    var(--color-hair) 70%,
+    transparent 100%
   );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 400ms ease;
-  z-index: -1;
+  overflow: hidden;
 }
-.card-shine:hover::before {
-  opacity: 1;
+.filament::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  width: 3px;
+  height: 14vh;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--color-signal) 45%,
+    var(--color-signal) 55%,
+    transparent 100%
+  );
+  filter: blur(1.5px);
+  opacity: 0.75;
+  animation: filament-flow 14s cubic-bezier(0.55, 0, 0.45, 1) infinite;
+}
+@keyframes filament-flow {
+  0%   { transform: translateY(-20vh); opacity: 0; }
+  8%   { opacity: 0.9; }
+  92%  { opacity: 0.9; }
+  100% { transform: translateY(120vh); opacity: 0; }
 }
 
-/* Subtle diagonal parallax shimmer for hero-scale surfaces. */
-@keyframes hero-glow {
-  0%, 100% { filter: hue-rotate(0deg) brightness(1); }
-  50%      { filter: hue-rotate(-8deg) brightness(1.08); }
+/* Blinking caret — used at the tail of a running dispatch line. Single
+   character-width block, warm cream, restrained cadence. */
+@keyframes caret-blink {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0; }
+  100% { opacity: 1; }
 }
-.hero-glow {
-  animation: hero-glow 12s ease-in-out infinite;
+.caret-blink {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  vertical-align: -0.12em;
+  background: currentColor;
+  animation: caret-blink 1.15s steps(1) infinite;
+  margin-left: 0.15em;
 }
 
-/* Fine grid texture. */
-.grid-texture {
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 46px 46px;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+/* CTA polish — a 1px vertical lift + easing on hover. Restraint over drama. */
+.cta-lift {
+  transform: translateY(0);
+  transition: transform 220ms cubic-bezier(0.2, 0, 0, 1),
+              background-color 220ms cubic-bezier(0.2, 0, 0, 1),
+              border-color 220ms cubic-bezier(0.2, 0, 0, 1),
+              color 220ms cubic-bezier(0.2, 0, 0, 1);
 }
+.cta-lift:hover {
+  transform: translateY(-1px);
+}
+
+/* Stack marquee row — each mono name warms toward paper-50 on hover, letter
+   by letter (no rotation, no scale). Used in the ecosystem strip. */
+.stack-name {
+  position: relative;
+  transition: color 260ms cubic-bezier(0.2, 0, 0, 1);
+}
+.stack-name::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1px;
+  background: var(--color-signal-dim);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 320ms cubic-bezier(0.2, 0, 0, 1);
+}
+.stack-name:hover {
+  color: var(--color-paper-50);
+}
+.stack-name:hover::after {
+  transform: scaleX(1);
+}
+
+/* The one motion primitive — 240ms fade + 4px rise on reveal. Nothing else. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise {
+  animation: rise 240ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+/* Focus — visible, not decorative. Single accent, thin. */
+:focus-visible {
+  outline: 1px solid var(--color-signal);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Selection matches the accent — one detail that says "this app has taste". */
+::selection {
+  background: var(--color-signal);
+  color: var(--color-signal-ink);
+}
+
+/* Hairline utility — the app is built out of these, not borders + shadows. */
+.hair {
+  border-color: var(--color-hair);
+}
+.hair-strong {
+  border-color: var(--color-hair-strong);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .animate-rise,
+  .animate-pulse-soft,
+  .animate-scanline,
+  .animate-radar,
+  .animate-shimmer,
+  .animate-marquee { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+/* ── Compatibility shims for legacy decoration classes ───────────────────────
+   Silenced or minimised so unmigrated pages keep their layout without the old
+   AI-slop decoration surfacing. Each shim is a candidate for deletion once
+   its consumers have been rewritten under the anchor. */
+.aurora,
+.hero-glow,
+.grid-texture,
+.marquee-mask { display: none; }
 
 .glass {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.035),
-    rgba(255, 255, 255, 0.012)
-  );
-  border: 1px solid var(--color-line);
-  backdrop-filter: blur(8px);
+  background: transparent;
+  border: 1px solid var(--color-hair);
+  backdrop-filter: none;
 }
+
+.card-shine { position: relative; }
+.card-shine::before { display: none; }
 
 .accent-text {
-  background: linear-gradient(120deg, var(--color-aqua-400), var(--color-violet-400));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  background: none;
+  color: var(--color-signal);
+  -webkit-background-clip: initial;
+  background-clip: initial;
 }
 
-/* Animated scanning line for the live-scan visual. */
-@keyframes scanline {
-  0% { transform: translateY(-10%); opacity: 0; }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { transform: translateY(1100%); opacity: 0; }
-}
-.animate-scanline {
-  animation: scanline 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
+.animate-rise { animation: rise 240ms cubic-bezier(0.2, 0, 0, 1) both; }
 
 @keyframes pulse-soft {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
 }
-.animate-pulse-soft {
-  animation: pulse-soft 1.8s ease-in-out infinite;
-}
+.animate-pulse-soft { animation: pulse-soft 2.2s ease-in-out infinite; }
 
-@keyframes rise {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes scanline {
+  0%   { transform: translateY(-10%); opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateY(1100%); opacity: 0; }
 }
-.animate-rise {
-  animation: rise 0.5s ease-out both;
-}
+.animate-scanline { animation: scanline 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
 
-/* Expanding radar rings for the scanning view (Resend-style, restrained). */
 @keyframes radar {
-  0% { transform: scale(0.35); opacity: 0.7; }
+  0%   { transform: scale(0.4); opacity: 0.6; }
   100% { transform: scale(1); opacity: 0; }
 }
-.animate-radar {
-  animation: radar 1.8s cubic-bezier(0.2, 0.6, 0.2, 1) infinite;
-}
+.animate-radar { animation: radar 1.8s cubic-bezier(0.2, 0.6, 0.2, 1) infinite; }
 
-/* Soft sweeping shimmer for progress surfaces. */
 @keyframes shimmer {
-  0% { background-position: -150% 0; }
+  0%   { background-position: -150% 0; }
   100% { background-position: 250% 0; }
 }
 .animate-shimmer {
   background-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(52, 230, 207, 0.14) 50%,
+    rgba(184, 242, 201, 0.10) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.8s linear infinite;
 }
 
-/* Continuous horizontal scroll for the "ecosystem" marquee. Doubled content
-   inside the track means the loop is seamless — as one copy scrolls out, the
-   duplicate has already taken its place. */
 @keyframes marquee {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
 }
-.animate-marquee {
-  animation: marquee 32s linear infinite;
-}
-.marquee-mask {
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    black 8%,
-    black 92%,
-    transparent 100%
-  );
-          mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    black 8%,
-    black 92%,
-    transparent 100%
-  );
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-scanline,
-  .animate-pulse-soft,
-  .animate-rise,
-  .animate-radar,
-  .animate-shimmer,
-  .animate-marquee {
-    animation: none;
-  }
-}
+.animate-marquee { animation: marquee 32s linear infinite; }
