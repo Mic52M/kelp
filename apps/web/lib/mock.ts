@@ -36,6 +36,7 @@ create policy "bookings_insert_own" on "public"."bookings"
       { category: "phone", count: 1203 },
     ],
     fixPrompt: `The Supabase table \`public.bookings\` is not secured: Row Level Security is turned off. Apply a migration so each user can only access their own rows (via \`auth.uid() = user_id\`) for select, insert, update and delete, then confirm the app still works for a logged-in user.`,
+    fromLatestScan: true,
     detectedAt: "2m ago",
   },
   {
@@ -52,6 +53,7 @@ create policy "bookings_insert_own" on "public"."bookings"
     fixPreview: `#12  - const key = "eyJhbGciOi…service_role…"
 #12  + const key = process.env.SUPABASE_SERVICE_ROLE_KEY!  // server only`,
     fixPrompt: `There is a hard-coded Supabase service_role secret in \`src/lib/supabaseClient.ts\` on line 12. Move it out of the code: read it from an environment variable named \`SUPABASE_SERVICE_ROLE_KEY\` instead, update every place that uses it, and make sure it is never sent to the browser. Then remind me to rotate the key in Supabase, since it was exposed.`,
+    fromLatestScan: true,
     detectedAt: "2m ago",
   },
   {
@@ -65,6 +67,7 @@ create policy "bookings_insert_own" on "public"."bookings"
       "Using account A's session, Kelp was able to fetch an invoice that belongs to account B by changing the id in the request. Object-level authorization is not enforced on this endpoint.",
     remediation:
       "This finding is queued for human review by the Kelp team before it is confirmed. Broken object-level authorization fixes depend on your business logic, so we validate them manually rather than auto-generating a change.",
+    fromLatestScan: true,
     detectedAt: "2m ago",
   },
   {
@@ -78,6 +81,7 @@ create policy "bookings_insert_own" on "public"."bookings"
       "A Stripe test secret key (sk_test_…) is hard-coded in the checkout handler. Test keys can still create charges and reveal your account structure; secrets should never be committed.",
     remediation:
       "Move it to an environment variable. Generate a fix to open a pull request.",
+    fromLatestScan: true,
     detectedAt: "2m ago",
   },
   {
@@ -90,6 +94,7 @@ create policy "bookings_insert_own" on "public"."bookings"
     explanation:
       "The profiles table had a policy scoped by organization rather than by user, so members could read each other's private profile fields. Fixed on 28 Jun.",
     remediation: "Resolved — verified on the last re-scan.",
+    fromLatestScan: true,
     detectedAt: "resolved",
   },
 ];

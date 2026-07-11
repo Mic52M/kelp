@@ -49,6 +49,9 @@ export interface Finding {
   autofixable?: boolean;
   /** triage annotation, when Kelp's post-review pass touched this finding */
   triage?: FindingTriage;
+  /** true iff the most recent scan re-detected (or freshly filed) this
+   *  finding — used on Overview to split "This scan" vs "Previous scans". */
+  fromLatestScan: boolean;
   detectedAt: string;
 }
 

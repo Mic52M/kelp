@@ -29,11 +29,18 @@ export default async function Dashboard({
   const { project, projectOptions, findings, summary, scanStatus, scanMode, scanIssues, activePentest, agentReport } =
     await loadDashboard(params.project);
   const scanning = scanStatus === "queued" || scanStatus === "running";
-  const active = findings.filter(
+  const openActive = findings.filter(
     (f) => f.status !== "resolved" && f.status !== "needs_review",
   );
+  // "This scan" = findings the latest scan re-detected. "Previous scans" =
+  // findings still open but not re-touched by the latest run (autonomous
+  // scans don't auto-resolve — this section keeps them visible + labeled
+  // instead of mixing them with what the fresh run just filed).
+  const active = openActive.filter((f) => f.fromLatestScan);
+  const carryover = openActive.filter((f) => !f.fromLatestScan);
   const needsJudgment = findings.filter((f) => f.status === "needs_review");
   const resolved = findings.filter((f) => f.status === "resolved");
+  const hasScanEver = scanStatus !== null;
 
   return (
     <>
@@ -169,17 +176,33 @@ export default async function Dashboard({
               </div>
             )}
 
-            {/* Findings */}
+            {/* Findings — split into "this scan" vs "previous scans" so the
+                fresh run is unambiguous. Carryover section only renders when
+                there's actually carryover to show. */}
             <div className="mt-14">
-              <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+              <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
                 Findings
+                {hasScanEver && carryover.length > 0 && (
+                  <span className="rounded-full border border-aqua-600/40 bg-aqua-500/[0.08] px-2 py-0.5 text-[10px] font-medium tracking-normal text-aqua-300">
+                    this scan
+                  </span>
+                )}
               </div>
               <div className="flex items-baseline justify-between">
-                <h2 className="text-2xl font-semibold tracking-tight">Active issues</h2>
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  {carryover.length > 0 ? "From this scan" : "Active issues"}
+                </h2>
                 <span className="text-sm text-fog-400">
                   {active.length} {active.length === 1 ? "finding" : "findings"}
                 </span>
               </div>
+              {carryover.length > 0 && (
+                <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-fog-400">
+                  What the most recent pen test just filed. Older findings that
+                  weren&rsquo;t re-detected sit below — kept visible so nothing
+                  gets silently dropped.
+                </p>
+              )}
               <div className="mt-6 space-y-3">
                 {active.map((f, i) => (
                   <div
@@ -198,17 +221,61 @@ export default async function Dashboard({
                       </svg>
                     </div>
                     <p className="mt-3.5 text-sm font-medium text-fog-200">
-                      {scanStatus === null ? "No scan run yet" : "No active findings"}
+                      {scanStatus === null
+                        ? "No scan run yet"
+                        : carryover.length > 0
+                          ? "This scan filed nothing new"
+                          : "No active findings"}
                     </p>
                     <p className="mt-1 text-[13px] text-fog-500">
                       {scanStatus === null
                         ? "Run a scan to see what Kelp finds."
-                        : "Kelp probed your project and everything held up."}
+                        : carryover.length > 0
+                          ? "Everything below is carryover from earlier scans."
+                          : "Kelp probed your project and everything held up."}
                     </p>
                   </div>
                 )}
               </div>
             </div>
+
+            {carryover.length > 0 && (
+              <div className="mt-16">
+                <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-fog-500">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden>
+                    <path d="M10 3.5v6l4 2M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+                  </svg>
+                  Previous scans
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <h2 className="text-2xl font-semibold tracking-tight text-fog-200">Carryover</h2>
+                  <span className="text-sm text-fog-400">
+                    {carryover.length} {carryover.length === 1 ? "finding" : "findings"}
+                  </span>
+                </div>
+                <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-fog-400">
+                  Filed by earlier runs and still open — the latest scan didn&rsquo;t
+                  re-detect them. That could mean the code changed, the agent
+                  chased different leads, or the finding really is fixed. Kelp
+                  won&rsquo;t auto-close them; use <span className="text-fog-200">Mark resolved</span> or
+                  {" "}<span className="text-fog-200">False positive</span> to clean up.
+                </p>
+                <div className="mt-6 space-y-3 opacity-90">
+                  {carryover.map((f, i) => (
+                    <div
+                      key={f.id}
+                      className="animate-rise"
+                      style={{
+                        animationDelay: `${(active.length + i) * 60}ms`,
+                        animationFillMode: "both",
+                      }}
+                    >
+                      <FindingCard finding={f} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {needsJudgment.length > 0 && (
               <div className="mt-16">

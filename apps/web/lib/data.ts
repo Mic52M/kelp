@@ -34,9 +34,10 @@ interface FindingRow {
   location: string | null;
   explanation: string;
   evidence: { fixable?: boolean; raw?: unknown } | null;
+  last_scan_id: string | null;
 }
 
-function mapFinding(row: FindingRow, prUrl?: string): Finding {
+function mapFinding(row: FindingRow, latestScanId: string | null, prUrl?: string): Finding {
   const raw = row.evidence?.raw;
   let fixPreview: string | undefined;
   let fixPrompt: string | undefined;
@@ -91,6 +92,13 @@ function mapFinding(row: FindingRow, prUrl?: string): Finding {
     ...(prUrl ? { prUrl } : {}),
     ...(autofixable ? { autofixable: true } : {}),
     ...(triage ? { triage } : {}),
+    // Was this finding touched by the most recent scan? Upsert bumps
+    // last_scan_id every time a finding is re-detected, so equality here
+    // means "the current scan saw it (new or unchanged)"; inequality means
+    // "the current scan did not re-detect this" — surfaced as a separate
+    // section on Overview so users can tell which findings the fresh run
+    // is speaking about vs which are carryover from earlier scans.
+    fromLatestScan: latestScanId !== null && row.last_scan_id === latestScanId,
     detectedAt: "recent",
   };
 }
@@ -326,13 +334,14 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
   const { data: scanRows } = p
     ? await supabase
         .from("scans")
-        .select("status, error, mode, agent_report, cost_cents")
+        .select("id, status, error, mode, agent_report, cost_cents")
         .eq("project_id", p.id)
         .order("queued_at", { ascending: false })
         .limit(1)
     : { data: null };
   const latestScan = scanRows?.[0] as
     | {
+        id: string;
         status: string;
         error: string | null;
         mode: "passive" | "active_pentest";
@@ -340,6 +349,7 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
         cost_cents: number | null;
       }
     | undefined;
+  const latestScanId = latestScan?.id ?? null;
   const scanStatus = latestScan?.status ?? null;
   const scanMode = latestScan?.mode ?? null;
   const agentReport = latestScan?.agent_report ?? null;
@@ -363,7 +373,7 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
   const { data: rows } = p
     ? await supabase
         .from("findings")
-        .select("id, vuln_class, severity, status, title, location, explanation, evidence")
+        .select("id, vuln_class, severity, status, title, location, explanation, evidence, last_scan_id")
         .eq("project_id", p.id)
     : { data: null };
 
@@ -384,7 +394,7 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
   );
 
   const findings = ((rows ?? []) as FindingRow[])
-    .map((r) => mapFinding(r, prUrls.get(r.id)))
+    .map((r) => mapFinding(r, latestScanId, prUrls.get(r.id)))
     .sort(
       (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
     );
