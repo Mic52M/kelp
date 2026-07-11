@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 import type { Finding, Severity } from "@/lib/types";
 import { classMeta, ClassIcon } from "./findings/vuln-class";
 import { Button } from "./Button";
@@ -175,19 +176,11 @@ export function FindingCard({
               )}
               <form action={markResolvedFinding}>
                 <input type="hidden" name="findingId" value={finding.id} />
-                <Button type="submit" variant="secondary">
-                  Mark resolved
-                </Button>
+                <MarkResolvedButton />
               </form>
               <form action={reportFalsePositive}>
                 <input type="hidden" name="findingId" value={finding.id} />
-                <button
-                  type="submit"
-                  title="Not a real issue — removes it from your list"
-                  className="rounded-lg border border-line px-3.5 py-2 text-sm text-fog-400 transition-colors hover:border-fog-600 hover:text-fog-200"
-                >
-                  False positive
-                </button>
+                <FalsePositiveButton />
               </form>
             </div>
           )}
@@ -244,6 +237,34 @@ function TriageBanner({ finding }: { finding: Finding }) {
         <p className="mt-2 text-[12.5px] leading-relaxed text-fog-300">{t.reason}</p>
       )}
     </div>
+  );
+}
+
+/** "Mark resolved" — submit button wired to the outer form's server action.
+ *  Disables while the server action runs, so the user sees clear feedback. */
+function MarkResolvedButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="secondary" disabled={pending}>
+      {pending ? "Marking…" : "Mark resolved"}
+    </Button>
+  );
+}
+
+/** "False positive" — same pattern. The old visual was `text-fog-400 border-line`
+ *  which read as disabled at a glance; bumped contrast + added `cursor-pointer`
+ *  + pending state so it's unmistakably interactive. */
+function FalsePositiveButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      title="Not a real issue — removes it from your list"
+      className="cursor-pointer rounded-lg border border-line/80 bg-ink-900/40 px-3.5 py-2 text-sm font-medium text-fog-200 transition-colors hover:border-fog-600 hover:bg-ink-800/60 hover:text-fog-50 disabled:cursor-wait disabled:opacity-60"
+    >
+      {pending ? "Removing…" : "False positive"}
+    </button>
   );
 }
 
