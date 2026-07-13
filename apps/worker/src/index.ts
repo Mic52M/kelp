@@ -47,6 +47,17 @@ export {
   redisEnabled,
 } from "./redis-queue.js";
 export { processScanById } from "./scan-processor.js";
+export { processFreeScan, parseRepoFullName } from "./free-scan-processor.js";
+export { verifyPublicRepo, PublicRepoNotFoundError, listPublicRepoSourceFiles } from "./connectors/github-public.js";
+export {
+  insertFreeScan,
+  countRecentFreeScansForIp,
+  findLatestFreeScanForRepo,
+  getFreeScanById,
+  getFreeScanBySlug,
+  captureFreeScanEmail,
+} from "./free-scan-db.js";
+export type { FreeScanPublicView } from "./free-scan-db.js";
 export {
   startCheckoutForOrg,
   verifyWebhookSignature as verifyStripeWebhookSignature,

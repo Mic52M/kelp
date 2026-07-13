@@ -10,6 +10,7 @@ export * from "./remediation/secret-fix.js";
 export * from "./remediation/bola-report.js";
 export * from "./remediation/fix-prompt.js";
 export * from "./orchestrator.js";
+export * from "./free-scan.js";
 export * from "./agent/loop.js";
 export * from "./agent/specialist.js";
 export * from "./agent/orchestrator.js";
