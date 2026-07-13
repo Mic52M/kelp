@@ -32,6 +32,9 @@ export {
   findUserEmail,
   findOrgName,
   expireStuckScans,
+  markFindingResolvedByUser,
+  pickWebhookRescanClasses,
+  hasLiveScan,
 } from "./db.js";
 export type { StoredActiveTestConsent } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";

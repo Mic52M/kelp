@@ -22,7 +22,9 @@ import {
   parseRepoFullName,
   processFreeScan,
   PublicRepoNotFoundError,
+  getFreeScanById,
 } from "@kelp/worker";
+import { track } from "@/lib/analytics";
 
 const RATE_LIMIT_PER_HOUR = 3;
 
@@ -130,7 +132,33 @@ export async function POST(req: Request): Promise<Response> {
   // Run the scan out-of-band. In dev / no-queue, `after()` runs it on this
   // instance after the response ships (same pattern as the paid path). In
   // prod with a queue, wire this to enqueueScanJob variant for free scans.
-  after(() => processFreeScan(created.id).catch((err) => console.error("free-scan run failed:", err)));
+  // Product analytics (#34): fire pre-signup submit under the free-scan slug
+  // as distinctId — later merged via alias() when the visitor claims the scan
+  // by signing up. hasAnonKey is a strong hint about scan depth.
+  track(created.slug, "free_scan.submitted", {
+    hasAnonKey: !!supabaseAnonKey,
+    hasSupabaseUrl: !!supabaseUrl,
+  });
+
+  // Run the scan, then fire the completion event once the row's final state
+  // is written. Product analytics (#34): distinctId stays the slug so the
+  // whole free-scan funnel merges into one Person timeline via alias() at
+  // signup time.
+  after(async () => {
+    try {
+      await processFreeScan(created.id);
+      const row = await getFreeScanById(created.id);
+      if (!row) return;
+      track(created.slug, "free_scan.completed", {
+        status: row.status,
+        nFindings: Array.isArray(row.findings) ? row.findings.length : 0,
+        durationMs: row.durationMs ?? undefined,
+        cappedAtBudget: row.status === "capped",
+      });
+    } catch (err) {
+      console.error("free-scan run failed:", err);
+    }
+  });
 
   return NextResponse.json({
     id: created.id,

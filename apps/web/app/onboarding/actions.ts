@@ -15,6 +15,7 @@ import {
   type RepoOption,
   type SupabaseProjectInfo,
 } from "@kelp/worker";
+import { track, identityForUser } from "@/lib/analytics";
 
 /** Translate raw engine/DB errors into calm, human messages. */
 function friendlyError(raw: string): string {
@@ -107,6 +108,24 @@ export async function connectAndScanAction(input: {
     }
   }
   if (error) return { ok: false, error };
+
+  // Product analytics (#34): project.created + github_installed. The GitHub
+  // App install itself happens off-site via the OAuth roundtrip; we mark it
+  // fired here because reaching this action means the app installation was
+  // committed to the org's row (installationId is present).
+  const supabaseForIdent = await getServerSupabase();
+  const { data: authData } = await supabaseForIdent.auth.getUser();
+  const ident = identityForUser(authData.user ?? null);
+  if (ident && projectId) {
+    track(ident.distinctId, "project.created", {
+      projectId,
+      hasRepo: !!input.repoFullName,
+      org_id: orgId,
+    });
+    if (input.installationId != null) {
+      track(ident.distinctId, "github_installed", { installationId: input.installationId });
+    }
+  }
 
   // Auto-detect the Supabase backend from the repo (URL/ref + public anon key)
   // and persist it, so Configuration shows it as detected and the user never

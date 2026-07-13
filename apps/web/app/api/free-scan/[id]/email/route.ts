@@ -11,6 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { captureFreeScanEmail, getFreeScanById } from "@kelp/worker";
+import { track, hashEmail } from "@/lib/analytics";
 
 interface Body {
   email?: unknown;
@@ -45,6 +46,11 @@ export async function POST(
   // Silently accept even before the scan completes — the client will keep
   // polling and see revealed findings as soon as they land.
   await captureFreeScanEmail(id, email);
+
+  // Product analytics (#34): keyed on the scan slug so the whole free-scan
+  // funnel sits under one Person timeline. Email is hashed — same identity
+  // policy as elsewhere; the raw address stays in `free_scans.email`.
+  track(row.slug, "free_scan.email_captured", { email_sha256: hashEmail(email) });
 
   return NextResponse.json({ ok: true });
 }

@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { openSecretFixPr } from "@kelp/worker";
+import { openSecretFixPr, markFindingResolvedByUser } from "@kelp/worker";
 import { getServerSupabase, getAdminSupabase } from "@/lib/supabase/server";
+import { track, identityForUser } from "@/lib/analytics";
 
 export interface FixPrState {
   url?: string;
@@ -23,14 +24,29 @@ export async function openFixPr(_prev: FixPrState, formData: FormData): Promise<
   const result = await openSecretFixPr(id, auth.user?.id);
   if (!result.ok) return { error: result.error };
 
+  const ident = identityForUser(auth.user ?? null);
+  if (ident) track(ident.distinctId, "finding.pr_opened", { findingId: id });
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/findings");
   return { url: result.url };
 }
 
-/** Mark a finding as resolved (the user fixed it). */
+/** Mark a finding as resolved (the user fixed it). Routes through the worker
+ *  helper so `resolved_by='user'` + `time_to_fix_ms` are stamped for the TTF
+ *  tile (#35). Ownership is enforced by the RLS-scoped SELECT before the
+ *  service-role write. */
 export async function markResolvedFinding(formData: FormData): Promise<void> {
-  await updateFindingStatus(String(formData.get("findingId") ?? ""), "resolved");
+  const id = String(formData.get("findingId") ?? "");
+  if (!id) return;
+  const supabase = await getServerSupabase();
+  const { data: owned } = await supabase.from("findings").select("id").eq("id", id).maybeSingle();
+  if (!owned) return;
+  await markFindingResolvedByUser(id);
+  const { data: auth } = await supabase.auth.getUser();
+  const ident = identityForUser(auth.user ?? null);
+  if (ident) track(ident.distinctId, "finding.marked_resolved", { findingId: id });
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/findings");
 }
 
 /**
@@ -55,18 +71,10 @@ export async function reportFalsePositive(formData: FormData): Promise<void> {
   if (!owned) return;
 
   await getAdminSupabase().from("findings").delete().eq("id", id);
+  const { data: auth } = await supabase.auth.getUser();
+  const ident = identityForUser(auth.user ?? null);
+  if (ident) track(ident.distinctId, "finding.marked_false_positive", { findingId: id });
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/findings");
 }
 
-async function updateFindingStatus(id: string, status: "resolved" | "dismissed"): Promise<void> {
-  if (!id) return;
-  const supabase = await getServerSupabase();
-  const { data: owned } = await supabase.from("findings").select("id").eq("id", id).maybeSingle();
-  if (!owned) return;
-  // The browser role has no UPDATE policy on findings, so mutate with the admin
-  // client (service role) after the ownership check.
-  await getAdminSupabase().from("findings").update({ status }).eq("id", id);
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/findings");
-}

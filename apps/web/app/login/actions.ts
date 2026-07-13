@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
+import { track, identify, identityForUser } from "@/lib/analytics";
 
 export type AuthState = { error: string } | null;
 
@@ -30,6 +31,19 @@ export async function authenticate(_prev: AuthState, formData: FormData): Promis
       await ensureTenant({ id: user.id, email: user.email });
     } catch {
       /* bootstrap retried on next authenticated request */
+    }
+    // Product analytics (#34): fire signup.completed only for the signup
+    // path — signin fires an implicit page.viewed via the client provider,
+    // which is enough for retention math. identify() runs both ways so
+    // events under this distinctId carry the (hashed) email property.
+    const ident = identityForUser(user);
+    if (ident) {
+      identify(ident.distinctId, {
+        ...(ident.email_sha256 ? { email_sha256: ident.email_sha256 } : {}),
+      });
+      if (mode === "signup") {
+        track(ident.distinctId, "signup.completed");
+      }
     }
   }
 

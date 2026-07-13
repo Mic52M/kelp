@@ -13,6 +13,7 @@ import {
   startCheckoutForOrg,
   stripeConfigured,
 } from "@kelp/worker";
+import { track, identityForUser } from "@/lib/analytics";
 
 /**
  * Start a Stripe Checkout Session for `tier` and redirect the user to the
@@ -55,6 +56,10 @@ export async function startCheckoutAction(
       cancelUrl: `${origin}/dashboard/billing?checkout=cancelled`,
     });
     checkoutUrl = url;
+    const ident = identityForUser(user);
+    if (ident) {
+      track(ident.distinctId, "plan.upgrade_started", { tier: tierRaw, org_id: orgId });
+    }
   } catch (e) {
     if (e instanceof StripeNotConfiguredError) {
       return { ok: false, message: e.message };

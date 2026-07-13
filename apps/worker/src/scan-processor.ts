@@ -48,6 +48,7 @@ import {
   upsertFindings,
   writeAudit,
 } from "./db.js";
+import { trackWorker } from "./analytics.js";
 import { createGitHubConnector } from "./connectors/github.js";
 import { createSupabaseConnector } from "./connectors/supabase.js";
 import { createSupabasePgConnector } from "./connectors/supabase-pg.js";
@@ -162,6 +163,16 @@ async function executePassiveScan(scan: {
   await resolveMissingFindings(scan.projectId, scan.scanId, successfulClasses);
 
   await finishScan(scan.scanId, "succeeded", errors.length ? JSON.stringify(errors) : undefined);
+  // Product analytics (#34): scan.completed under the org's distinctId — the
+  // acting user isn't always available (webhook path, cron, standalone
+  // worker) so per-org attribution is the honest choice.
+  trackWorker(scan.orgId, "scan.completed", {
+    scanId: scan.scanId,
+    projectId: scan.projectId,
+    mode: "passive",
+    nFindings: found,
+    nErrors: errors.length,
+  });
   return { scanId: scan.scanId, found, errors: errors.length };
 }
 
@@ -341,6 +352,14 @@ async function executeActivePentestScan(scan: {
       ? JSON.stringify(erroredSpecialists.map((o) => ({ name: o.name, error: o.error })))
       : undefined;
   await finishScan(scan.scanId, "succeeded", errorNote, costCents);
+  trackWorker(scan.orgId, "scan.completed", {
+    scanId: scan.scanId,
+    projectId: scan.projectId,
+    mode: "active_pentest",
+    nFindings: found,
+    nErrors: erroredSpecialists.length,
+    costCents,
+  });
 
   // Persist the full CampaignReport (per-agent transcript + counts + cost +
   // findings) so the "How the pen test ran" panel can show exactly what the
@@ -375,6 +394,12 @@ async function executeScan(scan: {
     return await executePassiveScan(scan);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    trackWorker(scan.orgId, "scan.failed", {
+      scanId: scan.scanId,
+      projectId: scan.projectId,
+      mode: scan.mode,
+      error: msg.slice(0, 300),
+    });
     try {
       await finishScan(scan.scanId, "failed", msg);
     } catch (finishErr) {

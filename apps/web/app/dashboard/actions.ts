@@ -6,6 +6,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { PlanLimitError } from "@kelp/core";
 import { enqueueScanForProject, drainScans, expireStuckScans } from "@kelp/worker";
+import { track, identityForUser } from "@/lib/analytics";
 
 /** Re-run the scan for a project the signed-in user owns. */
 export async function rescanAction(formData: FormData): Promise<void> {
@@ -28,6 +29,8 @@ export async function rescanAction(formData: FormData): Promise<void> {
 
   const { orgId } = await ensureTenant({ id: user.id, email: user.email });
   await enqueueScanForProject({ orgId, projectId, classes: ["secret", "rls"], trigger: "manual" });
+  const ident = identityForUser(user);
+  if (ident) track(ident.distinctId, "scan.started", { projectId, mode: "passive", org_id: orgId });
   after(() => drainScans().catch((e) => console.error("scan processing failed:", e)));
   revalidatePath("/dashboard");
 }
@@ -77,6 +80,8 @@ export async function startActivePentestAction(
       message: e instanceof Error ? e.message : "Could not start the pen test.",
     };
   }
+  const ident = identityForUser(user);
+  if (ident) track(ident.distinctId, "scan.started", { projectId, mode: "active_pentest", org_id: orgId });
   after(() => drainScans().catch((err) => console.error("active-pentest run failed:", err)));
   revalidatePath("/dashboard");
   return { ok: true, message: "Active pen test started — findings will appear as specialists finish." };

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
+import { track, identityForUser } from "@/lib/analytics";
 import { CONSENT_V3_TEXT, CONSENT_VERSION_LATEST } from "@kelp/core";
 import {
   listSupabaseProjects,
@@ -49,6 +50,11 @@ export async function reconnectSupabaseAction(
   const { orgId } = await ensureTenant({ id: user.id, email: user.email });
   await putCredential(orgId, projectId, "supabase_management", token);
 
+  const ident = identityForUser(user);
+  if (ident) {
+    track(ident.distinctId, "supabase_connected", { projectId, via: "management_pat", org_id: orgId });
+  }
+
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/configuration");
@@ -94,6 +100,11 @@ export async function reconnectSupabaseReadonlyAction(
 
   const { orgId } = await ensureTenant({ id: user.id, email: user.email });
   await putCredential(orgId, projectId, "supabase_readonly_connstring", connString);
+
+  const readonlyIdent = identityForUser(user);
+  if (readonlyIdent) {
+    track(readonlyIdent.distinctId, "supabase_connected", { projectId, via: "readonly_conn", org_id: orgId });
+  }
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/configuration");

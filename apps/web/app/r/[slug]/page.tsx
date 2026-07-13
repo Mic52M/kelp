@@ -9,6 +9,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFreeScanBySlug, type FreeScanDiagnostic } from "@kelp/worker";
+import { track } from "@/lib/analytics";
 import { Logo } from "@/components/Logo";
 import { buttonClasses } from "@/components/Button";
 import { ShareRow } from "@/components/free-scan/ShareRow";
@@ -95,6 +96,12 @@ export default async function ShareableReport({
 
   const row = await getFreeScanBySlug(slug);
   if (!row) notFound();
+
+  // Product analytics (#34): fires on every SSR render — the page has no
+  // client-side revalidation, so this is the only signal we get that a
+  // shared link was actually opened. distinctId is the slug so the view
+  // lands under the same Person timeline as the original submission.
+  track(slug, "free_scan.viewed_from_share", { slug });
 
   const findings = coerceFindings(row.findings);
   findings.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);

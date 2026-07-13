@@ -167,6 +167,15 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<{ applied
       // that follows — the user is watching the page.
       if (orgId && typeof s.subscription === "string") {
         await syncPlanFromSubscription(orgId, s.subscription);
+        // Product analytics (#34): plan.upgrade_completed. Keyed on the org
+        // (no acting user in the webhook context) so it lands in the same
+        // Person as plan.upgrade_started fired from the click.
+        try {
+          const { trackWorker } = await import("./analytics.js");
+          trackWorker(orgId, "plan.upgrade_completed", { subscriptionId: s.subscription });
+        } catch {
+          /* posthog optional — never block webhook processing */
+        }
       }
       return { applied: "checkout.session.completed" };
     }
