@@ -6,6 +6,7 @@ import type { Finding, Severity } from "@/lib/types";
 import { classMeta, ClassIcon } from "./findings/vuln-class";
 import { EvidencePanel } from "./findings/EvidencePanel";
 import { FindingChat } from "./findings/FindingChat";
+import { MarkdownLite } from "./findings/MarkdownLite";
 import { track } from "./PostHogProvider";
 import { Button, buttonClasses } from "./Button";
 import { SeverityBadge } from "./SeverityBadge";
@@ -318,11 +319,9 @@ function FixPromptBlock({
           )}
         </button>
       </div>
-      <div className="px-4 py-3">
-        <p className="whitespace-pre-wrap font-mono text-[12px] leading-[1.75] text-[color:var(--color-paper-100)]">
-          {body}
-        </p>
-        <div className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+      <div className="px-4 py-3 text-[13.5px] leading-[1.7] text-[color:var(--color-paper-200)]">
+        <MarkdownLite>{body}</MarkdownLite>
+        <div className="mt-4 font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
           Paste into your AI coding tool.
         </div>
       </div>

@@ -1,13 +1,17 @@
-// Minimal, XSS-safe Markdown renderer for the finding-chat (#39).
+"use client";
+
+// Minimal, XSS-safe Markdown renderer for the finding-chat (#39) + reused
+// wherever we render model-authored / prompt-shaped text (fix prompts,
+// finding explanations that contain code).
 //
 // Why not react-markdown? For 1500 lines of chat output on a security product
 // we want zero-dependency and a review-able allowlist. This renderer supports
 // exactly the subset the system prompt (chat.ts rule 10) tells the model to
-// emit — no headings, no tables, no images, no links except allow-list. HTML
-// in the input is escaped, not parsed. Any construct we don't understand
-// falls through as escaped text.
+// emit — no headings, no tables, no images, no links except allow-list.
+// Everything reaches React as text children (never dangerouslySetInnerHTML),
+// so a stray "<script>" surfaces as harmless text.
 
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 
 const ALLOWED_DOMAINS_RE =
   /^https?:\/\/(?:[a-z0-9-]+\.)*(?:kelp\.dev|owasp\.org|cwe\.mitre\.org|mozilla\.org|github\.com|githubusercontent\.com)(?:\/.*)?$/i;
@@ -122,15 +126,7 @@ export function MarkdownLite({ children }: { children: string }) {
       let end = start;
       while (end < lines.length && !/^```/.test(lines[end]!)) end++;
       const code = lines.slice(start, end).join("\n");
-      blocks.push(
-        <pre
-          key={`p-${key++}`}
-          className="my-2 overflow-x-auto border border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)] px-3 py-2 font-mono text-[12px] leading-[1.55] text-[color:var(--color-paper-100)]"
-          data-lang={lang || undefined}
-        >
-          {code}
-        </pre>,
-      );
+      blocks.push(<CodeBlock key={`p-${key++}`} lang={lang} code={code} />);
       i = end + 1;
       continue;
     }
@@ -196,4 +192,43 @@ export function MarkdownLite({ children }: { children: string }) {
   }
 
   return <div className="markdown-lite">{blocks}</div>;
+}
+
+/** Claude/ChatGPT-style code block: language pill (top-left), copy button
+ *  (top-right), dark inset body. Used for fenced blocks in MarkdownLite AND
+ *  as a standalone renderer for the fix-prompt panel and any other place
+ *  we show model-authored / prompt-shaped code. */
+export function CodeBlock({ lang, code }: { lang?: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+  const langLabel = (lang ?? "").trim();
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <div className="my-3 overflow-hidden border border-[color:var(--color-hair-strong)] bg-[color:var(--color-ink-950,#08090A)]">
+      <div className="flex items-center justify-between border-b border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)] px-3 py-1.5">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--color-paper-500)]">
+          {langLabel || "code"}
+        </span>
+        <button
+          type="button"
+          onClick={copy}
+          className="inline-flex items-center gap-1.5 border border-transparent px-2 py-0.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)] transition-colors hover:border-[color:var(--color-hair-strong)] hover:text-[color:var(--color-paper-100)]"
+        >
+          {copied ? "Copied ✓" : "Copy"}
+        </button>
+      </div>
+      <pre className="overflow-x-auto px-3 py-3 font-mono text-[12px] leading-[1.65] text-[color:var(--color-paper-100)]">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
 }
