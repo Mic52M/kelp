@@ -62,6 +62,12 @@ export {
 } from "./free-scan-db.js";
 export type { FreeScanPublicView } from "./free-scan-db.js";
 export {
+  loadFindingForChat,
+  loadOrCreateConversation,
+  appendConversationTurn,
+} from "./db.js";
+export type { FindingForChat, ConversationRow } from "./db.js";
+export {
   startCheckoutForOrg,
   verifyWebhookSignature as verifyStripeWebhookSignature,
   handleWebhookEvent as handleStripeWebhookEvent,

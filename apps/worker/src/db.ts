@@ -606,3 +606,132 @@ export async function writeAudit(entry: {
     ],
   );
 }
+
+
+// ─── Finding-chat helpers (#39) ──────────────────────────────────────────────
+
+/** Compact view of a finding for the chat context. Includes the finding's
+ *  org (so the API can authorize) + the raw evidence blob (untrusted; the
+ *  core sanitizer neutralizes it before it reaches the LLM). */
+export interface FindingForChat {
+  id: string;
+  orgId: string;
+  vulnClass: string;
+  severity: string;
+  title: string;
+  explanation: string;
+  location: string | null;
+  /** JSONB payload — SecretFinding / RlsFinding / agent report shape. */
+  raw: unknown;
+  scanId: string | null;
+}
+
+export async function loadFindingForChat(
+  findingId: string,
+): Promise<FindingForChat | null> {
+  const { rows } = await getPool().query(
+    `select id, org_id, vuln_class::text, severity::text, title, explanation,
+            location, evidence, last_scan_id
+       from findings
+      where id = $1`,
+    [findingId],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: r.id,
+    orgId: r.org_id,
+    vulnClass: r.vuln_class,
+    severity: r.severity,
+    title: r.title,
+    explanation: r.explanation,
+    location: r.location,
+    raw: r.evidence?.raw ?? null,
+    scanId: r.last_scan_id,
+  };
+}
+
+/** The persisted chat row, minus its own bookkeeping. */
+export interface ConversationRow {
+  id: string;
+  findingId: string;
+  orgId: string;
+  messages: { role: "user" | "assistant"; content: string; ts: string }[];
+  turnCount: number;
+  hourlyCount: number;
+  hourlyWindowStart: Date;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+}
+
+/** Load the conversation for a finding (creates if missing).
+ *  Idempotent — safe to call at every chat request. */
+export async function loadOrCreateConversation(
+  findingId: string,
+  orgId: string,
+): Promise<ConversationRow> {
+  // Upsert: race-safe insert with returning.
+  const { rows } = await getPool().query(
+    `insert into finding_conversations (finding_id, org_id)
+     values ($1, $2)
+     on conflict (finding_id) do update
+        set updated_at = finding_conversations.updated_at
+     returning id, finding_id, org_id, messages, turn_count,
+               hourly_count, hourly_window_start,
+               total_input_tokens, total_output_tokens`,
+    [findingId, orgId],
+  );
+  const r = rows[0]!;
+  return {
+    id: r.id,
+    findingId: r.finding_id,
+    orgId: r.org_id,
+    messages: Array.isArray(r.messages) ? r.messages : [],
+    turnCount: r.turn_count,
+    hourlyCount: r.hourly_count,
+    hourlyWindowStart: r.hourly_window_start,
+    totalInputTokens: Number(r.total_input_tokens),
+    totalOutputTokens: Number(r.total_output_tokens),
+  };
+}
+
+/** Append the user + assistant turn and update rate-limit + cost counters. */
+export async function appendConversationTurn(input: {
+  conversationId: string;
+  userMessage: string;
+  assistantMessage: string;
+  nowIso: string;
+  nextTurnCount: number;
+  nextHourlyCount: number;
+  nextHourlyWindowStart: Date;
+  addedInputTokens: number;
+  addedOutputTokens: number;
+  addedCostMicroCents: number;
+}): Promise<void> {
+  await getPool().query(
+    `update finding_conversations set
+        messages = messages
+          || jsonb_build_object('role','user','content',$2::text,'ts',$3::text)
+          || jsonb_build_object('role','assistant','content',$4::text,'ts',$3::text),
+        turn_count = $5,
+        hourly_count = $6,
+        hourly_window_start = $7,
+        total_input_tokens = total_input_tokens + $8,
+        total_output_tokens = total_output_tokens + $9,
+        estimated_cost_micro_cents = estimated_cost_micro_cents + $10,
+        updated_at = now()
+      where id = $1`,
+    [
+      input.conversationId,
+      input.userMessage,
+      input.nowIso,
+      input.assistantMessage,
+      input.nextTurnCount,
+      input.nextHourlyCount,
+      input.nextHourlyWindowStart,
+      input.addedInputTokens,
+      input.addedOutputTokens,
+      input.addedCostMicroCents,
+    ],
+  );
+}

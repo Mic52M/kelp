@@ -24,6 +24,7 @@ export * from "./agent/triage.js";
 export * from "./agent/auth-model.js";
 export * from "./agent/analyze-backend.js";
 export * from "./agent/repo-recon.js";
+export * from "./agent/chat.js";
 export * from "./agent/backend-brief.js";
 export * from "./agent/specialists/auth-bypass.js";
 export * from "./agent/specialists/injection.js";

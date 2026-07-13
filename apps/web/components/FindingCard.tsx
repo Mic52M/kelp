@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import type { Finding, Severity } from "@/lib/types";
 import { classMeta, ClassIcon } from "./findings/vuln-class";
 import { EvidencePanel } from "./findings/EvidencePanel";
+import { FindingChat } from "./findings/FindingChat";
 import { track } from "./PostHogProvider";
 import { Button, buttonClasses } from "./Button";
 import { SeverityBadge } from "./SeverityBadge";
@@ -130,6 +131,8 @@ export function FindingCard({
           {finding.triage && <TriageBanner finding={finding} />}
 
           <EvidencePanel finding={finding} />
+
+          <FindingChat findingId={finding.id} />
 
           {finding.exposure && finding.exposure.length > 0 && (
             <div className="mt-5 flex flex-wrap gap-2">
