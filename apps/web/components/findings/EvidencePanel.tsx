@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Finding, FindingEvidence } from "@/lib/types";
+import { MarkdownLite } from "./MarkdownLite";
 
 // "How Kelp verified this" (#43) — surfaces the deterministic evidence
 // gate behind each finding. Data source: apps/web/lib/data.ts → buildEvidence.
@@ -144,13 +145,13 @@ function TranscriptDetails({
         </span>
       </button>
       {open && (
-        <ol className="max-h-[420px] overflow-y-auto border-t border-[color:var(--color-hair)] bg-[color:var(--color-ink-1000)] px-4 py-3 font-mono text-[11.5px] leading-[1.75] text-[color:var(--color-paper-200)]">
+        <ol className="max-h-[520px] overflow-y-auto border-t border-[color:var(--color-hair)] bg-[color:var(--color-ink-1000)] px-4 py-3 text-[13px] leading-[1.7] text-[color:var(--color-paper-200)]">
           {transcript.map((step, i) => (
-            <li key={i} className="border-b border-[color:var(--color-hair)] py-2 last:border-b-0">
-              <div className="mb-1 text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+            <li key={i} className="border-b border-[color:var(--color-hair)] py-3 last:border-b-0">
+              <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
                 step {i + 1}
               </div>
-              <pre className="whitespace-pre-wrap break-words">{step}</pre>
+              <MarkdownLite>{step}</MarkdownLite>
             </li>
           ))}
         </ol>

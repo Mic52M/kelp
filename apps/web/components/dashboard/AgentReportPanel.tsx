@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import type { PersistedAgentReport } from "@/lib/data";
+import { MarkdownLite } from "@/components/findings/MarkdownLite";
 
 const AGENT_LABEL: Record<string, string> = {
   "agent-data": "Data agent",
@@ -152,9 +153,9 @@ function AgentRow({ o }: { o: PersistedAgentReport["outcomes"][number] }) {
                   <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
                     Step {String(i + 1).padStart(2, "0")}
                   </div>
-                  <p className="whitespace-pre-wrap text-[13px] leading-[1.7] text-[color:var(--color-paper-100)]">
-                    {step}
-                  </p>
+                  <div className="text-[13px] leading-[1.7] text-[color:var(--color-paper-100)]">
+                    <MarkdownLite>{step}</MarkdownLite>
+                  </div>
                 </li>
               ))}
             </ol>
