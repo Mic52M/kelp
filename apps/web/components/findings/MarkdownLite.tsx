@@ -12,15 +12,6 @@ import { Fragment, type ReactNode } from "react";
 const ALLOWED_DOMAINS_RE =
   /^https?:\/\/(?:[a-z0-9-]+\.)*(?:kelp\.dev|owasp\.org|cwe\.mitre\.org|mozilla\.org|github\.com|githubusercontent\.com)(?:\/.*)?$/i;
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /** Inline pass: **bold**, `code`, and allow-listed [text](url). */
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -109,9 +100,12 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
 
 /** Split input into blocks: paragraphs, fenced code, and list items. */
 export function MarkdownLite({ children }: { children: string }) {
-  // Normalize CRLF, escape any HTML the model might've emitted (we then
-  // re-interpret only the safe subset).
-  const raw = escapeHtml((children ?? "").replace(/\r\n/g, "\n"));
+  // Normalize CRLF. HTML in the string is NOT pre-escaped — React auto-escapes
+  // text children when it renders, and pre-escaping produces literal &#39;
+  // etc. on screen. We render everything through React text nodes (never
+  // dangerouslySetInnerHTML), so a stray "<script>" in the model's output
+  // is displayed as harmless text.
+  const raw = (children ?? "").replace(/\r\n/g, "\n");
 
   const lines = raw.split("\n");
   const blocks: ReactNode[] = [];
