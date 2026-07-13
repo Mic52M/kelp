@@ -7,9 +7,11 @@ import { ScoreRing } from "@/components/ScoreRing";
 import { SeverityMeter } from "@/components/dashboard/SeverityMeter";
 import { ScanningView } from "@/components/ScanningView";
 import { AgentReportPanel } from "@/components/dashboard/AgentReportPanel";
+import { BackendMapPanel } from "@/components/dashboard/BackendMap";
+import { TimeToFixTile } from "@/components/dashboard/TimeToFixTile";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
-import { loadDashboard } from "@/lib/data";
+import { loadDashboard, loadBackendMap } from "@/lib/data";
 import { rescanAction, resetStuckScanAction } from "./actions";
 
 export default async function Dashboard({
@@ -36,7 +38,9 @@ export default async function Dashboard({
     scanIssues,
     activePentest,
     agentReport,
+    timeToFix,
   } = await loadDashboard(params.project);
+  const backendMap = project ? await loadBackendMap(project.id, findings) : null;
   const scanning = scanStatus === "queued" || scanStatus === "running";
   const openActive = findings.filter(
     (f) => f.status !== "resolved" && f.status !== "needs_review",
@@ -167,6 +171,10 @@ export default async function Dashboard({
                 </div>
               </div>
             </div>
+
+            {project && scanStatus !== null && <TimeToFixTile stats={timeToFix} />}
+
+            {backendMap && <BackendMapPanel map={backendMap} />}
 
             {scanIssues.length > 0 && (
               <div className="mt-10 space-y-2">
