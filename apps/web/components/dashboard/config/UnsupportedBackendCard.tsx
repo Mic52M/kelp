@@ -35,9 +35,9 @@ export function UnsupportedBackendCard({ report }: { report: BackendReport }) {
             Active pen-testing isn't available for {backend} yet.
           </h2>
           <p className="mt-3 max-w-xl text-[13.5px] leading-[1.65] text-[color:var(--color-paper-300)]">
-            Kelp's active pen test currently covers Supabase-based apps (including Lovable Cloud,
-            Bolt, and v0). {backend} works differently — its security rules and auth model need
-            their own specialist agents, which we're building next.
+            Kelp's active pen test currently covers Supabase-based vibe-coded apps (including
+            managed Supabase backends). {backend} works differently — its security rules and
+            auth model need their own specialist agents, which we're building next.
           </p>
         </div>
       </div>

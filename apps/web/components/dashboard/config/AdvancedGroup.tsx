@@ -40,7 +40,7 @@ export function AdvancedGroup(props: AdvancedGroupProps) {
           </div>
           <p className="mt-3 max-w-xl text-[13px] leading-[1.65] text-[color:var(--color-paper-400)]">
             Optional. Give Kelp a live database view for a deeper scan. You don't need this on
-            Lovable Cloud or if Kelp already auto-detected your backend above.
+            managed Supabase or if Kelp already auto-detected your backend above.
           </p>
         </div>
         <ChevronDownIcon

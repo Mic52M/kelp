@@ -277,8 +277,7 @@ function HowToGuide() {
               />
             </div>
             <p className="px-4 py-3 text-[12.5px] text-[color:var(--color-paper-400)]">
-              Paste the prompt into Lovable, Bolt, Cursor, or v0. Your AI tool will handle the seed
-              script for you.
+              Paste the prompt into your AI coding tool. It will handle the seed script for you.
             </p>
           </div>
 

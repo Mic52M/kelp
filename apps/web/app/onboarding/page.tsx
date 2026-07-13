@@ -109,8 +109,8 @@ export default function Onboarding() {
         </h1>
         <p className="mt-5 max-w-xl text-[15px] leading-[1.65] text-[color:var(--color-paper-300)]">
           Pick the repo of the app you want to secure. Kelp reads the code to map your backend —
-          it auto-detects Supabase (including Lovable Cloud) from the source. You'll finish setup
-          in Configuration; no API keys needed here.
+          it auto-detects Supabase (including managed backends) from the source. You'll finish
+          setup in Configuration; no API keys needed here.
         </p>
 
         <div className="mt-12 border border-[color:var(--color-hair)] p-8">

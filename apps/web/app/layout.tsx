@@ -24,7 +24,7 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Kelp — security for vibe-coded apps",
   description:
-    "Kelp finds and fixes the security holes in apps built with Lovable, Bolt, Replit and Cursor on Supabase — before your users find them.",
+    "The security agent for vibe-coded apps. Kelp probes your backend the way an attacker would and hands you the fix — ready to paste back into your AI tool.",
   metadataBase: new URL("https://kelp.dev"),
 };
 

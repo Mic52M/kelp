@@ -296,7 +296,7 @@ function FixPromptBlock({
           {body}
         </p>
         <div className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
-          Paste into Lovable, Bolt, Cursor, or v0.
+          Paste into your AI coding tool.
         </div>
       </div>
     </div>

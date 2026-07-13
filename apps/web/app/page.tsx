@@ -3,6 +3,7 @@ import { buttonClasses } from "@/components/Button";
 import { Logo } from "@/components/Logo";
 import { Reveal } from "@/components/Reveal";
 import { CountUp } from "@/components/CountUp";
+import { FreeScanInput } from "@/components/free-scan/FreeScanInput";
 
 /* ── Copy ──────────────────────────────────────────────────────────────────── */
 
@@ -23,7 +24,7 @@ const checks = [
     tag: "BOLA-003",
     title: "Broken object authorization, actively probed.",
     body:
-      "With your consent, one authenticated user tries to reach another's data by ID. This is the exact failure behind the public breaches of Lovable and Moltbook apps.",
+      "With your consent, one authenticated user tries to reach another's data by ID. It's the exact failure behind the loudest public breaches of AI-generated apps.",
   },
 ];
 
@@ -31,10 +32,6 @@ const steps = [
   { n: "01", t: "Connect", d: "Sign in with GitHub and link your Supabase project. Scoped tokens only — the service_role key stays in your project." },
   { n: "02", t: "Scan",    d: "Kelp reads your schema and code, then runs authorized probes. Every request is logged in your audit trail." },
   { n: "03", t: "Fix",     d: "Read a plain-language report, apply ready-made fixes with one click, and stay covered on every push to main." },
-];
-
-const stack = [
-  "Lovable", "Bolt.new", "Replit", "Cursor", "v0", "Windsurf", "Firebase Studio", "Supabase", "GitHub", "Vercel",
 ];
 
 const faqs = [
@@ -204,34 +201,30 @@ export default function Landing() {
             </Reveal>
             <Reveal delay={120} duration={720}>
               <h1 className="font-display mt-8 text-[56px] leading-[0.98] text-[color:var(--color-paper-50)] sm:text-[72px] lg:text-[84px]">
-                Ship the app.<br />
-                <span className="italic text-[color:var(--color-paper-300)]">Not</span> its holes.
+                AI wrote your app.<br />
+                Kelp finds the doors it left <span className="italic text-[color:var(--color-paper-300)]">open</span>.
               </h1>
             </Reveal>
             <Reveal delay={280}>
               <p className="mt-8 max-w-[560px] text-[17px] leading-[1.6] text-[color:var(--color-paper-300)]">
-                62% of Lovable, Bolt and Replit projects ship with a security flaw. Kelp finds the ones
-                that matter in your Supabase app — missing policies, exposed keys, broken authorization —
-                and hands you the fix. No security team required.
+                The security agent for vibe-coded apps. We probe your backend the way an attacker would —
+                with real user context, no theatre — and hand you the fix, ready to paste back into
+                whatever AI tool built it.
               </p>
             </Reveal>
             <Reveal delay={400}>
-              <div className="mt-11 flex flex-wrap items-center gap-4">
-                <Link href="/onboarding" className={buttonClasses("primary", "lg", "cta-lift")}>
-                  Scan my app free
-                </Link>
-                <a href="#how" className={buttonClasses("secondary", "lg", "cta-lift")}>
-                  How it works
-                </a>
+              <div className="mt-11">
+                <FreeScanInput />
               </div>
             </Reveal>
             <Reveal delay={520}>
-              <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-2 text-[12px] font-mono uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
-                <span>No credit card</span>
-                <span aria-hidden className="h-1 w-1 bg-[color:var(--color-paper-600)]" />
-                <span>First scan under 10 min</span>
-                <span aria-hidden className="h-1 w-1 bg-[color:var(--color-paper-600)]" />
-                <span>Read-only by default</span>
+              <div className="mt-6">
+                <a
+                  href="#how"
+                  className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)] underline-offset-4 transition-colors hover:text-[color:var(--color-paper-50)] hover:underline"
+                >
+                  Or see how it works ↓
+                </a>
               </div>
             </Reveal>
           </div>
@@ -334,25 +327,47 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── ECOSYSTEM ────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-[1120px] px-6 py-16">
-        <Reveal>
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--color-paper-500)]">
-              Built for the AI-native stack
-            </div>
-            <div className="flex flex-wrap gap-x-7 gap-y-3">
-              {stack.map((s) => (
-                <span
-                  key={s}
-                  className="stack-name font-mono text-[12.5px] text-[color:var(--color-paper-300)]"
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
-          </div>
-        </Reveal>
+      {/* ── PROVEN, NOT THEORETICAL ─────────────────────────────────────── */}
+      <section className="mx-auto max-w-[1120px] px-6 py-24">
+        <SectionHead
+          eyebrowIndex="§ 02b"
+          eyebrow="Evidence, not maybes"
+          title="Proven, not theoretical."
+          kicker="Every finding Kelp files has been reproduced. Our executor re-runs the model's exploit before it becomes a ticket — no observable, no finding. That's why our reports are shorter than a scanner's, and why every line is real."
+        />
+        <div className="mt-14 grid grid-cols-1 gap-y-10 md:grid-cols-3 md:gap-x-10 md:gap-y-0 md:divide-x md:divide-[color:var(--color-hair)]">
+          {[
+            {
+              n: "01",
+              t: "Agents reason, adversaries prove.",
+              d: "Kelp's agents form hypotheses freely; the executor accepts them only when the exploit reproduces against your actual endpoints, with real user context.",
+            },
+            {
+              n: "02",
+              t: "Auth model as ground truth.",
+              d: "Before any finding is filed, Kelp derives your app's auth model — cookies, CORS, JWTs, one-time tokens — and refuses findings that don't survive it. No CSRF cries on bearer-JWT apps.",
+            },
+            {
+              n: "03",
+              t: "Full transcript per finding.",
+              d: "Every finding ships with the reasoning, the probe, and the response. Not a black box — the receipt for exactly how we know.",
+            },
+          ].map((s, i) => (
+            <Reveal key={s.n} delay={i * 100}>
+              <div className="md:px-8 first:md:pl-0 last:md:pr-0">
+                <div className="font-mono tabular text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-signal-dim)]">
+                  Guarantee · {s.n}
+                </div>
+                <h3 className="font-display mt-5 text-[26px] leading-[1.15] text-[color:var(--color-paper-50)]">
+                  {s.t}
+                </h3>
+                <p className="mt-4 text-[14.5px] leading-[1.7] text-[color:var(--color-paper-300)]">
+                  {s.d}
+                </p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
       </section>
 
       {/* ── PRICING ──────────────────────────────────────────────────────── */}
