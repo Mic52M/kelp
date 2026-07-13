@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { Reveal } from "@/components/Reveal";
 import { buttonClasses } from "@/components/Button";
+import { ShareRow } from "@/components/free-scan/ShareRow";
 
 type Severity = "critical" | "high" | "medium" | "low";
 
@@ -260,6 +261,7 @@ export default function ScanPage({ params }: { params: Promise<{ id: string }> }
 
         {done && snap && (
           <div className="mt-14 space-y-10">
+            <ShareRow slug={snap.slug} repoUrl={snap.repoUrl} />
             <DiagnosticPanel diagnostic={snap.diagnostic} />
 
             {/* Un-redacted preview or full findings if email captured. */}
