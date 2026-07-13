@@ -9,8 +9,14 @@ import {
   type SecretFinding,
 } from "@kelp/core";
 import { getServerSupabase } from "./supabase/server";
-import { loadActiveTestConsent, getProjectConfigStatus, expireStuckScans } from "@kelp/worker";
-import type { Finding, FindingStatus, FindingTriage, Project, Severity, VulnClass } from "./types";
+import {
+  loadActiveTestConsent,
+  getProjectConfigStatus,
+  expireStuckScans,
+  loadBackendReport,
+} from "@kelp/worker";
+import type { BackendReport } from "@kelp/core";
+import type { Finding, FindingEvidence, FindingStatus, FindingTriage, Project, Severity, VulnClass } from "./types";
 
 // Loads the signed-in org's project + findings from the DB. Queries run through
 // the user's session, so RLS scopes them to orgs the user belongs to.
@@ -37,7 +43,12 @@ interface FindingRow {
   last_scan_id: string | null;
 }
 
-function mapFinding(row: FindingRow, latestScanId: string | null, prUrl?: string): Finding {
+function mapFinding(
+  row: FindingRow,
+  latestScanId: string | null,
+  agentReport: PersistedAgentReport | null,
+  prUrl?: string,
+): Finding {
   const raw = row.evidence?.raw;
   let fixPreview: string | undefined;
   let fixPrompt: string | undefined;
@@ -72,6 +83,7 @@ function mapFinding(row: FindingRow, latestScanId: string | null, prUrl?: string
   const rawTriage = (raw as { triage?: unknown } | undefined)?.triage;
   const triage = parseTriage(rawTriage);
   const explanation = cleanExplanation(row.explanation);
+  const evidence = buildEvidence(row, raw, agentReport);
 
   return {
     id: row.id,
@@ -92,6 +104,7 @@ function mapFinding(row: FindingRow, latestScanId: string | null, prUrl?: string
     ...(prUrl ? { prUrl } : {}),
     ...(autofixable ? { autofixable: true } : {}),
     ...(triage ? { triage } : {}),
+    ...(evidence ? { evidence } : {}),
     // Was this finding touched by the most recent scan? Upsert bumps
     // last_scan_id every time a finding is re-detected, so equality here
     // means "the current scan saw it (new or unchanged)"; inequality means
@@ -157,6 +170,78 @@ function parseTriage(raw: unknown): FindingTriage | undefined {
  *  endpoint, fix, evidence) and would produce "undefined … undefined" if
  *  passed to the template helpers. Only apply the templates when the payload
  *  actually looks like the scanner's own shape. */
+/** "How Kelp verified this" (#43): shape the FindingEvidence for the panel.
+ *
+ *  Autonomous findings (raw shape: campaignFindingsToDetected + AutonomousFinding):
+ *  surface/endpoint come off `raw`; the "why-accepted" tail is embedded in the
+ *  original explanation as `[Kelp confirmed: …]` — we mine it out so the panel
+ *  can show it separately (the user-facing explanation strips it via
+ *  cleanExplanation). Passive findings just carry ruleId/provider/preview or
+ *  the RLS shape — no transcript, no confirmed-why. */
+function buildEvidence(
+  row: FindingRow,
+  raw: unknown,
+  agentReport: PersistedAgentReport | null,
+): FindingEvidence | undefined {
+  const r = (raw ?? {}) as Record<string, unknown>;
+
+  // Autonomous specialists put `surface` + `endpoint` on the report. That's
+  // the strongest signal we're looking at an agent-produced finding.
+  if (typeof r.surface === "string" && typeof r.endpoint === "string") {
+    const confirmedWhy = extractConfirmedWhy(row.explanation);
+    const { transcript, specialist } = pickTranscript(agentReport, row.vuln_class);
+    const ev: FindingEvidence = { kind: "agent", surface: r.surface, endpoint: r.endpoint };
+    if (confirmedWhy) ev.confirmedWhy = confirmedWhy;
+    if (transcript && transcript.length > 0) {
+      ev.transcript = transcript;
+      if (specialist) ev.specialist = specialist;
+    }
+    return ev;
+  }
+
+  if (row.vuln_class === "secret" && looksLikeSecretFinding(raw)) {
+    const s = raw as SecretFinding;
+    return {
+      kind: "passive-secret",
+      ruleId: s.ruleId,
+      provider: s.provider,
+      preview: s.preview,
+      endpoint: `${s.path}:${s.line}`,
+    };
+  }
+  if (row.vuln_class === "rls" && looksLikeRlsFinding(raw)) {
+    const rl = raw as RlsFinding;
+    return { kind: "passive-rls", endpoint: `${rl.schema}.${rl.table}` };
+  }
+  return { kind: "generic" };
+}
+
+/** Pull the "[Kelp confirmed: …]" tail off the persisted evidence string.
+ *  The bracket format is written by AutonomousExecutor.handleReport — we
+ *  render it separately in the panel; cleanExplanation removes it from the
+ *  user-facing prose. Returns undefined if the marker isn't present. */
+function extractConfirmedWhy(text: string): string | undefined {
+  const m = /\[Kelp confirmed:\s*([^\]]+)\]/i.exec(text);
+  return m ? m[1].trim() : undefined;
+}
+
+/** Find the specialist outcome whose vulnClass matches this finding and
+ *  return its transcript slice. Only one specialist typically produces
+ *  findings for a given vulnClass in a campaign, so this correlation is
+ *  reliable enough for the panel. Falls back to the follow-up specialist
+ *  when the primary outcome has no transcript. */
+function pickTranscript(
+  report: PersistedAgentReport | null,
+  vulnClass: string,
+): { transcript?: string[]; specialist?: string } {
+  if (!report) return {};
+  const matches = report.outcomes.filter((o) => o.vulnClass === vulnClass && o.transcript.length > 0);
+  if (matches.length === 0) return {};
+  // Prefer the outcome that actually filed findings for this class.
+  const chosen = matches.find((o) => o.findingsCount > 0) ?? matches[0];
+  return { transcript: chosen.transcript, specialist: chosen.name };
+}
+
 function looksLikeRlsFinding(raw: unknown): raw is RlsFinding {
   return !!raw && typeof (raw as RlsFinding).table === "string";
 }
@@ -182,6 +267,22 @@ export interface PersistedAgentReport {
   }>;
 }
 
+/** Median TTF stats surfaced on the Overview tile (#35). Numbers are
+ *  milliseconds; the component formats them (min / h / d). Per-severity
+ *  slots may be null when that severity has never been closed on the org. */
+export interface TimeToFixStats {
+  /** Overall median across all closed findings for the org. */
+  overallMs: number;
+  /** How many closures were used to compute the numbers. */
+  sampleSize: number;
+  bySeverity: {
+    critical: number | null;
+    high: number | null;
+    medium: number | null;
+    low: number | null;
+  };
+}
+
 export interface DashboardData {
   project: Project | null;
   /** all projects the caller can see (for the top-bar switcher) */
@@ -198,6 +299,9 @@ export interface DashboardData {
   agentReport: PersistedAgentReport | null;
   /** Claude spend of the most recent scan, in USD cents. */
   scanCostCents: number | null;
+  /** Median time-to-fix stats for the current org (#35). Null when no
+   *  finding has been closed yet (nothing meaningful to render). */
+  timeToFix: TimeToFixStats | null;
   /** human-readable warnings if a scan class couldn't complete */
   scanIssues: string[];
   /** Active-pentest gate state (#27): what's needed to enable the button. */
@@ -218,6 +322,47 @@ export interface DashboardData {
     ready: boolean;
     /** the org's current plan tier (for upgrade CTAs) */
     plan: PlanTier;
+  };
+}
+
+/** Median TTF loader (#35). Reads `findings.time_to_fix_ms` closed in the
+ *  last 180 days, scoped to the given org (RLS also enforces this — the
+ *  org filter is defensive + makes the query index-friendly). Returns null
+ *  when nothing has been closed yet, so the tile can render "no data yet"
+ *  instead of a misleading zero. */
+async function loadTimeToFix(
+  supabase: Awaited<ReturnType<typeof getServerSupabase>>,
+  orgId: string,
+): Promise<TimeToFixStats | null> {
+  const cutoff = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await supabase
+    .from("findings")
+    .select("severity, time_to_fix_ms")
+    .eq("org_id", orgId)
+    .gte("resolved_at", cutoff)
+    .not("time_to_fix_ms", "is", null);
+  const rows = (data ?? []) as { severity: Severity; time_to_fix_ms: number }[];
+  if (rows.length === 0) return null;
+  const median = (list: number[]): number | null => {
+    if (list.length === 0) return null;
+    const sorted = list.slice().sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
+      : sorted[mid];
+  };
+  const overall = median(rows.map((r) => r.time_to_fix_ms))!;
+  const bucket = (s: Severity) =>
+    median(rows.filter((r) => r.severity === s).map((r) => r.time_to_fix_ms));
+  return {
+    overallMs: overall,
+    sampleSize: rows.length,
+    bySeverity: {
+      critical: bucket("critical"),
+      high: bucket("high"),
+      medium: bucket("medium"),
+      low: bucket("low"),
+    },
   };
 }
 
@@ -394,7 +539,7 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
   );
 
   const findings = ((rows ?? []) as FindingRow[])
-    .map((r) => mapFinding(r, latestScanId, prUrls.get(r.id)))
+    .map((r) => mapFinding(r, latestScanId, agentReport, prUrls.get(r.id)))
     .sort(
       (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
     );
@@ -459,6 +604,14 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
     accountBSet = status.testAccountBEmail !== null;
   }
 
+  // Time-to-fix (#35): scope to the current project's org and compute median
+  // per severity + overall. Restricted to findings closed in the last 180
+  // days so a single ancient outlier doesn't dominate the median. The rows
+  // are RLS-scoped to the caller's orgs; we don't need to add an org filter.
+  const timeToFix: TimeToFixStats | null = p
+    ? await loadTimeToFix(supabase, p.org_id)
+    : null;
+
   return {
     project,
     projectOptions,
@@ -468,6 +621,7 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
     agentReport,
     scanCostCents,
     scanIssues,
+    timeToFix,
     summary: {
       // A `null` score means "no successful scan yet, we don't know" — the
       // dashboard renders it as `—`, not 100. A project with zero findings
@@ -497,5 +651,191 @@ export async function loadDashboard(projectId?: string): Promise<DashboardData> 
       ready: planAllowed && consentGranted && supabaseAnonReady && accountASet && accountBSet,
       plan,
     },
+  };
+}
+
+// ─── Backend map (#44) ───────────────────────────────────────────────────────
+
+export interface BackendMapEntry {
+  /** Short mono label, e.g. "supabase.co ref". */
+  label: string;
+  /** Mono value to render (already masked when sensitive). */
+  value: string;
+  /** Optional annotation column ("detected", "not set", provider name, …). */
+  note?: string;
+  /** Severity-dot color when there's an outstanding finding on this row. */
+  severityDot?: Severity;
+}
+
+export interface BackendMapColumn {
+  kind: "repo" | "supabase" | "auth";
+  heading: string;
+  /** One-line lede for the column ("What Kelp sees for your…"). */
+  lede: string;
+  entries: BackendMapEntry[];
+  /** Active-finding count Kelp attributes to this resource kind. */
+  findingCount: number;
+  /** Highest severity among active findings for this kind, drives the eyebrow dot. */
+  worstSeverity: Severity | null;
+}
+
+export interface BackendMap {
+  /** Absent when the project has never been analyzed — the panel renders a
+   *  hairline "not analyzed yet" placeholder instead of guessing. */
+  analyzed: boolean;
+  /** ISO timestamp of the last backend analysis (from BackendReport.analyzedAt). */
+  analyzedAt: string | null;
+  /** Primary backend kind, when confidently detected. */
+  primary: { type: string; confidence: string } | null;
+  columns: BackendMapColumn[];
+  /** Human-readable notes surfaced by the analyzer. */
+  hints: string[];
+  warnings: string[];
+}
+
+/** Rank of severity for picking the worst across a set. */
+function severityRank(s: Severity): number {
+  return SEVERITY_ORDER.indexOf(s);
+}
+function worstOf(list: Severity[]): Severity | null {
+  if (list.length === 0) return null;
+  return list.slice().sort((a, b) => severityRank(a) - severityRank(b))[0];
+}
+
+/** Mask an anon key for display — first 8 + last 4, middle collapsed. Anon
+ *  keys are public by design (they ship in the client bundle) but the panel
+ *  is prose, not a config field: full paste would be noise, not value. */
+function maskAnonKey(key: string): string {
+  if (key.length <= 14) return key;
+  return `${key.slice(0, 8)}…${key.slice(-4)}`;
+}
+
+/** Build the Overview "Backend map" (#44) from the persisted BackendReport
+ *  and the caller's already-loaded findings. All data lives in
+ *  `projects.backend_report` (migration 0011) + `findings.evidence.surface`
+ *  (populated by #43) — no extra queries, no repo re-recon. */
+export async function loadBackendMap(
+  projectId: string,
+  findings: Finding[],
+): Promise<BackendMap> {
+  const report: BackendReport | null = await loadBackendReport(projectId).catch(() => null);
+  const active = findings.filter((f) => f.status !== "resolved");
+
+  // Cross-reference findings by the evidence surface Kelp already recorded
+  // per finding (#43). We fold the two secret/RLS deterministic lanes into
+  // the Supabase column since that's what they concretely touch on a
+  // Supabase-shaped stack.
+  const bySurface = (s: string) => active.filter((f) => f.evidence?.surface === s);
+  const supabaseFindings = [
+    ...bySurface("postgrest"),
+    ...active.filter((f) => f.vulnClass === "rls" || f.vulnClass === "secret"),
+  ];
+  const authFindings = bySurface("auth").concat(active.filter((f) => f.vulnClass === "auth"));
+  const edgeFindings = bySurface("edge");
+  const repoFindings = active.filter((f) => f.evidence?.kind === "passive-secret");
+
+  const worstSup = worstOf(supabaseFindings.map((f) => f.severity));
+  const worstAuth = worstOf(authFindings.map((f) => f.severity));
+
+  const columns: BackendMapColumn[] = [];
+
+  // Repo column — always shown when we have any project data.
+  const repoEntries: BackendMapEntry[] = [];
+  const worstRepo = worstOf(repoFindings.map((f) => f.severity));
+  const { data: projectRow } = await (await getServerSupabase())
+    .from("projects")
+    .select("github_repo_full_name")
+    .eq("id", projectId)
+    .maybeSingle();
+  const repoName = (projectRow?.github_repo_full_name as string | null) ?? null;
+  repoEntries.push({
+    label: "GitHub repo",
+    value: repoName ?? "not connected",
+    note: repoName ? "connected" : undefined,
+    ...(worstRepo ? { severityDot: worstRepo } : {}),
+  });
+  columns.push({
+    kind: "repo",
+    heading: "Repository",
+    lede: "Where Kelp reads your app's source.",
+    entries: repoEntries,
+    findingCount: repoFindings.length,
+    worstSeverity: worstRepo,
+  });
+
+  // Supabase column — populated from BackendReport.publicConfig. Every field
+  // is optional; we render only what's actually present so nothing is faked.
+  const sup = report?.publicConfig ?? {};
+  const supEntries: BackendMapEntry[] = [];
+  if (sup.supabaseRef) {
+    supEntries.push({ label: "Project ref", value: sup.supabaseRef });
+  }
+  if (sup.supabaseUrl) {
+    supEntries.push({ label: "API URL", value: sup.supabaseUrl });
+  }
+  if (sup.supabaseAnonKey) {
+    supEntries.push({
+      label: "Anon key",
+      value: maskAnonKey(sup.supabaseAnonKey),
+      note: "public — masked here",
+    });
+  }
+  if (supEntries.length > 0 || supabaseFindings.length > 0) {
+    // Attach the worst-severity dot to the ref row (the resource's canonical id).
+    if (worstSup && supEntries[0]) supEntries[0].severityDot = worstSup;
+    columns.push({
+      kind: "supabase",
+      heading: "Supabase",
+      lede: "Backend Kelp probes over PostgREST + secrets audit.",
+      entries: supEntries.length > 0 ? supEntries : [{ label: "Config", value: "not detected" }],
+      findingCount: supabaseFindings.length,
+      worstSeverity: worstSup,
+    });
+  }
+
+  // Auth column — providers + signup path from BackendReport.authFlow.
+  const authEntries: BackendMapEntry[] = [];
+  const providers = report?.authFlow?.providers ?? [];
+  if (providers.length > 0) {
+    authEntries.push({
+      label: "Providers",
+      value: providers.join(" · "),
+      ...(worstAuth ? { severityDot: worstAuth } : {}),
+    });
+  }
+  if (report?.authFlow?.signupPath) {
+    authEntries.push({ label: "Signup path", value: report.authFlow.signupPath });
+  }
+  if (authEntries.length > 0 || authFindings.length > 0) {
+    columns.push({
+      kind: "auth",
+      heading: "Auth",
+      lede: "How users get into your app.",
+      entries: authEntries.length > 0 ? authEntries : [{ label: "Providers", value: "not detected" }],
+      findingCount: authFindings.length,
+      worstSeverity: worstAuth,
+    });
+  }
+
+  // Edge functions folded into a hint on the Supabase column: we don't
+  // persist the discovered function list, so surfacing an empty column would
+  // be misleading. When findings on the edge surface exist, we still count
+  // them on Supabase and note the finding count via the last hint.
+  const extraHints: string[] = [];
+  if (edgeFindings.length > 0) {
+    extraHints.push(
+      `${edgeFindings.length} finding${edgeFindings.length === 1 ? "" : "s"} on edge functions — see the findings list.`,
+    );
+  }
+
+  return {
+    analyzed: !!report,
+    analyzedAt: report?.analyzedAt ?? null,
+    primary: report
+      ? { type: report.primary.type, confidence: report.primary.confidence }
+      : null,
+    columns,
+    hints: [...(report?.hints ?? []), ...extraHints],
+    warnings: report?.warnings ?? [],
   };
 }

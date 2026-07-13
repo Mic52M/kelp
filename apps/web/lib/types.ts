@@ -27,6 +27,37 @@ export interface FindingTriage {
   originalSeverity?: Severity;
 }
 
+/** "How Kelp verified this" (#43) — data backing the evidence panel. All
+ *  optional so the panel can render gracefully for older findings that
+ *  predate a given field, or for lanes without an agent transcript. */
+export interface FindingEvidence {
+  /** Detection lane — informs the panel's phrasing.
+   *   - "agent": autonomous specialist proved it via a re-runnable probe.
+   *   - "passive-secret": deterministic secret-scanner match.
+   *   - "passive-rls": deterministic RLS/PostgREST audit.
+   *   - "generic": unknown or hand-filed. */
+  kind: "agent" | "passive-secret" | "passive-rls" | "generic";
+  /** Which Supabase surface the agent attacked (postgrest / edge / auth / …). */
+  surface?: string;
+  /** endpoint / table / function the finding is about */
+  endpoint?: string;
+  /** what the executor observed that let it accept the finding — the
+   *  "[Kelp confirmed: …]" tail on the persisted evidence string. */
+  confirmedWhy?: string;
+  /** For passive-secret: the rule id (e.g. "stripe-secret-live"). */
+  ruleId?: string;
+  /** For passive-secret: the provider (e.g. "Stripe"). */
+  provider?: string;
+  /** For passive-secret: masked preview shown by the scanner. */
+  preview?: string;
+  /** Trimmed transcript slice from the specialist that filed this finding.
+   *  Response bodies were already redacted by the toolbox — transcripts hold
+   *  only the agent's narration + tool-choice reasoning, no user data. */
+  transcript?: string[];
+  /** Name of the specialist whose transcript we're showing (e.g. "agent-postgrest"). */
+  specialist?: string;
+}
+
 export interface Finding {
   id: string;
   vulnClass: VulnClass;
@@ -35,6 +66,8 @@ export interface Finding {
   title: string;
   location: string;
   explanation: string;
+  /** "How Kelp verified this" (#43). */
+  evidence?: FindingEvidence;
   /** what the user should do, in plain language */
   remediation: string;
   /** for RLS: the proposed migration; for secret: the PR summary */

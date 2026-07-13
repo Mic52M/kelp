@@ -4,6 +4,8 @@ import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import type { Finding, Severity } from "@/lib/types";
 import { classMeta, ClassIcon } from "./findings/vuln-class";
+import { EvidencePanel } from "./findings/EvidencePanel";
+import { track } from "./PostHogProvider";
 import { Button, buttonClasses } from "./Button";
 import { SeverityBadge } from "./SeverityBadge";
 import {
@@ -38,6 +40,7 @@ export function FindingCard({
   const [open, setOpen] = useState(
     defaultOpen ?? (finding.severity === "critical" && finding.status === "open"),
   );
+  const [viewedFired, setViewedFired] = useState(false);
   const [copied, setCopied] = useState(false);
   const [fixPr, fixPrAction, fixPrPending] = useActionState<FixPrState, FormData>(openFixPr, {});
 
@@ -52,6 +55,11 @@ export function FindingCard({
     try {
       await navigator.clipboard.writeText(finding.fixPrompt);
       setCopied(true);
+      track("finding.fix_prompt_copied", {
+        findingId: finding.id,
+        vulnClass: finding.vulnClass,
+        severity: finding.severity,
+      });
       setTimeout(() => setCopied(false), 1800);
     } catch {
       /* clipboard unavailable */
@@ -64,7 +72,21 @@ export function FindingCard({
       style={{ borderLeft: `2px solid ${sevColor}` }}
     >
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setOpen((v) => !v);
+          // finding.viewed (#34): fire once per session per card, and only
+          // on OPEN (not on collapse). defaultOpen findings still count —
+          // the user actually saw them expanded on mount.
+          if (!viewedFired && !open) {
+            track("finding.viewed", {
+              findingId: finding.id,
+              vulnClass: finding.vulnClass,
+              severity: finding.severity,
+              status: finding.status,
+            });
+            setViewedFired(true);
+          }
+        }}
         className="flex w-full items-start gap-5 px-6 py-5 text-left"
       >
         <span className="mt-1 text-[color:var(--color-paper-400)]">
@@ -106,6 +128,8 @@ export function FindingCard({
           </p>
 
           {finding.triage && <TriageBanner finding={finding} />}
+
+          <EvidencePanel finding={finding} />
 
           {finding.exposure && finding.exposure.length > 0 && (
             <div className="mt-5 flex flex-wrap gap-2">
