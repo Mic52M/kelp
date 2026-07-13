@@ -7,6 +7,7 @@
 // server enforces.
 
 import { useEffect, useRef, useState } from "react";
+import { MarkdownLite } from "./MarkdownLite";
 
 interface Message {
   role: "user" | "assistant";
@@ -169,38 +170,41 @@ export function FindingChat({ findingId, suggestions = DEFAULT_SUGGESTIONS }: Pr
 
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mt-6 inline-flex items-center gap-2 border border-[color:var(--color-hair-strong)] px-4 py-2 font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-300)] transition-colors hover:border-[color:var(--color-paper-400)] hover:text-[color:var(--color-paper-50)]"
-      >
-        <span
-          aria-hidden
-          className="inline-block h-1.5 w-1.5 bg-[color:var(--color-signal)]"
-        />
-        Ask Kelp about this finding
-      </button>
+      <div className="mt-8">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-3 border border-[color:var(--color-signal-dim)] bg-[color:var(--color-signal)]/5 px-4 py-2.5 font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-signal)] transition-colors hover:border-[color:var(--color-signal)] hover:bg-[color:var(--color-signal)]/10"
+        >
+          <span
+            aria-hidden
+            className="inline-block h-1.5 w-1.5 animate-pulse-soft bg-[color:var(--color-signal)]"
+          />
+          Ask Kelp about this finding
+          <span aria-hidden className="text-[color:var(--color-signal-dim)]">→</span>
+        </button>
+      </div>
     );
   }
 
   return (
-    <section className="mt-6 border border-[color:var(--color-hair-strong)]">
-      <header className="flex items-center justify-between border-b border-[color:var(--color-hair)] px-4 py-2.5">
+    <section className="relative mt-8 border-l-2 border-[color:var(--color-signal)] bg-[color:var(--color-ink-900)]/50 shadow-[0_0_0_1px_var(--color-hair-strong)]">
+      <header className="flex items-center justify-between border-b border-[color:var(--color-hair-strong)] bg-[color:var(--color-ink-900)] px-5 py-3">
         <div className="flex items-center gap-3">
           <span
             aria-hidden
-            className="inline-block h-1.5 w-1.5 bg-[color:var(--color-signal)]"
+            className="inline-block h-1.5 w-1.5 animate-pulse-soft bg-[color:var(--color-signal)]"
           />
-          <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-paper-400)]">
-            Ask Kelp about this finding
+          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--color-paper-200)]">
+            Ask Kelp — chat
           </span>
         </div>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)] hover:text-[color:var(--color-paper-50)]"
+          className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)] transition-colors hover:text-[color:var(--color-paper-50)]"
         >
-          Close
+          Close ×
         </button>
       </header>
 
@@ -234,24 +238,30 @@ export function FindingChat({ findingId, suggestions = DEFAULT_SUGGESTIONS }: Pr
           </div>
         )}
 
-        <ul className="space-y-4">
+        <ul className="space-y-5">
           {messages.map((m, i) => (
-            <li key={i} className={m.role === "user" ? "" : "border-l-2 border-[color:var(--color-signal-dim)] pl-3"}>
-              <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
-                {m.role === "user" ? "You" : "Kelp"}
-              </div>
+            <li key={i}>
               <div
                 className={
                   m.role === "user"
-                    ? "mt-1 whitespace-pre-wrap text-[13.5px] leading-[1.65] text-[color:var(--color-paper-100)]"
-                    : "mt-1 whitespace-pre-wrap text-[13.5px] leading-[1.65] text-[color:var(--color-paper-200)]"
+                    ? "font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]"
+                    : "font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-signal-dim)]"
                 }
               >
-                {m.content}
-                {m.role === "assistant" && streaming && i === messages.length - 1 && (
-                  <span className="ml-1 inline-block h-3 w-1 animate-pulse bg-[color:var(--color-signal)] align-middle" />
-                )}
+                {m.role === "user" ? "You" : "Kelp"}
               </div>
+              {m.role === "user" ? (
+                <div className="mt-1.5 whitespace-pre-wrap text-[13.5px] leading-[1.65] text-[color:var(--color-paper-100)]">
+                  {m.content}
+                </div>
+              ) : (
+                <div className="mt-1.5 text-[13.5px] text-[color:var(--color-paper-200)]">
+                  <MarkdownLite>{m.content}</MarkdownLite>
+                  {streaming && i === messages.length - 1 && (
+                    <span className="ml-1 inline-block h-3 w-1 animate-pulse bg-[color:var(--color-signal)] align-middle" />
+                  )}
+                </div>
+              )}
             </li>
           ))}
         </ul>
