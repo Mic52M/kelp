@@ -13,6 +13,8 @@ import {
   drainScans,
   enqueueScanForProject,
   findProjectByRepo,
+  hasLiveScan,
+  pickWebhookRescanClasses,
 } from "@kelp/worker";
 
 function verify(payload: Buffer, signature: string | null, secret: string): boolean {
@@ -62,12 +64,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const project = await findProjectByRepo(repoFullName, installationId);
   if (!project) return NextResponse.json({ ignored: "no matching project" });
 
+  // Dedup (#35): a burst of pushes should not stack scans the worker will
+  // just serialize. Skip the enqueue when one is already queued or running
+  // — the in-flight scan already sees the newest commit tarball anyway.
+  if (await hasLiveScan(project.id)) {
+    return NextResponse.json({ ignored: "scan already in flight" });
+  }
+
+  // Close-the-loop (#35): re-run the same classes the last successful
+  // passive scan ran, so a fix push actually verifies what the user last
+  // saw findings across. `secret` alone remains the fallback on projects
+  // that have never completed a scan yet (first-connect edge case).
+  const classes = await pickWebhookRescanClasses(project.id, ["secret"]);
+
   let scanId: string;
   try {
     ({ scanId } = await enqueueScanForProject({
       orgId: project.orgId,
       projectId: project.id,
-      classes: ["secret"],
+      classes,
       trigger: "webhook_push",
     }));
   } catch (e) {

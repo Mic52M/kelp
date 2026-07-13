@@ -299,18 +299,93 @@ export async function resolveMissingFindings(
   classes: VulnClass[],
 ): Promise<number> {
   if (classes.length === 0) return 0;
+  // Attribution + time-to-fix (#35): stamp `resolved_by='auto'` on findings
+  // Kelp itself closes because the follow-up scan didn't re-detect them, and
+  // compute how long the finding was open. `first_scan_id.queued_at` is the
+  // birth timestamp — using `created_at` on findings would double-count when
+  // an upsert bumps `updated_at`. `time_to_fix_ms` stays null for pre-#35
+  // rows (the JOIN wouldn't populate it retroactively either).
   const { rowCount } = await getPool().query(
-    `update findings
+    `update findings f
        set status = 'resolved',
            resolved_at = now(),
+           resolved_by = 'auto',
+           time_to_fix_ms = greatest(
+             0,
+             extract(epoch from (now() - s.queued_at))::bigint * 1000
+           ),
            updated_at = now()
-     where project_id = $1
-       and vuln_class = any($2::vuln_class[])
-       and last_scan_id <> $3
-       and status in ('open', 'pr_opened', 'regressed')`,
+       from scans s
+      where f.first_scan_id = s.id
+        and f.project_id = $1
+        and f.vuln_class = any($2::vuln_class[])
+        and f.last_scan_id <> $3
+        and f.status in ('open', 'pr_opened', 'regressed')`,
     [projectId, classes, currentScanId],
   );
   return rowCount ?? 0;
+}
+
+/** Webhook re-scan (#35): pick the vulnClass set the last successful scan
+ *  ran so a `git push` verifies the same surfaces the user last saw
+ *  findings across. Passive-only — active pen tests require user consent
+ *  per campaign and are never triggered by a push. Falls back to the given
+ *  default when the project has no prior successful passive scan (first
+ *  push after connect can still verify secret hygiene). */
+export async function pickWebhookRescanClasses(
+  projectId: string,
+  fallback: VulnClass[],
+): Promise<VulnClass[]> {
+  const { rows } = await getPool().query(
+    `select classes
+       from scans
+      where project_id = $1
+        and mode = 'passive'
+        and status = 'succeeded'
+      order by queued_at desc
+      limit 1`,
+    [projectId],
+  );
+  const last = rows[0]?.classes as VulnClass[] | undefined;
+  return last && last.length > 0 ? last : fallback;
+}
+
+/** Webhook dedup (#35): skip enqueueing when a scan is already queued or
+ *  running for this project. Prevents a burst of pushes from stacking scans
+ *  the worker will just serialize anyway. */
+export async function hasLiveScan(projectId: string): Promise<boolean> {
+  const { rows } = await getPool().query(
+    `select 1 from scans
+      where project_id = $1
+        and status in ('queued', 'running')
+      limit 1`,
+    [projectId],
+  );
+  return rows.length > 0;
+}
+
+/** User-initiated resolution (#35): the "Mark resolved" button on a finding.
+ *  Sets `resolved_by='user'` so the TTF tile can distinguish auto vs manual
+ *  closures. Computes TTF the same way as auto-close for consistency. Returns
+ *  true when the row transitioned (idempotent for already-resolved rows). */
+export async function markFindingResolvedByUser(findingId: string): Promise<boolean> {
+  const { rowCount } = await getPool().query(
+    `update findings f
+       set status = 'resolved',
+           resolved_at = now(),
+           resolved_by = 'user',
+           time_to_fix_ms = greatest(
+             0,
+             extract(epoch from (now() - s.queued_at))::bigint * 1000
+           ),
+           updated_at = now()
+       from scans s
+      where f.first_scan_id = s.id
+        and f.id = $1
+        and f.status <> 'resolved'`,
+    [findingId],
+  );
+  return (rowCount ?? 0) > 0;
 }
 
 /**
