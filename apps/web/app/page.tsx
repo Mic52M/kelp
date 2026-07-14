@@ -4,6 +4,7 @@ import { Logo } from "@/components/Logo";
 import { Reveal } from "@/components/Reveal";
 import { CountUp } from "@/components/CountUp";
 import { FreeScanInput } from "@/components/free-scan/FreeScanInput";
+import { MultiAgentConsole } from "@/components/MultiAgentConsole";
 
 /* ── Copy ──────────────────────────────────────────────────────────────────── */
 
@@ -103,56 +104,6 @@ function SectionHead({
   );
 }
 
-/* ── Hero "wire dispatch" — data-first, no window chrome, cascade reveal ─── */
-
-function WireDispatch() {
-  const lines: [string, string, boolean?][] = [
-    ["01", "supabase.tables → 14  ·  functions → 6  ·  policies → 22"],
-    ["02", "rls  profiles.email     — READ open to anon"],
-    ["03", "rls  invoices.*         — no policy, table is exposed"],
-    ["04", "sec  VITE_SERVICE_ROLE  — committed at src/lib/db.ts:14"],
-    ["05", "bola get-order          — returns row for auth.uid() != row.owner"],
-    ["06", "──────────────────────────────────────────────────────────"],
-    ["07", "4 findings · 2 auto-fixable · report ready · 00:07.4", true],
-  ];
-  return (
-    <div className="relative overflow-hidden border border-[color:var(--color-hair-strong)] bg-[color:var(--color-ink-900)]">
-      <Reveal delay={520}>
-        <div className="flex items-center justify-between border-b border-[color:var(--color-hair)] px-4 py-2.5">
-          <div className="eyebrow flex items-center gap-2">
-            <span className="inline-block h-1.5 w-1.5 animate-pulse-soft bg-[color:var(--color-signal)]" />
-            <span>scan/roamly-app</span>
-          </div>
-          <div className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
-            Supabase · Live
-          </div>
-        </div>
-      </Reveal>
-      <div className="font-mono text-[12.5px] leading-[1.85]">
-        {lines.map(([n, l, isFinal], i) => {
-          const isSep = l.startsWith("──");
-          const tone = isSep
-            ? "text-[color:var(--color-hair-strong)]"
-            : isFinal
-              ? "text-[color:var(--color-signal)]"
-              : "text-[color:var(--color-paper-100)]";
-          return (
-            <Reveal key={n} delay={620 + i * 110} y={4}>
-              <div className="grid grid-cols-[3rem_1fr] gap-4 border-b border-[color:var(--color-hair)] px-4 py-2 last:border-b-0">
-                <span className="tabular text-[color:var(--color-paper-600)]">{n}</span>
-                <span className={tone}>
-                  {l}
-                  {isFinal && <span className="caret-blink" aria-hidden />}
-                </span>
-              </div>
-            </Reveal>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 /* ── Page ──────────────────────────────────────────────────────────────────── */
 
 export default function Landing() {
@@ -230,7 +181,7 @@ export default function Landing() {
           </div>
 
           <div className="lg:col-span-5">
-            <WireDispatch />
+            <MultiAgentConsole />
             <Reveal delay={1520}>
               <p className="mt-4 text-[12px] font-mono uppercase tracking-[0.12em] text-[color:var(--color-paper-500)]">
                 An excerpt from an actual dispatch. Nothing invented, nothing dramatised.

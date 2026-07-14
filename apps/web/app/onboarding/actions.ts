@@ -12,6 +12,7 @@ import {
   analyzeAndStoreBackendReport,
   getGithubInstallUrl,
   drainScans,
+  registerGithubInstallation,
   type RepoOption,
   type SupabaseProjectInfo,
 } from "@kelp/worker";
@@ -38,9 +39,69 @@ export async function getGithubReposAction(): Promise<
 > {
   try {
     const { orgId } = await requireOrg();
-    return { ok: true, repos: await listReposForOrg(orgId) };
+    let repos = await listReposForOrg(orgId);
+
+    // Auto-attribution fallback (#46). When the user signed in via GitHub
+    // OAuth the App may already be installed on one of their accounts, but
+    // the OAuth callback might not have caught it (Supabase-cached
+    // provider_token missing, transient GitHub error, etc.). Rather than
+    // send the user through the install flow again, try to detect an
+    // existing install via /user/installations using the session's
+    // provider_token and register it silently. Then re-query repos.
+    if (repos.length === 0) {
+      const attributed = await tryAttributeFromSession(orgId);
+      if (attributed) repos = await listReposForOrg(orgId);
+    }
+
+    return { ok: true, repos };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not list repositories" };
+  }
+}
+
+/** Attempt to attribute an existing GitHub App installation to `orgId`
+ *  using the session's OAuth provider_token. Returns true when an install
+ *  was successfully registered; false on any signal that no install exists
+ *  or the token can't reach the API. Never throws — this is a best-effort
+ *  auto-detect fired from a click handler. */
+async function tryAttributeFromSession(orgId: string): Promise<boolean> {
+  try {
+    const supabase = await getServerSupabase();
+    const { data: sessionData } = await supabase.auth.getSession();
+    const providerToken = sessionData?.session?.provider_token;
+    if (!providerToken) return false;
+
+    const appIdRaw = process.env.GITHUB_APP_ID;
+    const kelpAppId = appIdRaw ? Number(appIdRaw) : NaN;
+    if (!Number.isFinite(kelpAppId)) return false;
+
+    const res = await fetch("https://api.github.com/user/installations?per_page=100", {
+      headers: {
+        Authorization: `Bearer ${providerToken}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { installations?: Array<{ id: number; app_id: number }> };
+    const ours = (body.installations ?? []).find((i) => i.app_id === kelpAppId);
+    if (!ours) return false;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    await registerGithubInstallation({
+      orgId,
+      installationId: ours.id,
+      connectedBy: user?.id ?? null,
+    });
+    return true;
+  } catch (e) {
+    console.warn(
+      "tryAttributeFromSession failed:",
+      e instanceof Error ? e.message : e,
+    );
+    return false;
   }
 }
 

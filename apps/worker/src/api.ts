@@ -48,27 +48,34 @@ export interface RepoOption {
  * installations. Each repo carries the installation it came from, so the
  * connect step stores the right installation on the project.
  *
- * Dev fallback: if the org has registered no installations yet but a single
- * GITHUB_APP_INSTALLATION_ID is set in env, use it. This keeps local dev working
- * before the install flow is wired end-to-end; production orgs always have their
- * own rows (see saveGithubInstallation).
+ * Returns an empty list when the org has no installations registered — the
+ * UI reads that as "prompt the install flow" instead of a runtime error.
+ * Installations from foreign accounts silently 404 on token exchange rather
+ * than surfacing a confusing "Not Found" to the user (this happened when a
+ * stale `GITHUB_APP_INSTALLATION_ID` env fallback pointed at an install that
+ * no longer belonged to this App after a rename/transfer).
  */
 export async function listReposForOrg(orgId: string): Promise<RepoOption[]> {
-  let installationIds = await listOrgInstallationIds(orgId);
-  if (installationIds.length === 0) {
-    const envId = process.env.GITHUB_APP_INSTALLATION_ID;
-    if (envId) installationIds = [Number(envId)];
-  }
+  const installationIds = await listOrgInstallationIds(orgId);
 
   const app = githubAppEnv();
   const out: RepoOption[] = [];
   const seen = new Set<string>();
   for (const installationId of installationIds) {
-    const repos = await createGitHubConnector({ ...app, installationId }).listRepos();
-    for (const fullName of repos) {
-      if (seen.has(fullName)) continue; // a repo could be visible via two installs
-      seen.add(fullName);
-      out.push({ fullName, installationId });
+    try {
+      const repos = await createGitHubConnector({ ...app, installationId }).listRepos();
+      for (const fullName of repos) {
+        if (seen.has(fullName)) continue; // a repo could be visible via two installs
+        seen.add(fullName);
+        out.push({ fullName, installationId });
+      }
+    } catch (e) {
+      // A stored installation might have been uninstalled by the customer, or
+      // moved between accounts. Skip it silently — the org simply won't see
+      // repos from that install until it's re-added.
+      console.warn(
+        `listReposForOrg: installation ${installationId} unreachable, skipping (${e instanceof Error ? e.message : e})`,
+      );
     }
   }
   return out;
