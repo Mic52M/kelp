@@ -21,6 +21,7 @@ export {
   putCredential,
   getCredential,
   findProjectByRepo,
+  listOrgInstallationIds,
   loadActiveTestConsent,
   saveActiveTestConsent,
   revokeActiveTestConsent,

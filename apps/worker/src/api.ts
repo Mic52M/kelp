@@ -18,6 +18,7 @@ import {
   listOrgInstallationIds,
   loadOrgPlan,
   putCredential,
+  revokeGithubInstallation,
   saveGithubInstallation,
 } from "./db.js";
 import { createGitHubApp, createGitHubConnector } from "./connectors/github.js";
@@ -70,11 +71,15 @@ export async function listReposForOrg(orgId: string): Promise<RepoOption[]> {
         out.push({ fullName, installationId });
       }
     } catch (e) {
-      // A stored installation might have been uninstalled by the customer, or
-      // moved between accounts. Skip it silently — the org simply won't see
-      // repos from that install until it's re-added.
+      // Installation was uninstalled or moved between accounts — GitHub 404s
+      // on the create-installation-access-token endpoint. Revoke the row so
+      // hasInstallation reflects reality and the UI shows the install CTA.
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/Not Found/i.test(msg)) {
+        await revokeGithubInstallation(installationId).catch(() => {});
+      }
       console.warn(
-        `listReposForOrg: installation ${installationId} unreachable, skipping (${e instanceof Error ? e.message : e})`,
+        `listReposForOrg: installation ${installationId} unreachable, skipping (${msg})`,
       );
     }
   }

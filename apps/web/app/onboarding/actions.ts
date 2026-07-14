@@ -13,6 +13,7 @@ import {
   getGithubInstallUrl,
   drainScans,
   registerGithubInstallation,
+  listOrgInstallationIds,
   type RepoOption,
   type SupabaseProjectInfo,
 } from "@kelp/worker";
@@ -35,11 +36,12 @@ async function requireOrg(): Promise<{ orgId: string }> {
 }
 
 export async function getGithubReposAction(): Promise<
-  { ok: true; repos: RepoOption[] } | { ok: false; error: string }
+  { ok: true; repos: RepoOption[]; hasInstallation: boolean } | { ok: false; error: string }
 > {
   try {
     const { orgId } = await requireOrg();
     let repos = await listReposForOrg(orgId);
+    let hasInstallation = repos.length > 0;
 
     // Auto-attribution fallback (#46). When the user signed in via GitHub
     // OAuth the App may already be installed on one of their accounts, but
@@ -50,10 +52,26 @@ export async function getGithubReposAction(): Promise<
     // provider_token and register it silently. Then re-query repos.
     if (repos.length === 0) {
       const attributed = await tryAttributeFromSession(orgId);
-      if (attributed) repos = await listReposForOrg(orgId);
+      if (attributed) {
+        hasInstallation = true;
+        repos = await listReposForOrg(orgId);
+      }
     }
 
-    return { ok: true, repos };
+    // hasInstallation stays true even when repos is empty — the caller uses
+    // it to decide "skip the install CTA" vs "show install CTA". A user who
+    // installed the App on an account with zero repos must still land on the
+    // repo view (which prompts them to grant repo access), not on the CTA.
+    // Since 0003 the source of truth for org installs is the
+    // github_installations table (not orgs.github_installation_id, which the
+    // register path stopped writing to). A non-empty result here means "an
+    // install exists for this org, even if it currently exposes 0 repos".
+    if (!hasInstallation) {
+      const installIds = await listOrgInstallationIds(orgId);
+      hasInstallation = installIds.length > 0;
+    }
+
+    return { ok: true, repos, hasInstallation };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not list repositories" };
   }

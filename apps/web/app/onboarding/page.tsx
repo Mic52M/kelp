@@ -22,6 +22,11 @@ export default function Onboarding() {
   const [repoError, setRepoError] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const [installNote, setInstallNote] = useState<string | null>(null);
+  // Cold-load auto-detect: on mount we call getGithubReposAction, which
+  // internally tries the session provider_token via tryAttributeFromSession.
+  // Until that returns, we hide the install CTA so returning users don't have
+  // to click "Already installed?" — they land straight on the repo list.
+  const [detecting, setDetecting] = useState(true);
   const [selectedRepo, setSelectedRepo] = useState<RepoOption | null>(null);
   const [repoFilter, setRepoFilter] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -34,6 +39,15 @@ export default function Onboarding() {
     setLoadingRepos(false);
     if (res.ok) setRepos(res.repos);
     else setRepoError(res.error);
+  }
+
+  // Same as loadRepos but only surfaces the repo list when the org actually
+  // has an installation on file — even if that install has zero repos. On no
+  // install we fall through silently to the install CTA.
+  async function silentAutoDetect() {
+    const res = await getGithubReposAction();
+    setDetecting(false);
+    if (res.ok && res.hasInstallation) setRepos(res.repos);
   }
 
   async function startInstall() {
@@ -49,18 +63,27 @@ export default function Onboarding() {
 
   useEffect(() => {
     const status = new URLSearchParams(window.location.search).get("github");
-    if (!status) return;
-    window.history.replaceState(null, "", "/onboarding");
-    if (status === "connected") {
-      setInstallNote("GitHub App installed — loading your repositories…");
-      void loadRepos();
-    } else if (status === "pending") {
-      setInstallNote(
-        "Install requested. An owner of that GitHub organization needs to approve it, then come back and load your repositories.",
-      );
-    } else if (status === "error") {
-      setRepoError("We couldn't complete the GitHub install. Please try again.");
+    if (status) {
+      window.history.replaceState(null, "", "/onboarding");
+      setDetecting(false);
+      if (status === "connected") {
+        setInstallNote("GitHub App installed — loading your repositories…");
+        void loadRepos();
+      } else if (status === "pending") {
+        setInstallNote(
+          "Install requested. An owner of that GitHub organization needs to approve it, then come back and load your repositories.",
+        );
+      } else if (status === "error") {
+        setRepoError("We couldn't complete the GitHub install. Please try again.");
+      }
+      return;
     }
+    // Silent cold-load probe: if the user already installed the App (either
+    // in a previous session or during OAuth signup), skip straight to the
+    // repo list — even when it's empty (the install-but-no-repos state has
+    // its own inline prompt to grant repo access). Falling through to the
+    // install CTA is correct only for a first-timer with no installation.
+    void silentAutoDetect();
   }, []);
 
   async function connect() {
@@ -114,7 +137,12 @@ export default function Onboarding() {
         </p>
 
         <div className="mt-12 border border-[color:var(--color-hair)] p-8">
-          {!repos && (
+          {!repos && detecting && (
+            <p className="font-mono text-[12px] text-[color:var(--color-paper-500)]">
+              Checking your GitHub installation…
+            </p>
+          )}
+          {!repos && !detecting && (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <Button onClick={startInstall} disabled={installing} size="lg">
                 {installing ? "Redirecting to GitHub…" : "Install the Kelp GitHub App"}
@@ -174,15 +202,26 @@ export default function Onboarding() {
                   </p>
                 )}
                 {repos.length === 0 && (
-                  <div className="px-3 py-4 font-mono text-[12px] text-[color:var(--color-paper-500)]">
-                    No repositories yet.{" "}
+                  <div className="px-3 py-4 font-mono text-[12px] leading-relaxed text-[color:var(--color-paper-500)]">
+                    The installation is registered but can't see any repositories.
+                    Most likely you granted access to zero repos, or installed on
+                    an account without any.{" "}
+                    <a
+                      href="https://github.com/settings/installations"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-[color:var(--color-signal)] hover:text-[color:var(--color-paper-50)]"
+                    >
+                      Manage repository access on GitHub
+                    </a>{" "}
+                    or{" "}
                     <button
                       onClick={startInstall}
                       className="text-[color:var(--color-signal)] hover:text-[color:var(--color-paper-50)]"
                     >
-                      Install the Kelp GitHub App
-                    </button>{" "}
-                    and grant it access to a repo.
+                      install on a different account
+                    </button>
+                    . Reload this page when you're done.
                   </div>
                 )}
               </div>

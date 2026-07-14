@@ -201,6 +201,18 @@ export async function listOrgInstallationIds(orgId: string): Promise<number[]> {
   return rows.map((r) => Number(r.installation_id));
 }
 
+/** Mark an installation as revoked — used when GitHub 404s the access-token
+ *  call (the install was uninstalled or moved), so we stop returning it from
+ *  listOrgInstallationIds and the UI falls back to the install CTA. */
+export async function revokeGithubInstallation(installationId: number): Promise<void> {
+  await getPool().query(
+    `update github_installations
+     set revoked_at = now()
+     where installation_id = $1 and revoked_at is null`,
+    [installationId],
+  );
+}
+
 /** Decrypt a stored credential, or null if the project doesn't have that kind. */
 export async function getCredential(projectId: string, kind: string): Promise<string | null> {
   const { rows } = await getPool().query(
