@@ -118,6 +118,7 @@ async function executePassiveScan(scan: {
   orgId: string;
   projectId: string;
   classes: VulnClass[];
+  headSha: string | null;
 }): Promise<ScanOutcome> {
   const project = await loadProject(scan.projectId);
   if (!project) throw new Error(`project ${scan.projectId} not found`);
@@ -152,6 +153,7 @@ async function executePassiveScan(scan: {
       supabaseRef: project.supabaseRef,
       classes: scan.classes,
       jobId: scan.scanId,
+      headSha: scan.headSha,
     },
     deps,
   );
@@ -386,6 +388,7 @@ async function executeScan(scan: {
   projectId: string;
   classes: VulnClass[];
   mode: ScanMode;
+  headSha: string | null;
 }): Promise<ScanOutcome> {
   try {
     if (scan.mode === "active_pentest") {
@@ -446,6 +449,7 @@ export async function runScanForProject(input: {
     projectId: input.projectId,
     classes: input.classes,
     mode,
+    headSha: null,
   });
 }
 

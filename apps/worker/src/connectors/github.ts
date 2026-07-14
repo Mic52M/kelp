@@ -132,16 +132,22 @@ export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubCon
       return repos;
     },
 
-    async listSourceFiles(repoFullName: string): Promise<SourceFile[]> {
+    async listSourceFiles(repoFullName: string, ref?: string): Promise<SourceFile[]> {
       const kit = await octokit();
       const [owner, repo] = repoFullName.split("/");
       if (!owner || !repo) throw new Error(`invalid repo "${repoFullName}"`);
 
-      // One request: download the repo tarball (default branch). Far fewer API
-      // calls than fetching each blob, so no secondary rate limits and it's fast.
-      const res = await withRetry(() =>
-        kit.request("GET /repos/{owner}/{repo}/tarball", { owner, repo }),
-      );
+      // One request: download the repo tarball. Default branch when ref is
+      // omitted; a specific SHA/branch/tag when the caller wants to scan an
+      // exact commit (e.g. the PR head SHA from the GitHub Action, #36). Far
+      // fewer API calls than fetching each blob, so no secondary rate limits.
+      const res = ref
+        ? await withRetry(() =>
+            kit.request("GET /repos/{owner}/{repo}/tarball/{ref}", { owner, repo, ref }),
+          )
+        : await withRetry(() =>
+            kit.request("GET /repos/{owner}/{repo}/tarball", { owner, repo }),
+          );
       const gzipped = Buffer.from(res.data as ArrayBuffer);
 
       return extractSourceFiles(gzipped);

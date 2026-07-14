@@ -52,6 +52,10 @@ export interface ClaimedScan {
   classes: VulnClass[];
   /** 'passive' → deterministic scanners; 'active_pentest' → multi-agent campaign (#27). */
   mode: ScanMode;
+  /** Non-null only for PR-triggered scans (#36) — pins tarball to a specific commit. */
+  headSha: string | null;
+  /** Non-null only for PR-triggered scans (#36) — the base ref SHA for diff-against-main. */
+  baseSha: string | null;
 }
 
 /** Atomically claim the next queued scan (skip-locked), marking it running. */
@@ -62,7 +66,7 @@ export async function claimQueuedScan(): Promise<ClaimedScan | null> {
        select id from scans where status = 'queued'
        order by queued_at limit 1 for update skip locked
      )
-     returning id, org_id, project_id, classes::text[], mode`,
+     returning id, org_id, project_id, classes::text[], mode, head_sha, base_sha`,
   );
   if (rows.length === 0) return null;
   const r = rows[0];
@@ -72,6 +76,8 @@ export async function claimQueuedScan(): Promise<ClaimedScan | null> {
     projectId: r.project_id,
     classes: r.classes,
     mode: r.mode as ScanMode,
+    headSha: r.head_sha ?? null,
+    baseSha: r.base_sha ?? null,
   };
 }
 
@@ -82,7 +88,7 @@ export async function claimScanById(scanId: string): Promise<ClaimedScan | null>
   const { rows } = await getPool().query(
     `update scans set status = 'running', started_at = now()
      where id = $1 and status = 'queued'
-     returning id, org_id, project_id, classes::text[], mode`,
+     returning id, org_id, project_id, classes::text[], mode, head_sha, base_sha`,
     [scanId],
   );
   if (rows.length === 0) return null;
@@ -93,6 +99,8 @@ export async function claimScanById(scanId: string): Promise<ClaimedScan | null>
     projectId: r.project_id,
     classes: r.classes,
     mode: r.mode as ScanMode,
+    headSha: r.head_sha ?? null,
+    baseSha: r.base_sha ?? null,
   };
 }
 
@@ -185,6 +193,83 @@ export async function findProjectByRepo(
      where github_repo_full_name = $1 and github_installation_id = $2
      limit 1`,
     [repoFullName, installationId],
+  );
+  if (rows.length === 0) return null;
+  return { id: rows[0].id as string, orgId: rows[0].org_id as string };
+}
+
+/** Ownership check for the from-action polling endpoint (#36): does this
+ *  scanId belong to this project? Prevents cross-org id-probing. */
+export async function scanBelongsToProject(scanId: string, projectId: string): Promise<boolean> {
+  const { rows } = await getPool().query(
+    `select 1 from scans where id = $1 and project_id = $2 limit 1`,
+    [scanId, projectId],
+  );
+  return rows.length > 0;
+}
+
+/** Public status snapshot for the kelp/check Action's polling loop (#36).
+ *  Returns null if the scan does not exist; findings are counted here rather
+ *  than shipped raw so the endpoint stays under a few hundred bytes. */
+export async function loadScanStatus(scanId: string): Promise<{
+  scanId: string;
+  status: string;
+  headSha: string | null;
+  baseSha: string | null;
+  finishedAt: string | null;
+  counts: { critical: number; high: number; medium: number; low: number };
+  reportSlug: string | null;
+} | null> {
+  const { rows: scanRows } = await getPool().query(
+    `select id, status, head_sha, base_sha, finished_at, project_id
+       from scans where id = $1`,
+    [scanId],
+  );
+  if (scanRows.length === 0) return null;
+  const s = scanRows[0];
+
+  const { rows: countRows } = await getPool().query(
+    `select severity, count(*)::int as n
+       from findings
+       where project_id = $1 and status = 'open'
+       group by severity`,
+    [s.project_id],
+  );
+  const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const r of countRows) {
+    const sev = String(r.severity) as keyof typeof counts;
+    if (sev in counts) counts[sev] = Number(r.n);
+  }
+
+  // MVP: authenticated project reports don't have a public /r/<slug> yet
+  // (that's only wired for free-scans, migration 0012). Leaving as null so
+  // the Action's PR comment renders counts + link to /dashboard, and we can
+  // add slug minting behind this same field later without a contract change.
+  const reportSlug: string | null = null;
+
+  return {
+    scanId: s.id,
+    status: s.status,
+    headSha: s.head_sha ?? null,
+    baseSha: s.base_sha ?? null,
+    finishedAt: s.finished_at ? new Date(s.finished_at).toISOString() : null,
+    counts,
+    reportSlug,
+  };
+}
+
+/** Locate any project connected to this repo, across any installation the
+ *  org owns. Used by the kelp/check GitHub Action (#36) — the Action only
+ *  knows the repo full name, not which installation is behind it. */
+export async function findAnyProjectByRepo(
+  repoFullName: string,
+): Promise<{ id: string; orgId: string } | null> {
+  const { rows } = await getPool().query(
+    `select id, org_id from projects
+     where github_repo_full_name = $1 and github_installation_id is not null
+     order by created_at asc
+     limit 1`,
+    [repoFullName],
   );
   if (rows.length === 0) return null;
   return { id: rows[0].id as string, orgId: rows[0].org_id as string };

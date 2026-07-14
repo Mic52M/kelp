@@ -45,21 +45,23 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
   free: {
     name: "Free",
     maxProjects: 1,
-    allowedRescanTriggers: ["initial", "manual"],
+    // pr_check (#36) is allowed even on Free — the GitHub Action is the
+    // distribution surface; killing it on Free would kill the wedge itself.
+    allowedRescanTriggers: ["initial", "manual", "pr_check"],
     autoFixEnabled: false,
     activePentestEnabled: false,
   },
   starter: {
     name: "Starter",
     maxProjects: 5,
-    allowedRescanTriggers: ["initial", "manual", "webhook_push", "scheduled"],
+    allowedRescanTriggers: ["initial", "manual", "webhook_push", "scheduled", "pr_check"],
     autoFixEnabled: true,
     activePentestEnabled: true,
   },
   agency: {
     name: "Agency",
     maxProjects: 25,
-    allowedRescanTriggers: ["initial", "manual", "webhook_push", "scheduled"],
+    allowedRescanTriggers: ["initial", "manual", "webhook_push", "scheduled", "pr_check"],
     autoFixEnabled: true,
     activePentestEnabled: true,
   },

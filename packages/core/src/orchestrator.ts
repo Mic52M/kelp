@@ -12,7 +12,7 @@ import { runWithActiveTestConsent, type ConsentStore, type AuditLogger } from ".
 
 export interface GitHubConnector {
   /** already-filtered source files for the repo (secret scan input). */
-  listSourceFiles(repoFullName: string): Promise<SourceFile[]>;
+  listSourceFiles(repoFullName: string, ref?: string): Promise<SourceFile[]>;
 }
 
 export interface SupabaseConnector {
@@ -58,6 +58,8 @@ export interface ScanInput {
   supabaseRef: string | null;
   classes: VulnClass[];
   jobId: string;
+  /** For #36 pr_check scans: pin the repo tarball to a specific commit. */
+  headSha?: string | null;
 }
 
 export interface ScanDeps {
@@ -84,7 +86,7 @@ export async function runScan(
 
   if (input.classes.includes("secret") && deps.github && input.repoFullName) {
     try {
-      const files = await deps.github.listSourceFiles(input.repoFullName);
+      const files = await deps.github.listSourceFiles(input.repoFullName, input.headSha ?? undefined);
       await deps.audit.record({
         orgId: input.orgId,
         projectId: input.projectId,
