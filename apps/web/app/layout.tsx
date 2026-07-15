@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   title: "Kelp — security for vibe-coded apps",
   description:
     "The security agent for vibe-coded apps. Kelp probes your backend the way an attacker would and hands you the fix — ready to paste back into your AI tool.",
-  metadataBase: new URL("https://kelp.dev"),
+  metadataBase: new URL("https://kelp.build"),
 };
 
 export default async function RootLayout({

@@ -115,16 +115,18 @@ export async function resetStuckScanAction(formData: FormData): Promise<void> {
 
 /** Open (or reuse) the "Enable kelp/check" PR for a project the signed-in
  *  user owns (#36 follow-up, option B). Idempotent — running against a
- *  project whose workflow is already enabled just refreshes the UI. */
-export async function enableCheckPrAction(
-  formData: FormData,
-): Promise<{ ok: true; status: "opened" | "already_open" | "already_enabled"; url: string | null } | { ok: false; error: string }> {
+ *  project whose workflow is already enabled just refreshes the UI. Void
+ *  return so it plugs directly into a `<form action={…}>` (Next 15 requires
+ *  the form-action handler to be `(FormData) => void | Promise<void>`);
+ *  the eventual state — Enable / PR-open / Enabled — is read on the next
+ *  render from `loadProjects` after revalidatePath. */
+export async function enableCheckPrAction(formData: FormData): Promise<void> {
   const projectId = String(formData.get("projectId") ?? "");
-  if (!projectId) return { ok: false, error: "Missing project id." };
+  if (!projectId) return;
 
   const supabase = await getServerSupabase();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user?.email) return { ok: false, error: "Not signed in." };
+  if (!user?.email) return;
 
   // Ownership check via RLS.
   const { data: project } = await supabase
@@ -132,10 +134,11 @@ export async function enableCheckPrAction(
     .select("id")
     .eq("id", projectId)
     .maybeSingle();
-  if (!project) return { ok: false, error: "Project not found." };
+  if (!project) return;
 
   const res = await openEnableCheckPr(projectId);
+  if (!res.ok) {
+    console.warn(`enableCheckPrAction (${projectId}) failed: ${res.error} — ${res.message}`);
+  }
   revalidatePath("/dashboard/projects");
-  if (!res.ok) return { ok: false, error: res.message };
-  return { ok: true, status: res.status, url: res.url };
 }

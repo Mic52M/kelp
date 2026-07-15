@@ -41,7 +41,10 @@ export default async function BillingPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  let currentPlan: "free" | "starter" | "agency" = "free";
+  // 'founder' is an internal tier (see [[core/plans.ts]]) with no billing
+  // page representation — anyone on it sees the "on a paid plan" copy and
+  // no upgrade CTA. This narrow set is what the pricing UI cards enumerate.
+  let currentPlan: "free" | "starter" | "agency" | "founder" = "free";
   if (user?.email) {
     const { orgId } = await ensureTenant({ id: user.id, email: user.email });
     currentPlan = await loadOrgPlan(orgId);

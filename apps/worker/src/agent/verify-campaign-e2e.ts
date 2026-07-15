@@ -61,7 +61,7 @@ async function seedScratchProject(): Promise<{
   const orgId = orgRows[0].id as string;
   const { rows: userRows } = await pool.query(
     `insert into users (id, email) values (gen_random_uuid(), $1) returning id`,
-    [`e2e+${suffix}@kelp.dev`],
+    [`e2e+${suffix}@kelp.build`],
   );
   const userId = userRows[0].id as string;
   await pool.query(

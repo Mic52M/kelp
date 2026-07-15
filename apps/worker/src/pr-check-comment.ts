@@ -46,7 +46,7 @@ function severityLine(counts: SeverityCounts): string {
 }
 
 function dashboardUrl(projectId: string): string {
-  const base = (process.env.KELP_APP_BASE_URL ?? "https://kelp.dev").replace(/\/+$/, "");
+  const base = (process.env.KELP_APP_BASE_URL ?? "https://kelp.build").replace(/\/+$/, "");
   return `${base}/dashboard/${projectId}`;
 }
 

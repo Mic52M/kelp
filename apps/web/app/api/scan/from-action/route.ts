@@ -11,7 +11,7 @@
 // The repo MUST already be connected to a Kelp project (via the onboarding
 // flow, so a github_installations row exists for its org). We refuse
 // unrecognized repos with 404 so the Action can surface a friendly
-// "connect this repo at kelp.dev/dashboard first" message.
+// "connect this repo at kelp.build/dashboard first" message.
 //
 // Contract:
 //   Headers: Authorization: Bearer <github_token>

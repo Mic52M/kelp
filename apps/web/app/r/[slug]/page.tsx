@@ -229,7 +229,7 @@ export default async function ShareableReport({
           <div className="flex items-center gap-4">
             <Logo />
             <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
-              kelp.dev
+              kelp.build
             </span>
           </div>
           <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">

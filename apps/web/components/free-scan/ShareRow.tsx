@@ -24,8 +24,8 @@ export function ShareRow({ slug, repoUrl }: Props) {
 
   // We can't know the actual public origin at render time on the server (SSR
   // may run behind a proxy); build absolute URLs from the current window when
-  // available, falling back to "https://kelp.dev".
-  const origin = typeof window !== "undefined" ? window.location.origin : "https://kelp.dev";
+  // available, falling back to "https://kelp.build".
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://kelp.build";
   const reportUrl = `${origin}/r/${slug}`;
   const badgeMarkdown = `[![Scanned by Kelp](${origin}/r/${slug}/badge)](${reportUrl})`;
   const shareText = encodeURIComponent(

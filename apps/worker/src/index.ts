@@ -66,7 +66,7 @@ export {
   getFreeScanBySlug,
   captureFreeScanEmail,
 } from "./free-scan-db.js";
-export type { FreeScanPublicView } from "./free-scan-db.js";
+export type { FreeScanPublicView, FreeScanDiagnostic } from "./free-scan-db.js";
 export {
   loadFindingForChat,
   loadOrCreateConversation,

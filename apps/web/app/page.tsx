@@ -457,7 +457,7 @@ export default function Landing() {
             <a href="#how" className="hover:text-[color:var(--color-paper-50)]">How</a>
             <a href="#pricing" className="hover:text-[color:var(--color-paper-50)]">Pricing</a>
             <Link href="/dashboard" className="hover:text-[color:var(--color-paper-50)]">Dashboard</Link>
-            <a href="mailto:hello@kelp.dev" className="hover:text-[color:var(--color-paper-50)]">Contact</a>
+            <a href="mailto:hello@kelp.build" className="hover:text-[color:var(--color-paper-50)]">Contact</a>
           </nav>
           <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
             © 2026 Kelp Labs

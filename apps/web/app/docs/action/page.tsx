@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     "Add the kelp/check GitHub Action to your repository. Kelp scans every PR for new security findings and fails the check when critical or high issues are introduced.",
 };
 
-const ACTION_SLUG = process.env.KELP_ACTION_REPO ?? "Mic52M/kelp-action";
+const ACTION_SLUG = process.env.KELP_ACTION_REPO ?? "kelp-security/kelp-action";
 const ACTION_REF = process.env.KELP_ACTION_REF ?? "v1";
 
 const WORKFLOW_SNIPPET = `name: kelp/check
@@ -85,7 +85,7 @@ export default function ActionDocs() {
                 href="/dashboard"
                 className="text-[color:var(--color-signal)] hover:text-[color:var(--color-paper-50)]"
               >
-                kelp.dev/dashboard
+                kelp.build/dashboard
               </Link>
               .
             </li>
@@ -136,7 +136,7 @@ export default function ActionDocs() {
         <section className="mt-14">
           <SectionHeader>Inputs</SectionHeader>
           <div className="mt-5 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
-            <InputRow name="kelp-url" def="https://kelp.dev">
+            <InputRow name="kelp-url" def="https://kelp.build">
               Kelp API base URL. Override for staging or self-hosted deployments.
             </InputRow>
             <InputRow name="github-token" def="${{ github.token }}">
@@ -164,7 +164,7 @@ export default function ActionDocs() {
                 href="/dashboard"
                 className="text-[color:var(--color-signal)] hover:text-[color:var(--color-paper-50)]"
               >
-                kelp.dev/dashboard
+                kelp.build/dashboard
               </Link>{" "}
               and connect it, then re-run the check.
             </Trouble>

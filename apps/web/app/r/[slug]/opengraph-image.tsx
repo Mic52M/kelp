@@ -55,7 +55,7 @@ export default async function OG({ params }: { params: Promise<{ slug: string }>
           }}
         >
           <span>KELP · Security report</span>
-          <span>kelp.dev</span>
+          <span>kelp.build</span>
         </div>
 
         <div style={{ height: 2, background: "#232322", marginTop: 32, marginBottom: 56 }} />
@@ -138,7 +138,7 @@ export default async function OG({ params }: { params: Promise<{ slug: string }>
           }}
         >
           <span>{serious > 0 ? `${serious} serious · scanned by Kelp` : "scanned by Kelp"}</span>
-          <span>kelp.dev/r/{slug}</span>
+          <span>kelp.build/r/{slug}</span>
         </div>
       </div>
     ),

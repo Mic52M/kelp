@@ -6,7 +6,7 @@
 import { getPool, putCredential } from "./db.js";
 import { drainScans } from "./scan-processor.js";
 
-const DEMO_EMAIL = "founder+demo@kelp.dev";
+const DEMO_EMAIL = "founder+demo@kelp.build";
 const REPO = "Mic52M/auto-spark-flows";
 const SUPABASE_REF = "hebrhezulnxlhgrfbegt"; // Lunea
 
