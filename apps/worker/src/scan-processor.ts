@@ -36,6 +36,7 @@ import {
 import {
   claimQueuedScan,
   claimScanById,
+  countNewFindingsForScan,
   finishScan,
   getCredential,
   getPool,
@@ -48,6 +49,7 @@ import {
   upsertFindings,
   writeAudit,
 } from "./db.js";
+import { postPrCheckComment } from "./pr-check-comment.js";
 import { trackWorker } from "./analytics.js";
 import { createGitHubConnector } from "./connectors/github.js";
 import { createSupabaseConnector } from "./connectors/supabase.js";
@@ -118,7 +120,10 @@ async function executePassiveScan(scan: {
   orgId: string;
   projectId: string;
   classes: VulnClass[];
+  trigger: string;
   headSha: string | null;
+  baseSha: string | null;
+  prNumber: number | null;
 }): Promise<ScanOutcome> {
   const project = await loadProject(scan.projectId);
   if (!project) throw new Error(`project ${scan.projectId} not found`);
@@ -162,7 +167,12 @@ async function executePassiveScan(scan: {
 
   const erroredClasses = new Set(errors.map((e) => e.vulnClass));
   const successfulClasses = scan.classes.filter((c) => !erroredClasses.has(c));
-  await resolveMissingFindings(scan.projectId, scan.scanId, successfulClasses);
+  // Skip auto-close on PR-head scans (#36): a PR branch may legitimately not
+  // touch code that has findings on main, and resolving them here would lie
+  // to the customer about their main-branch security state.
+  if (scan.trigger !== "pr_check") {
+    await resolveMissingFindings(scan.projectId, scan.scanId, successfulClasses);
+  }
 
   await finishScan(scan.scanId, "succeeded", errors.length ? JSON.stringify(errors) : undefined);
   // Product analytics (#34): scan.completed under the org's distinctId — the
@@ -175,7 +185,54 @@ async function executePassiveScan(scan: {
     nFindings: found,
     nErrors: errors.length,
   });
+
+  // #36 Phase 2: post the kelp/check verdict comment on the PR. Fire-and-log
+  // — a comment failure (e.g. transient GitHub 5xx) must not fail the scan.
+  if (
+    scan.trigger === "pr_check" &&
+    scan.prNumber != null &&
+    project.repoFullName &&
+    project.installationId != null &&
+    scan.headSha
+  ) {
+    const newFindings = await countNewFindingsForScan(scan.projectId, scan.scanId);
+    const totalOpen = await countOpenFindings(scan.projectId);
+    await postPrCheckComment({
+      installationId: project.installationId,
+      repoFullName: project.repoFullName,
+      prNumber: scan.prNumber,
+      projectId: scan.projectId,
+      status: "succeeded",
+      headSha: scan.headSha,
+      newFindings,
+      totalOpen,
+    });
+  }
+
   return { scanId: scan.scanId, found, errors: errors.length };
+}
+
+/** Sum of open findings per severity for the project — used in the pr_check
+ *  comment footer so reviewers see the wider security context. */
+async function countOpenFindings(projectId: string): Promise<{
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}> {
+  const { rows } = await getPool().query(
+    `select severity, count(*)::int as n
+       from findings
+      where project_id = $1 and status = 'open'
+      group by severity`,
+    [projectId],
+  );
+  const out = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const r of rows) {
+    const sev = String(r.severity) as keyof typeof out;
+    if (sev in out) out[sev] = Number(r.n);
+  }
+  return out;
 }
 
 /**
@@ -388,7 +445,10 @@ async function executeScan(scan: {
   projectId: string;
   classes: VulnClass[];
   mode: ScanMode;
+  trigger: string;
   headSha: string | null;
+  baseSha: string | null;
+  prNumber: number | null;
 }): Promise<ScanOutcome> {
   try {
     if (scan.mode === "active_pentest") {
@@ -403,6 +463,24 @@ async function executeScan(scan: {
       mode: scan.mode,
       error: msg.slice(0, 300),
     });
+    // #36 Phase 2: tell the PR that Kelp couldn't scan this commit rather
+    // than silently timing out the Action.
+    if (scan.trigger === "pr_check" && scan.prNumber != null && scan.headSha) {
+      const project = await loadProject(scan.projectId).catch(() => null);
+      if (project?.repoFullName && project.installationId != null) {
+        await postPrCheckComment({
+          installationId: project.installationId,
+          repoFullName: project.repoFullName,
+          prNumber: scan.prNumber,
+          projectId: scan.projectId,
+          status: "failed",
+          headSha: scan.headSha,
+          newFindings: { critical: 0, high: 0, medium: 0, low: 0 },
+          totalOpen: { critical: 0, high: 0, medium: 0, low: 0 },
+          errorMessage: msg,
+        });
+      }
+    }
     try {
       await finishScan(scan.scanId, "failed", msg);
     } catch (finishErr) {
@@ -449,7 +527,10 @@ export async function runScanForProject(input: {
     projectId: input.projectId,
     classes: input.classes,
     mode,
+    trigger: input.trigger ?? "manual",
     headSha: null,
+    baseSha: null,
+    prNumber: null,
   });
 }
 

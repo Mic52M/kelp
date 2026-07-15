@@ -386,6 +386,8 @@ export async function enqueueScanForProject(input: {
   headSha?: string | null;
   /** For #36: base SHA to diff against — findings NEW since base gate the PR. */
   baseSha?: string | null;
+  /** For #36: the PR number to comment on after the scan finishes. */
+  prNumber?: number | null;
 }): Promise<{ scanId: string }> {
   const trigger = input.trigger ?? "manual";
   const mode = input.mode ?? "passive";
@@ -402,9 +404,18 @@ export async function enqueueScanForProject(input: {
     }
   }
   const { rows } = await getPool().query(
-    `insert into scans (org_id, project_id, status, trigger, classes, mode, head_sha, base_sha)
-     values ($1, $2, 'queued', $3, $4::vuln_class[], $5, $6, $7) returning id`,
-    [input.orgId, input.projectId, trigger, input.classes, mode, input.headSha ?? null, input.baseSha ?? null],
+    `insert into scans (org_id, project_id, status, trigger, classes, mode, head_sha, base_sha, pr_number)
+     values ($1, $2, 'queued', $3, $4::vuln_class[], $5, $6, $7, $8) returning id`,
+    [
+      input.orgId,
+      input.projectId,
+      trigger,
+      input.classes,
+      mode,
+      input.headSha ?? null,
+      input.baseSha ?? null,
+      input.prNumber ?? null,
+    ],
   );
   const scanId = rows[0].id as string;
   // If Redis is configured, hand the job to the durable queue (#7); otherwise

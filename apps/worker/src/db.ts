@@ -52,10 +52,16 @@ export interface ClaimedScan {
   classes: VulnClass[];
   /** 'passive' → deterministic scanners; 'active_pentest' → multi-agent campaign (#27). */
   mode: ScanMode;
+  /** What kicked the scan off. Only 'pr_check' (#36) currently changes downstream behavior
+   *  — we skip auto-close on a PR head because a branch may legitimately not touch code
+   *  that has findings on main, and closing those would lie to the customer. */
+  trigger: string;
   /** Non-null only for PR-triggered scans (#36) — pins tarball to a specific commit. */
   headSha: string | null;
   /** Non-null only for PR-triggered scans (#36) — the base ref SHA for diff-against-main. */
   baseSha: string | null;
+  /** Non-null only for kelp/check scans (#36) — the PR to comment on when the scan finishes. */
+  prNumber: number | null;
 }
 
 /** Atomically claim the next queued scan (skip-locked), marking it running. */
@@ -66,7 +72,7 @@ export async function claimQueuedScan(): Promise<ClaimedScan | null> {
        select id from scans where status = 'queued'
        order by queued_at limit 1 for update skip locked
      )
-     returning id, org_id, project_id, classes::text[], mode, head_sha, base_sha`,
+     returning id, org_id, project_id, classes::text[], mode, trigger, head_sha, base_sha, pr_number`,
   );
   if (rows.length === 0) return null;
   const r = rows[0];
@@ -76,8 +82,10 @@ export async function claimQueuedScan(): Promise<ClaimedScan | null> {
     projectId: r.project_id,
     classes: r.classes,
     mode: r.mode as ScanMode,
+    trigger: String(r.trigger),
     headSha: r.head_sha ?? null,
     baseSha: r.base_sha ?? null,
+    prNumber: r.pr_number == null ? null : Number(r.pr_number),
   };
 }
 
@@ -88,7 +96,7 @@ export async function claimScanById(scanId: string): Promise<ClaimedScan | null>
   const { rows } = await getPool().query(
     `update scans set status = 'running', started_at = now()
      where id = $1 and status = 'queued'
-     returning id, org_id, project_id, classes::text[], mode, head_sha, base_sha`,
+     returning id, org_id, project_id, classes::text[], mode, trigger, head_sha, base_sha, pr_number`,
     [scanId],
   );
   if (rows.length === 0) return null;
@@ -99,8 +107,10 @@ export async function claimScanById(scanId: string): Promise<ClaimedScan | null>
     projectId: r.project_id,
     classes: r.classes,
     mode: r.mode as ScanMode,
+    trigger: String(r.trigger),
     headSha: r.head_sha ?? null,
     baseSha: r.base_sha ?? null,
+    prNumber: r.pr_number == null ? null : Number(r.pr_number),
   };
 }
 
@@ -218,6 +228,12 @@ export async function loadScanStatus(scanId: string): Promise<{
   baseSha: string | null;
   finishedAt: string | null;
   counts: { critical: number; high: number; medium: number; low: number };
+  /** Findings NEW to the project because of this scan (#36 Phase 2). For a
+   *  pr_check scan the Action gates the merge on this — anything > 0 at
+   *  high/critical fails the check. For non-PR scans this is populated too
+   *  (findings whose first_scan_id = this scan) so the field always has a
+   *  meaning; consumers just ignore it. */
+  newFindings: { critical: number; high: number; medium: number; low: number };
   reportSlug: string | null;
 } | null> {
   const { rows: scanRows } = await getPool().query(
@@ -241,6 +257,26 @@ export async function loadScanStatus(scanId: string): Promise<{
     if (sev in counts) counts[sev] = Number(r.n);
   }
 
+  // Diff-against-main (#36 Phase 2): a finding whose first_scan_id is THIS
+  // scan is one we'd never seen before this run — i.e. new for the PR head.
+  // Regressed findings (previously resolved, now re-detected) also count as
+  // new for gating purposes: `last_scan_id = this scan AND status = 'regressed'`.
+  // Dismissed rows are excluded — the user's explicit "don't care" wins.
+  const { rows: newRows } = await getPool().query(
+    `select severity, count(*)::int as n
+       from findings
+      where project_id = $1
+        and status <> 'dismissed'
+        and (first_scan_id = $2 or (last_scan_id = $2 and status = 'regressed'))
+      group by severity`,
+    [s.project_id, s.id],
+  );
+  const newFindings = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const r of newRows) {
+    const sev = String(r.severity) as keyof typeof newFindings;
+    if (sev in newFindings) newFindings[sev] = Number(r.n);
+  }
+
   // MVP: authenticated project reports don't have a public /r/<slug> yet
   // (that's only wired for free-scans, migration 0012). Leaving as null so
   // the Action's PR comment renders counts + link to /dashboard, and we can
@@ -254,8 +290,34 @@ export async function loadScanStatus(scanId: string): Promise<{
     baseSha: s.base_sha ?? null,
     finishedAt: s.finished_at ? new Date(s.finished_at).toISOString() : null,
     counts,
+    newFindings,
     reportSlug,
   };
+}
+
+/** Per-severity count of findings NEW to the project because of `scanId`.
+ *  Same query as loadScanStatus.newFindings; exported for the worker's PR
+ *  comment path (#36 Phase 2) so it can pick the numbers without re-loading
+ *  the full status snapshot. */
+export async function countNewFindingsForScan(
+  projectId: string,
+  scanId: string,
+): Promise<{ critical: number; high: number; medium: number; low: number }> {
+  const { rows } = await getPool().query(
+    `select severity, count(*)::int as n
+       from findings
+      where project_id = $1
+        and status <> 'dismissed'
+        and (first_scan_id = $2 or (last_scan_id = $2 and status = 'regressed'))
+      group by severity`,
+    [projectId, scanId],
+  );
+  const out = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const r of rows) {
+    const sev = String(r.severity) as keyof typeof out;
+    if (sev in out) out[sev] = Number(r.n);
+  }
+  return out;
 }
 
 /** Locate any project connected to this repo, across any installation the

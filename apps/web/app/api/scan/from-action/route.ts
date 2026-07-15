@@ -133,6 +133,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       trigger: "pr_check",
       headSha,
       baseSha,
+      prNumber,
     }));
   } catch (e) {
     if (e instanceof PlanLimitError) {

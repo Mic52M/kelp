@@ -55,6 +55,17 @@ export interface RealGitHubConnector extends GitHubConnector {
   listRepos(): Promise<string[]>;
   /** Open (or reuse) a fix PR: branch off the default branch, commit the edited file, open the PR. */
   openFixPr(repoFullName: string, input: FixPrInput): Promise<FixPrResult>;
+  /** Upsert a Kelp-branded comment on a PR (#36 Phase 2). Finds any existing
+   *  comment whose body contains `marker` and PATCHes it in place; otherwise
+   *  POSTs a new one. Idempotent per marker — each new commit on the PR
+   *  triggers a new workflow run, and we want ONE moving comment, not a
+   *  growing thread. Returns the html_url of the comment. */
+  upsertPrComment(
+    repoFullName: string,
+    prNumber: number,
+    marker: string,
+    body: string,
+  ): Promise<{ url: string; created: boolean }>;
 }
 
 // Retry transient GitHub errors (5xx and secondary/abuse rate limits, which can
@@ -248,6 +259,64 @@ export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubCon
         }),
       );
       return { url: pr.html_url, alreadyExisted: false };
+    },
+
+    async upsertPrComment(
+      repoFullName: string,
+      prNumber: number,
+      marker: string,
+      body: string,
+    ): Promise<{ url: string; created: boolean }> {
+      const kit = await octokit();
+      const [owner, repo] = repoFullName.split("/");
+      if (!owner || !repo) throw new Error(`invalid repo "${repoFullName}"`);
+
+      // Walk PR comments looking for our marker. PRs with hundreds of comments
+      // are rare on the Action's target audience (vibe-code repos), so pagination
+      // stops at MAX_PAGES to bound the walk.
+      const MAX_PAGES = 5;
+      const perPage = 100;
+      let existingId: number | null = null;
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const { data } = await withRetry(() =>
+          kit.request("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", {
+            owner,
+            repo,
+            issue_number: prNumber,
+            per_page: perPage,
+            page,
+          }),
+        );
+        for (const c of data) {
+          if (typeof c.body === "string" && c.body.includes(marker)) {
+            existingId = c.id;
+            break;
+          }
+        }
+        if (existingId != null || data.length < perPage) break;
+      }
+
+      if (existingId != null) {
+        const { data } = await withRetry(() =>
+          kit.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
+            owner,
+            repo,
+            comment_id: existingId!,
+            body,
+          }),
+        );
+        return { url: data.html_url, created: false };
+      }
+
+      const { data } = await withRetry(() =>
+        kit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
+          owner,
+          repo,
+          issue_number: prNumber,
+          body,
+        }),
+      );
+      return { url: data.html_url, created: true };
     },
   };
 }
