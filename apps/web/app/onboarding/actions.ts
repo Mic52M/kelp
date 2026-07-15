@@ -14,6 +14,7 @@ import {
   drainScans,
   registerGithubInstallation,
   listOrgInstallationIds,
+  openEnableCheckPr,
   type RepoOption,
   type SupabaseProjectInfo,
 } from "@kelp/worker";
@@ -228,6 +229,20 @@ export async function connectAndScanAction(input: {
       }).catch((e) =>
         console.warn("backend analyzer failed:", e instanceof Error ? e.message : e),
       );
+
+      // Auto-open the "Enable kelp/check" PR (#36 follow-up, option A).
+      // Silent + best-effort — the PR itself is the surface. `needs_permission`
+      // is the expected outcome on installs that predate the Workflows: write
+      // permission escalation; the dashboard button (option B) will re-try
+      // once the user has accepted the new permissions.
+      if (pid) {
+        const enableRes = await openEnableCheckPr(pid);
+        if (!enableRes.ok) {
+          console.warn(`auto-enable check PR skipped (${enableRes.error}): ${enableRes.message}`);
+        } else {
+          console.log(`auto-enable check PR ${enableRes.status}: ${enableRes.url ?? "(no url)"}`);
+        }
+      }
     }
     await drainScans().catch((e) => console.error("scan processing failed:", e));
   });

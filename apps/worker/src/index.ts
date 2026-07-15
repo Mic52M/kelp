@@ -43,6 +43,8 @@ export {
 export type { StoredActiveTestConsent } from "./db.js";
 export { openSecretFixPr } from "./fix-pr.js";
 export type { SecretFixPrResult } from "./fix-pr.js";
+export { openEnableCheckPr, isCheckEnabled, loadEnableCheckStatus } from "./enable-check-pr.js";
+export type { EnableCheckPrResult, EnableCheckStatus } from "./enable-check-pr.js";
 export type { SupabaseProjectInfo, ConnectInput, RepoOption, ProjectConfigStatus } from "./api.js";
 export { analyzeAndStoreBackendReport, loadBackendReport } from "./api.js";
 export { InMemoryQueue } from "./queue.js";

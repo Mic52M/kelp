@@ -50,11 +50,35 @@ export class FixNotApplicableError extends Error {
   }
 }
 
+export interface FileCreationPrInput {
+  branch: string;
+  title: string;
+  body: string;
+  commitMessage: string;
+  path: string;
+  content: string;
+}
+
+export type FileCreationPrResult =
+  | { status: "opened"; url: string }
+  | { status: "already_open"; url: string }
+  | { status: "file_already_exists" };
+
 export interface RealGitHubConnector extends GitHubConnector {
   /** repos the installation can access, as "owner/repo". */
   listRepos(): Promise<string[]>;
   /** Open (or reuse) a fix PR: branch off the default branch, commit the edited file, open the PR. */
   openFixPr(repoFullName: string, input: FixPrInput): Promise<FixPrResult>;
+  /** Open a PR that CREATES a new file (no edit callback — the content is
+   *  provided verbatim). Powers the "Enable kelp/check" PR (#36 follow-up).
+   *  Short-circuits with `file_already_exists` when the path is present on
+   *  the default branch, so callers don't clobber user-authored files. */
+  openFileCreationPr(
+    repoFullName: string,
+    input: FileCreationPrInput,
+  ): Promise<FileCreationPrResult>;
+  /** Cheap read: does `path` exist on the repo's default branch? */
+  fileExistsOnDefaultBranch(repoFullName: string, path: string): Promise<boolean>;
   /** Upsert a Kelp-branded comment on a PR (#36 Phase 2). Finds any existing
    *  comment whose body contains `marker` and PATCHes it in place; otherwise
    *  POSTs a new one. Idempotent per marker — each new commit on the PR
@@ -259,6 +283,126 @@ export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubCon
         }),
       );
       return { url: pr.html_url, alreadyExisted: false };
+    },
+
+    async openFileCreationPr(
+      repoFullName: string,
+      input: FileCreationPrInput,
+    ): Promise<FileCreationPrResult> {
+      const kit = await octokit();
+      const [owner, repo] = repoFullName.split("/");
+      if (!owner || !repo) throw new Error(`invalid repo "${repoFullName}"`);
+      if (!input.branch.startsWith("kelp/")) {
+        throw new Error(`branch must be kelp-namespaced, got "${input.branch}"`);
+      }
+
+      const { data: repoInfo } = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}", { owner, repo }),
+      );
+      const base = repoInfo.default_branch;
+
+      // Short-circuit if the file already exists on the default branch —
+      // means the workflow is already installed (either by us in a prior
+      // run, or the user did it manually). Don't clobber.
+      try {
+        const { status } = await kit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+          owner,
+          repo,
+          path: input.path,
+          ref: base,
+        });
+        if (status === 200) return { status: "file_already_exists" };
+      } catch (e) {
+        // 404 is the expected "not there yet" path.
+        if ((e as { status?: number }).status !== 404) throw e;
+      }
+
+      // Idempotent: reuse an open PR for this branch if we already have one.
+      const { data: existing } = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}/pulls", {
+          owner,
+          repo,
+          head: `${owner}:${input.branch}`,
+          state: "open",
+        }),
+      );
+      if (existing.length > 0) {
+        return { status: "already_open", url: existing[0]!.html_url };
+      }
+
+      const { data: baseRef } = await withRetry(() =>
+        kit.request("GET /repos/{owner}/{repo}/git/ref/{ref}", {
+          owner,
+          repo,
+          ref: `heads/${base}`,
+        }),
+      );
+      const headSha = baseRef.object.sha;
+
+      try {
+        await kit.request("POST /repos/{owner}/{repo}/git/refs", {
+          owner,
+          repo,
+          ref: `refs/heads/${input.branch}`,
+          sha: headSha,
+        });
+      } catch (e) {
+        if ((e as { status?: number }).status !== 422) throw e;
+        await kit.request("PATCH /repos/{owner}/{repo}/git/refs/{ref}", {
+          owner,
+          repo,
+          ref: `heads/${input.branch}`,
+          sha: headSha,
+          force: true,
+        });
+      }
+
+      // PUT contents WITHOUT sha creates the file. This is where a
+      // `workflows: write` permission on the App becomes required for
+      // paths under .github/workflows/ — GitHub rejects otherwise.
+      await withRetry(() =>
+        kit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
+          owner,
+          repo,
+          path: input.path,
+          branch: input.branch,
+          message: input.commitMessage,
+          content: Buffer.from(input.content, "utf8").toString("base64"),
+        }),
+      );
+
+      const { data: pr } = await withRetry(() =>
+        kit.request("POST /repos/{owner}/{repo}/pulls", {
+          owner,
+          repo,
+          title: input.title,
+          body: input.body,
+          head: input.branch,
+          base,
+        }),
+      );
+      return { status: "opened", url: pr.html_url };
+    },
+
+    async fileExistsOnDefaultBranch(repoFullName: string, path: string): Promise<boolean> {
+      const kit = await octokit();
+      const [owner, repo] = repoFullName.split("/");
+      if (!owner || !repo) throw new Error(`invalid repo "${repoFullName}"`);
+      try {
+        const { data: repoInfo } = await withRetry(() =>
+          kit.request("GET /repos/{owner}/{repo}", { owner, repo }),
+        );
+        const { status } = await kit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+          owner,
+          repo,
+          path,
+          ref: repoInfo.default_branch,
+        });
+        return status === 200;
+      } catch (e) {
+        if ((e as { status?: number }).status === 404) return false;
+        throw e;
+      }
     },
 
     async upsertPrComment(

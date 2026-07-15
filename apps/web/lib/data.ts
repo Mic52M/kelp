@@ -388,6 +388,10 @@ export interface ProjectSummary {
   supabaseRef: string | null;
   activeFindings: number;
   scanStatus: string | null;
+  /** PR-check enablement (#36 follow-up). enabled = workflow file present on
+   *  default branch; pr_open = we opened an enable PR that is still open;
+   *  not_enabled = neither. */
+  prCheck: { state: "enabled" | "pr_open" | "not_enabled"; prUrl: string | null };
 }
 
 /** All projects for the signed-in org, with active-finding counts. */
@@ -395,8 +399,10 @@ export async function loadProjects(): Promise<ProjectSummary[]> {
   const supabase = await getServerSupabase();
   const { data: projects } = await supabase
     .from("projects")
-    .select("id, name, github_repo_full_name, supabase_project_ref")
+    .select("id, name, github_repo_full_name, supabase_project_ref, enable_check_pr_url")
     .order("created_at", { ascending: false });
+
+  const { isCheckEnabled } = await import("@kelp/worker");
 
   const out: ProjectSummary[] = [];
   for (const p of projects ?? []) {
@@ -414,6 +420,19 @@ export async function loadProjects(): Promise<ProjectSummary[]> {
       .eq("project_id", p.id)
       .order("queued_at", { ascending: false })
       .limit(1);
+
+    // PR-check state (#36 follow-up). If we already have a pending PR
+    // recorded, don't waste a GitHub call — the PR-open case is by far
+    // the most common intermediate state. Otherwise, live-check the
+    // default branch. Failures fall back to "not_enabled" (safe UI).
+    let prCheck: ProjectSummary["prCheck"] = { state: "not_enabled", prUrl: null };
+    if (p.enable_check_pr_url) {
+      prCheck = { state: "pr_open", prUrl: p.enable_check_pr_url as string };
+    } else if (p.github_repo_full_name) {
+      const enabled = await isCheckEnabled(p.id).catch(() => false);
+      if (enabled) prCheck = { state: "enabled", prUrl: null };
+    }
+
     out.push({
       id: p.id,
       name: p.name,
@@ -421,6 +440,7 @@ export async function loadProjects(): Promise<ProjectSummary[]> {
       supabaseRef: p.supabase_project_ref,
       activeFindings: count ?? 0,
       scanStatus: (scan?.[0]?.status as string | undefined) ?? null,
+      prCheck,
     });
   }
   return out;

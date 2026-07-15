@@ -3,7 +3,68 @@ import { Button, buttonClasses } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHero } from "@/components/dashboard/PageHeader";
 import { loadProjects } from "@/lib/data";
-import { rescanAction, resetStuckScanAction } from "../actions";
+import { enableCheckPrAction, rescanAction, resetStuckScanAction } from "../actions";
+
+/** PR-check state chip + action, per project (#36 follow-up, option B). */
+function PrCheckRow({
+  projectId,
+  state,
+}: {
+  projectId: string;
+  state: { state: "enabled" | "pr_open" | "not_enabled"; prUrl: string | null };
+}) {
+  if (state.state === "enabled") {
+    return (
+      <div className="mt-2 flex items-center gap-2 font-mono text-[11px] text-[color:var(--color-paper-500)]">
+        <span
+          className="inline-block h-1.5 w-1.5"
+          style={{ background: "var(--color-signal)" }}
+          aria-hidden
+        />
+        <span>PR checks enabled</span>
+      </div>
+    );
+  }
+  if (state.state === "pr_open" && state.prUrl) {
+    return (
+      <div className="mt-2 flex items-center gap-2 font-mono text-[11px] text-[color:var(--color-paper-500)]">
+        <span
+          className="inline-block h-1.5 w-1.5"
+          style={{ background: "var(--color-sev-med)" }}
+          aria-hidden
+        />
+        <span>Enable-check PR waiting to be merged — </span>
+        <a
+          href={state.prUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="underline decoration-[color:var(--color-hair-strong)] underline-offset-4 hover:text-[color:var(--color-paper-50)]"
+        >
+          open PR
+        </a>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 flex items-center gap-4">
+      <form action={enableCheckPrAction}>
+        <input type="hidden" name="projectId" value={projectId} />
+        <button
+          type="submit"
+          className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-signal)] underline decoration-[color:var(--color-signal-dim)] underline-offset-4 transition-colors hover:text-[color:var(--color-paper-50)]"
+        >
+          Enable Kelp checks on PRs →
+        </button>
+      </form>
+      <Link
+        href="/docs/action"
+        className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)] hover:text-[color:var(--color-paper-300)]"
+      >
+        Or add manually
+      </Link>
+    </div>
+  );
+}
 
 export default async function ProjectsPage() {
   const projects = await loadProjects();
@@ -57,6 +118,7 @@ export default async function ProjectsPage() {
                       {p.repo && p.supabaseRef && <span aria-hidden>·</span>}
                       {p.supabaseRef && <span>Supabase · {p.supabaseRef}</span>}
                     </div>
+                    {p.repo && <PrCheckRow projectId={p.id} state={p.prCheck} />}
                   </div>
                   <div className="lg:col-span-2 lg:text-right">
                     <span className="font-mono tabular text-[12px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)]">

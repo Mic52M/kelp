@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { ensureTenant } from "@/lib/tenant";
 import { PlanLimitError } from "@kelp/core";
-import { enqueueScanForProject, drainScans, expireStuckScans } from "@kelp/worker";
+import { enqueueScanForProject, drainScans, expireStuckScans, openEnableCheckPr } from "@kelp/worker";
 import { track, identityForUser } from "@/lib/analytics";
 
 /** Re-run the scan for a project the signed-in user owns. */
@@ -111,4 +111,31 @@ export async function resetStuckScanAction(formData: FormData): Promise<void> {
   await expireStuckScans(projectId, 0);
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/projects");
+}
+
+/** Open (or reuse) the "Enable kelp/check" PR for a project the signed-in
+ *  user owns (#36 follow-up, option B). Idempotent — running against a
+ *  project whose workflow is already enabled just refreshes the UI. */
+export async function enableCheckPrAction(
+  formData: FormData,
+): Promise<{ ok: true; status: "opened" | "already_open" | "already_enabled"; url: string | null } | { ok: false; error: string }> {
+  const projectId = String(formData.get("projectId") ?? "");
+  if (!projectId) return { ok: false, error: "Missing project id." };
+
+  const supabase = await getServerSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.email) return { ok: false, error: "Not signed in." };
+
+  // Ownership check via RLS.
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!project) return { ok: false, error: "Project not found." };
+
+  const res = await openEnableCheckPr(projectId);
+  revalidatePath("/dashboard/projects");
+  if (!res.ok) return { ok: false, error: res.message };
+  return { ok: true, status: res.status, url: res.url };
 }
