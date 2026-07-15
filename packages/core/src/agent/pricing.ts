@@ -73,6 +73,7 @@ export const MONTHLY_CAMPAIGN_CAP_CENTS: Record<PlanTier, number> = {
   free: 0,
   starter: 100_00, // $100/mo
   agency: 500_00, // $500/mo
+  founder: Number.POSITIVE_INFINITY, // internal; no cap
 };
 
 /**

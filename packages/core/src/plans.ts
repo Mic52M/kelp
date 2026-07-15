@@ -65,6 +65,16 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     autoFixEnabled: true,
     activePentestEnabled: true,
   },
+  founder: {
+    // Internal-only. Not sold, not surfaced in the pricing page. Effectively
+    // unlimited so the Kelp team can connect any number of test/customer
+    // repos without hitting the Agency cap mid-demo.
+    name: "Founder",
+    maxProjects: Number.POSITIVE_INFINITY,
+    allowedRescanTriggers: ["initial", "manual", "webhook_push", "scheduled", "pr_check"],
+    autoFixEnabled: true,
+    activePentestEnabled: true,
+  },
 };
 
 /**
@@ -96,6 +106,9 @@ export type PlanLimitCode =
 export function assertCanCreateProject(plan: PlanTier, currentProjectCount: number): void {
   const config = PLANS[plan];
   if (currentProjectCount >= config.maxProjects) {
+    // maxProjects can be Infinity (founder tier); the >= check still works
+    // in JS but the error message would render "Infinity project(s)" — guard
+    // it because this branch is unreachable on that tier.
     throw new PlanLimitError(
       plan,
       "PROJECT_LIMIT_REACHED",

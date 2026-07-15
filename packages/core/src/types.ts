@@ -1,7 +1,7 @@
 // Shared domain types. Mirror the SQL enums in packages/db/migrations/0001_init.sql.
 // Keep these two in sync — the SQL is the source of truth.
 
-export type PlanTier = "free" | "starter" | "agency";
+export type PlanTier = "free" | "starter" | "agency" | "founder";
 export type MemberRole = "owner" | "admin" | "member";
 
 export type VulnClass = "rls" | "secret" | "bola" | "auth" | "injection" | "ssrf" | "exposure";
