@@ -5,6 +5,7 @@ import { Reveal } from "@/components/Reveal";
 import { CountUp } from "@/components/CountUp";
 import { FreeScanInput } from "@/components/free-scan/FreeScanInput";
 import { MultiAgentConsole } from "@/components/MultiAgentConsole";
+import { ArchitectureCenterpiece } from "@/components/ArchitectureCenterpiece";
 
 /* ── Copy ──────────────────────────────────────────────────────────────────── */
 
@@ -187,6 +188,39 @@ export default function Landing() {
                 An excerpt from an actual dispatch. Nothing invented, nothing dramatised.
               </p>
             </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* ── § 01 · ARCHITECTURE CENTERPIECE ──────────────────────────────── */}
+      <section className="border-y border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/40">
+        <div className="mx-auto max-w-[1120px] px-6 py-20 sm:py-28">
+          <Reveal>
+            <div className="eyebrow flex items-center gap-3">
+              <span className="h-px w-6 bg-[color:var(--color-hair-strong)]" aria-hidden />
+              <span>§ 01 · How it moves</span>
+            </div>
+          </Reveal>
+          <Reveal delay={120}>
+            <h2 className="font-display mt-6 max-w-[820px] text-[36px] leading-[1.05] text-[color:var(--color-paper-50)] sm:text-[48px]">
+              Four specialists probe in parallel.
+              <br />
+              <span className="text-[color:var(--color-paper-300)]">
+                A reviewer keeps the honest ones.
+              </span>
+            </h2>
+          </Reveal>
+          <Reveal delay={240}>
+            <p className="mt-6 max-w-[560px] text-[15px] leading-[1.65] text-[color:var(--color-paper-300)]">
+              Every finding is evidence-gated: Kelp&rsquo;s reviewer re-runs the reproduction before it lands in
+              your report. Nothing invented, nothing hand-waved. Hover a specialist to see its beat.
+            </p>
+          </Reveal>
+          <div className="mt-12">
+            {/* No Reveal here — the SVG has its own internal loop, and IO
+                sometimes fails to trigger on the initial layout for very
+                tall (440px) children below the fold on slow mounts. */}
+            <ArchitectureCenterpiece />
           </div>
         </div>
       </section>
