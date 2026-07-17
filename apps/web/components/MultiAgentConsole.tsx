@@ -31,6 +31,9 @@ interface Step {
   finding?: boolean;
 }
 
+// 7-line loop. Kept short so the terminal frame fits the H1 without
+// growing the hero on smaller viewports — the interleave itself is the
+// pitch, not the count of specialists.
 const SCRIPT: Step[] = [
   { ts: "13:04:12", agent: "postgrest", text: "probing rls on public schema…" },
   { ts: "13:04:12", agent: "edge-fn",   text: "listing functions… found 6" },
@@ -39,10 +42,6 @@ const SCRIPT: Step[] = [
   { ts: "13:04:14", agent: "postgrest", text: "profiles.email — READ open to anon", finding: true },
   { ts: "13:04:14", agent: "edge-fn",   text: "get-order verify_jwt=false", finding: true },
   { ts: "13:04:15", agent: "secrets",   text: "VITE_SERVICE_ROLE at src/lib/db.ts:14", finding: true },
-  { ts: "13:04:15", agent: "auth",      text: "reset flow missing rate-limit" },
-  { ts: "13:04:16", agent: "postgrest", text: "invoices.* no policy, table exposed", finding: true },
-  { ts: "13:04:16", agent: "reviewer",  text: "merging 5 leads → confirmed 4, dropped 1 unreproducible" },
-  { ts: "13:04:18", agent: "reviewer",  text: "report ready · 4 findings · 2 auto-fixable · 00:06.2", finding: true },
 ];
 
 const AGENT_COLOR: Record<AgentTag, string> = {
@@ -146,10 +145,11 @@ export function MultiAgentConsole() {
         </div>
       </div>
       <div
-        className="font-mono text-[12.5px] leading-[1.75]"
-        // Reserve height so the terminal doesn't grow during the animation.
-        // 11 lines × ~26px + header buffer.
-        style={{ minHeight: `${totalLines * 30}px` }}
+        className="overflow-hidden font-mono text-[12.5px] leading-[1.75]"
+        // Lock the frame at exactly the script's row count so the terminal
+        // never grows during the typewriter — and so the hero layout on
+        // narrow viewports doesn't reflow with each line.
+        style={{ height: `${totalLines * 30}px` }}
       >
         {shown.map(({ step, chars }, i) => {
           const isTyping = !reduced && i === shown.length - 1 && chars < step.text.length;
