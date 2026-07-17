@@ -1,162 +1,291 @@
-// Landing "big-thing" — Kelp's agent architecture in motion (§ 01).
+// Landing § 01 — Kelp's agent architecture as an orchestrated diagram.
 //
-// One SVG. Four specialists probe the connected repo in parallel. Findings
-// emerge and flow to the reviewer, which drops the unreproducible ones and
-// promotes the confirmed ones into the report panel. Loops every 12s.
+// The animation is a single 12s coordinated sequence, not scattered effects:
+// four specialists take turns, each completing the full arc (probe → target
+// flash → return beam in severity colour → reviewer flash → report row) before
+// the next one starts. The one that gets dropped by the reviewer never lands
+// a row — that's the "reviewer keeps the honest ones" story made visible.
 //
-// Design rules from [[web-design-anchor]]:
-//   - No gradient, glass, aurora. Motion is structural (position, dash-
-//     offset, opacity), never decorative (glow, particles, neon).
-//   - Single signal accent — the same green as the rest of the site.
-//   - Severity colours reused (crit/high/med/low) so the piece reads as
-//     the same product, not a hero-only art piece.
-//   - Respect prefers-reduced-motion — the CSS animations are wrapped in
-//     `@media (prefers-reduced-motion: no-preference)` so a user who opts
-//     out sees the final steady-state (all lines drawn, findings in the
-//     report, no motion) instead of a jittering rush.
+// Design rules from [[web-design-anchor]] and the frontend-design skill:
+//   - Orchestrate, don't scatter — one beat at a time.
+//   - Motion teaches the structure. Nothing is decorative.
+//   - No glow, no glass, no gradient. Just stroke, dasharray, opacity.
+//   - Single accent (signal green) + severity palette for the "confirmed"
+//     leg. Grey when idle.
+//   - prefers-reduced-motion sees the steady state.
 //
-// Interactivity: hover over any labelled node to reveal its one-line role.
-// Everything else is CSS-driven, so it stays cheap on the main thread.
+// Interactivity: hover any specialist to reveal a one-line role via
+// foreignObject tooltip.
 
 "use client";
 
-const AGENTS = [
-  { key: "postgrest", label: "postgrest",   role: "Probes RLS + GRANTs on every table via the anon PostgREST surface.",  y: 70,  color: "var(--color-sev-med)"  },
-  { key: "edge-fn",   label: "edge-fn",     role: "Lists every edge function, replays each without a JWT and inspects the response.", y: 170, color: "var(--color-signal)" },
-  { key: "auth",      label: "auth",        role: "Reads supabase/config.toml + the auth flows for missing rate limits and open redirects.", y: 270, color: "var(--color-sev-high)" },
-  { key: "secrets",   label: "secrets",     role: "Walks the source tree for hardcoded API keys, service-role JWTs, third-party secrets.", y: 370, color: "var(--color-sev-crit)" },
-] as const;
+interface Specialist {
+  key: "postgrest" | "edge-fn" | "auth" | "secrets";
+  label: string;
+  role: string;
+  finding: string;
+  severity: "critical" | "high" | "medium" | "low";
+  dropped?: boolean;
+  y: number;
+  color: string;
+}
 
-// Findings that eventually appear in the report panel — order matches the
-// arrival delays defined in the keyframes below. Each finding travels from
-// its owning agent through the reviewer before landing in the panel.
-const FINDINGS = [
-  { severity: "critical", label: "VITE_SERVICE_ROLE in src/lib/db.ts:14",   from: "secrets"   },
-  { severity: "high",     label: "get-order verify_jwt=false",              from: "edge-fn"   },
-  { severity: "high",     label: "profiles.email — READ open to anon",      from: "postgrest" },
-  { severity: "medium",   label: "reset flow missing rate-limit",           from: "auth"      },
-] as const;
+const SPECIALISTS: Specialist[] = [
+  {
+    key: "postgrest",
+    label: "postgrest",
+    role: "Probes RLS + GRANTs on every table via the anon PostgREST surface.",
+    finding: "profiles.email — READ open to anon",
+    severity: "high",
+    y: 60,
+    color: "var(--color-sev-med)",
+  },
+  {
+    key: "edge-fn",
+    label: "edge-fn",
+    role: "Lists every edge function and replays each without a JWT.",
+    finding: "get-order verify_jwt=false",
+    severity: "critical",
+    y: 160,
+    color: "var(--color-signal)",
+  },
+  {
+    key: "auth",
+    label: "auth",
+    role: "Reads supabase/config.toml + auth flows for missing rate-limits.",
+    finding: "reset flow lead — not reproducible",
+    severity: "medium",
+    dropped: true,
+    y: 260,
+    color: "var(--color-sev-high)",
+  },
+  {
+    key: "secrets",
+    label: "secrets",
+    role: "Walks the source tree for hardcoded API keys and service-role JWTs.",
+    finding: "VITE_SERVICE_ROLE in src/lib/db.ts:14",
+    severity: "critical",
+    y: 360,
+    color: "var(--color-sev-crit)",
+  },
+];
 
-// Viewport constants — everything scales with these.
-const W = 1120;
-const H = 460;
-const REPO_X = 420, REPO_Y = 175, REPO_W = 220, REPO_H = 110;
-const REVIEWER_X = 745, REVIEWER_Y = 200, REVIEWER_W = 130, REVIEWER_H = 60;
-const REPORT_X = 920, REPORT_Y = 60, REPORT_W = 180, REPORT_H = 340;
-
-const SEV_COLOR: Record<string, string> = {
+const SEV_COLOR: Record<Specialist["severity"], string> = {
   critical: "var(--color-sev-crit)",
-  high:     "var(--color-sev-high)",
-  medium:   "var(--color-sev-med)",
-  low:      "var(--color-paper-500)",
+  high: "var(--color-sev-high)",
+  medium: "var(--color-sev-med)",
+  low: "var(--color-paper-500)",
 };
 
+// Geometry. Everything else is expressed in these constants so the layout
+// stays legible.
+const W = 1120;
+const H = 460;
+const SP_X = 60, SP_W = 130, SP_H = 60;
+const TARGET_X = 340, TARGET_Y = 180, TARGET_W = 220, TARGET_H = 100;
+const REVIEWER_X = 660, REVIEWER_Y = 200, REVIEWER_W = 130, REVIEWER_H = 60;
+const REPORT_X = 830, REPORT_Y = 40, REPORT_W = 260, REPORT_H = 380;
+
+// One 12s cycle. Each specialist owns a 2.4s slice; the last 2.4s is a hold
+// on the finished report before the loop restarts. `--i` shifts the shared
+// keyframes into each specialist's window.
+const CYCLE_MS = 12000;
+
 export function ArchitectureCenterpiece() {
+  const rows = SPECIALISTS.filter((s) => !s.dropped);
+
   return (
     <div className="architecture-centerpiece relative w-full">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label="Kelp agent architecture: four specialists probe the connected repository in parallel; findings flow through a reviewer that drops unreproducible leads and lands the confirmed ones in the report panel."
+        aria-label="Kelp agent architecture: four specialists take turns probing the connected repository. Each finding is re-run by the reviewer; unreproducible leads are dropped, confirmed ones land in the report."
         className="w-full"
       >
-        <defs>
-          {/* Small marker used as the "finding" dot travelling along the wire. */}
-          <symbol id="finding-dot" viewBox="-4 -4 8 8">
-            <circle r="3" />
-          </symbol>
-        </defs>
+        {/* ── SPECIALISTS ────────────────────────────────────────────────── */}
+        {SPECIALISTS.map((s, i) => {
+          const cy = s.y + SP_H / 2;
+          return (
+            <g
+              key={s.key}
+              className="node specialist"
+              style={{ ["--i" as string]: i }}
+              tabIndex={0}
+              role="button"
+              aria-label={`${s.label}: ${s.role}`}
+            >
+              {/* Static rest state — always visible so the diagram is readable
+                  even mid-animation. Bright pulse comes from the overlay below. */}
+              <rect
+                x={SP_X}
+                y={s.y}
+                width={SP_W}
+                height={SP_H}
+                fill="none"
+                stroke={s.color}
+                strokeWidth={1}
+                opacity={0.35}
+              />
+              <text
+                x={SP_X + SP_W / 2}
+                y={s.y + 24}
+                textAnchor="middle"
+                fontFamily="var(--font-mono, ui-monospace, monospace)"
+                fontSize={12}
+                fill={s.color}
+                opacity={0.55}
+              >
+                [{s.label}]
+              </text>
+              <text
+                x={SP_X + SP_W / 2}
+                y={s.y + 42}
+                textAnchor="middle"
+                fontFamily="var(--font-mono, ui-monospace, monospace)"
+                fontSize={9.5}
+                fill="var(--color-paper-500)"
+                letterSpacing="1.2"
+              >
+                {s.severity.toUpperCase()}
+              </text>
+              {/* Active-beat overlay — full opacity when it's this
+                  specialist's turn, fades otherwise. */}
+              <rect
+                className="specialist-active"
+                x={SP_X}
+                y={s.y}
+                width={SP_W}
+                height={SP_H}
+                fill="none"
+                stroke={s.color}
+                strokeWidth={1.2}
+              />
+              <text
+                className="specialist-active-label"
+                x={SP_X + SP_W / 2}
+                y={s.y + 24}
+                textAnchor="middle"
+                fontFamily="var(--font-mono, ui-monospace, monospace)"
+                fontSize={12}
+                fill={s.color}
+              >
+                [{s.label}]
+              </text>
 
-        {/* Specialist → repo probe lines. Each has a stroke-dashoffset animation
-            keyed by --i so they draw in sequence, then reset every cycle. */}
-        {AGENTS.map((a, i) => (
-          <g key={a.key} className="probe" style={{ ["--i" as string]: i }}>
-            <line
-              x1={180}
-              y1={a.y}
-              x2={REPO_X}
-              y2={REPO_Y + 20 + i * 24}
-              stroke={a.color}
-              strokeWidth={1}
-              strokeDasharray="4 6"
-              className="probe-line"
-              opacity={0.85}
-            />
-          </g>
+              {/* Hover tooltip. */}
+              <foreignObject
+                x={SP_X - 6}
+                y={s.y + SP_H + 6}
+                width={SP_W + 60}
+                height={72}
+                className="node-tooltip"
+              >
+                <div className="pointer-events-none border-l border-[color:var(--color-hair-strong)] pl-3 font-mono text-[10.5px] leading-relaxed text-[color:var(--color-paper-300)]">
+                  {s.role}
+                </div>
+              </foreignObject>
+
+              {/* Outbound beam — specialist → target. Draws in the specialist
+                  colour, fades once target flashes. */}
+              <line
+                className="beam beam-out"
+                x1={SP_X + SP_W}
+                y1={cy}
+                x2={TARGET_X}
+                y2={TARGET_Y + 25 + i * 15}
+                stroke={s.color}
+                strokeWidth={1.25}
+                strokeLinecap="round"
+              />
+
+              {/* Return beam — target → reviewer. Drawn in the SEVERITY colour
+                  because now the finding has a class. Skipped by dropped ones
+                  via CSS (opacity 0 for the .dropped variant). */}
+              <line
+                className={"beam beam-return" + (s.dropped ? " dropped" : "")}
+                x1={TARGET_X + TARGET_W}
+                y1={TARGET_Y + TARGET_H / 2}
+                x2={REVIEWER_X}
+                y2={REVIEWER_Y + REVIEWER_H / 2}
+                stroke={SEV_COLOR[s.severity]}
+                strokeWidth={1.25}
+                strokeLinecap="round"
+              />
+
+              {/* Target flash — same rect drawn brighter, animated in only
+                  during this specialist's beat. */}
+              <rect
+                className="target-flash"
+                x={TARGET_X - 1}
+                y={TARGET_Y - 1}
+                width={TARGET_W + 2}
+                height={TARGET_H + 2}
+                fill="none"
+                stroke={s.color}
+                strokeWidth={1.5}
+              />
+
+              {/* Reviewer flash. */}
+              <rect
+                className={"reviewer-flash" + (s.dropped ? " dropped" : "")}
+                x={REVIEWER_X - 1}
+                y={REVIEWER_Y - 1}
+                width={REVIEWER_W + 2}
+                height={REVIEWER_H + 2}
+                fill="none"
+                stroke={s.dropped ? "var(--color-paper-500)" : SEV_COLOR[s.severity]}
+                strokeWidth={1.5}
+              />
+            </g>
+          );
+        })}
+
+        {/* ── STATIC WIRE HINTS (visible always, muted) ─────────────────── */}
+        {SPECIALISTS.map((s, i) => (
+          <line
+            key={`hint-${s.key}`}
+            x1={SP_X + SP_W}
+            y1={s.y + SP_H / 2}
+            x2={TARGET_X}
+            y2={TARGET_Y + 25 + i * 15}
+            stroke="var(--color-hair-strong)"
+            strokeWidth={0.5}
+            strokeDasharray="1 4"
+          />
         ))}
-
-        {/* Trunk from repo → reviewer. Constant hairline. */}
         <line
-          x1={REPO_X + REPO_W}
-          y1={REPO_Y + REPO_H / 2}
+          x1={TARGET_X + TARGET_W}
+          y1={TARGET_Y + TARGET_H / 2}
           x2={REVIEWER_X}
           y2={REVIEWER_Y + REVIEWER_H / 2}
           stroke="var(--color-hair-strong)"
-          strokeWidth={1}
+          strokeWidth={0.5}
+          strokeDasharray="1 4"
         />
-
-        {/* Reviewer → report. */}
         <line
           x1={REVIEWER_X + REVIEWER_W}
           y1={REVIEWER_Y + REVIEWER_H / 2}
           x2={REPORT_X}
-          y2={REPORT_Y + 40}
+          y2={REPORT_Y + 50}
           stroke="var(--color-hair-strong)"
-          strokeWidth={1}
+          strokeWidth={0.5}
+          strokeDasharray="1 4"
         />
 
-        {/* Specialists (left column). */}
-        {AGENTS.map((a) => (
-          <g key={a.key} className="node" tabIndex={0} role="button" aria-label={`${a.label}: ${a.role}`}>
-            <rect
-              x={70}
-              y={a.y - 22}
-              width={110}
-              height={44}
-              fill="transparent"
-              stroke={a.color}
-              strokeWidth={1}
-            />
-            <text
-              x={125}
-              y={a.y + 5}
-              textAnchor="middle"
-              fontFamily="var(--font-mono, ui-monospace, monospace)"
-              fontSize={12}
-              fill={a.color}
-            >
-              [{a.label}]
-            </text>
-            {/* Tooltip: rendered as HTML-in-foreignObject so it inherits
-                the site typography and wraps like body copy. */}
-            <foreignObject
-              x={-10}
-              y={a.y + 26}
-              width={220}
-              height={90}
-              className="node-tooltip"
-            >
-              <div className="pointer-events-none border-l border-[color:var(--color-hair-strong)] pl-3 font-mono text-[10.5px] leading-relaxed text-[color:var(--color-paper-300)]">
-                {a.role}
-              </div>
-            </foreignObject>
-          </g>
-        ))}
-
-        {/* Target repo (centre). */}
-        <g className="node">
+        {/* ── TARGET (rest state) ────────────────────────────────────────── */}
+        <g className="node target-node">
           <rect
-            x={REPO_X}
-            y={REPO_Y}
-            width={REPO_W}
-            height={REPO_H}
+            x={TARGET_X}
+            y={TARGET_Y}
+            width={TARGET_W}
+            height={TARGET_H}
             fill="none"
             stroke="var(--color-paper-500)"
             strokeWidth={1}
           />
           <text
-            x={REPO_X + REPO_W / 2}
-            y={REPO_Y + 30}
+            x={TARGET_X + TARGET_W / 2}
+            y={TARGET_Y + 28}
             textAnchor="middle"
             fontFamily="var(--font-mono, ui-monospace, monospace)"
             fontSize={10.5}
@@ -166,18 +295,18 @@ export function ArchitectureCenterpiece() {
             ◇ TARGET
           </text>
           <text
-            x={REPO_X + REPO_W / 2}
-            y={REPO_Y + 60}
+            x={TARGET_X + TARGET_W / 2}
+            y={TARGET_Y + 58}
             textAnchor="middle"
             fontFamily="var(--font-mono, ui-monospace, monospace)"
-            fontSize={14}
-            fill="var(--color-paper-100)"
+            fontSize={16}
+            fill="var(--color-paper-50)"
           >
             roamly-app
           </text>
           <text
-            x={REPO_X + REPO_W / 2}
-            y={REPO_Y + 82}
+            x={TARGET_X + TARGET_W / 2}
+            y={TARGET_Y + 80}
             textAnchor="middle"
             fontFamily="var(--font-mono, ui-monospace, monospace)"
             fontSize={11}
@@ -187,8 +316,8 @@ export function ArchitectureCenterpiece() {
           </text>
         </g>
 
-        {/* Reviewer. */}
-        <g className="node">
+        {/* ── REVIEWER ───────────────────────────────────────────────────── */}
+        <g className="node reviewer-node">
           <rect
             x={REVIEWER_X}
             y={REVIEWER_Y}
@@ -203,7 +332,7 @@ export function ArchitectureCenterpiece() {
             y={REVIEWER_Y + 24}
             textAnchor="middle"
             fontFamily="var(--font-mono, ui-monospace, monospace)"
-            fontSize={11}
+            fontSize={11.5}
             fill="var(--color-signal)"
           >
             reviewer
@@ -220,8 +349,8 @@ export function ArchitectureCenterpiece() {
           </text>
         </g>
 
-        {/* Report panel — findings arrive here at staggered delays. */}
-        <g className="report">
+        {/* ── REPORT PANEL ───────────────────────────────────────────────── */}
+        <g className="report-panel">
           <rect
             x={REPORT_X}
             y={REPORT_Y}
@@ -232,165 +361,214 @@ export function ArchitectureCenterpiece() {
             strokeWidth={1}
           />
           <text
-            x={REPORT_X + 16}
-            y={REPORT_Y + 26}
+            x={REPORT_X + 18}
+            y={REPORT_Y + 28}
             fontFamily="var(--font-mono, ui-monospace, monospace)"
-            fontSize={10}
+            fontSize={10.5}
             fill="var(--color-paper-500)"
             letterSpacing="1.5"
           >
             § REPORT
           </text>
+          <text
+            x={REPORT_X + REPORT_W - 18}
+            y={REPORT_Y + 28}
+            textAnchor="end"
+            fontFamily="var(--font-mono, ui-monospace, monospace)"
+            fontSize={10}
+            fill="var(--color-paper-500)"
+          >
+            {rows.length} confirmed · {SPECIALISTS.length - rows.length} dropped
+          </text>
           <line
-            x1={REPORT_X + 12}
-            y1={REPORT_Y + 38}
-            x2={REPORT_X + REPORT_W - 12}
-            y2={REPORT_Y + 38}
+            x1={REPORT_X + 14}
+            y1={REPORT_Y + 42}
+            x2={REPORT_X + REPORT_W - 14}
+            y2={REPORT_Y + 42}
             stroke="var(--color-hair)"
           />
-          {FINDINGS.map((f, i) => (
-            <g key={i} className="report-item" style={{ ["--i" as string]: i }}>
+
+          {rows.map((s, i) => (
+            <g
+              key={s.key}
+              className="report-row"
+              style={{ ["--i" as string]: SPECIALISTS.findIndex((x) => x.key === s.key) }}
+            >
               <circle
-                cx={REPORT_X + 18}
-                cy={REPORT_Y + 60 + i * 46}
-                r={2.5}
-                fill={SEV_COLOR[f.severity]}
+                cx={REPORT_X + 22}
+                cy={REPORT_Y + 70 + i * 62}
+                r={3}
+                fill={SEV_COLOR[s.severity]}
               />
               <text
-                x={REPORT_X + 30}
-                y={REPORT_Y + 55 + i * 46}
+                x={REPORT_X + 34}
+                y={REPORT_Y + 65 + i * 62}
                 fontFamily="var(--font-mono, ui-monospace, monospace)"
-                fontSize={9}
+                fontSize={9.5}
                 fill="var(--color-paper-500)"
-                letterSpacing="1"
+                letterSpacing="1.2"
               >
-                {f.severity.toUpperCase()}
+                {s.severity.toUpperCase()}
               </text>
               <text
-                x={REPORT_X + 18}
-                y={REPORT_Y + 72 + i * 46}
+                x={REPORT_X + 22}
+                y={REPORT_Y + 84 + i * 62}
                 fontFamily="var(--font-mono, ui-monospace, monospace)"
-                fontSize={10}
+                fontSize={11}
                 fill="var(--color-paper-100)"
               >
-                {truncate(f.label, 22)}
+                {truncate(s.finding, 30)}
+              </text>
+              <text
+                x={REPORT_X + 22}
+                y={REPORT_Y + 102 + i * 62}
+                fontFamily="var(--font-mono, ui-monospace, monospace)"
+                fontSize={9.5}
+                fill="var(--color-paper-500)"
+              >
+                via [{s.key}]
               </text>
             </g>
           ))}
         </g>
-
-        {/* Findings-in-flight — one per finding, travelling repo → reviewer →
-            report. Delays are keyed via --i so they arrive in the same
-            cadence as the report items reveal. */}
-        {FINDINGS.map((f, i) => {
-          const agent = AGENTS.find((a) => a.key === f.from);
-          const color = SEV_COLOR[f.severity];
-          return (
-            <g key={i} className="in-flight" style={{ ["--i" as string]: i, color }}>
-              <use
-                href="#finding-dot"
-                fill={color}
-                className="dot dot-a"
-                style={{ ["--from-x" as string]: `${180}px`, ["--from-y" as string]: `${agent?.y}px` }}
-              />
-              <use
-                href="#finding-dot"
-                fill={color}
-                className="dot dot-b"
-              />
-            </g>
-          );
-        })}
       </svg>
 
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: STYLES }} />
+    </div>
+  );
+}
+
+const STYLES = `
         .architecture-centerpiece .node-tooltip {
           opacity: 0;
           transition: opacity 220ms ease;
           pointer-events: none;
         }
-        .architecture-centerpiece .node:hover .node-tooltip,
-        .architecture-centerpiece .node:focus-visible .node-tooltip {
+        .architecture-centerpiece .specialist:hover .node-tooltip,
+        .architecture-centerpiece .specialist:focus-visible .node-tooltip {
           opacity: 1;
         }
-        .architecture-centerpiece .node:focus-visible rect {
+        .architecture-centerpiece .specialist:focus-visible rect:first-of-type {
           outline: 1px solid var(--color-signal);
           outline-offset: 2px;
         }
-        .architecture-centerpiece .node text,
-        .architecture-centerpiece .node rect {
-          transition: opacity 220ms ease;
-        }
-        .architecture-centerpiece .node:hover rect,
-        .architecture-centerpiece .node:hover text {
-          opacity: 1;
-        }
 
-        /* Steady state — reduced-motion sees this, nothing else. */
-        .architecture-centerpiece .probe-line { stroke-dasharray: 4 6; }
-        .architecture-centerpiece .in-flight .dot { opacity: 0; }
-        .architecture-centerpiece .report-item { opacity: 1; }
+        /* Steady state — visible under reduced-motion, hidden otherwise
+           until the beat comes around. */
+        .architecture-centerpiece .specialist-active,
+        .architecture-centerpiece .specialist-active-label,
+        .architecture-centerpiece .beam,
+        .architecture-centerpiece .target-flash,
+        .architecture-centerpiece .reviewer-flash {
+          opacity: 0;
+        }
+        .architecture-centerpiece .report-row { opacity: 1; }
+
+        /* Beam line prep. Real dasharray gets computed at runtime from the
+           stroke length; the drawn-length trick uses pathLength instead so
+           we can talk in %. Setting pathLength lets us dasharray "100"
+           regardless of actual pixel length. */
+        .architecture-centerpiece .beam {
+          pathLength: 100;
+          stroke-dasharray: 100;
+          stroke-dashoffset: 100;
+        }
 
         @media (prefers-reduced-motion: no-preference) {
-          .architecture-centerpiece .probe-line {
-            stroke-dashoffset: 400;
-            animation: kelp-probe 12s linear infinite;
-            animation-delay: calc(var(--i) * 0.4s);
+          /* Sequential beat: each specialist owns a 2.4s slice, delay = i × 2.4s. */
+          .architecture-centerpiece .specialist-active,
+          .architecture-centerpiece .specialist-active-label {
+            animation: kelp-active 12s linear infinite;
+            animation-delay: calc(var(--i) * 2.4s);
           }
-          @keyframes kelp-probe {
-            0%    { stroke-dashoffset: 400; opacity: 0; }
-            3%    { opacity: 0.85; }
-            15%   { stroke-dashoffset: 0;   opacity: 0.85; }
-            55%   { stroke-dashoffset: 0;   opacity: 0.85; }
-            65%   { stroke-dashoffset: -400; opacity: 0; }
-            100%  { stroke-dashoffset: -400; opacity: 0; }
-          }
-
-          /* dot-a travels from the agent to the reviewer. */
-          .architecture-centerpiece .in-flight .dot-a {
-            animation: kelp-fly-a 12s linear infinite;
-            animation-delay: calc(1.6s + var(--i) * 0.6s);
-          }
-          @keyframes kelp-fly-a {
-            0%   { transform: translate(180px, var(--from-y, 220px)); opacity: 0; }
-            5%   { opacity: 1; }
-            20%  { transform: translate(${REPO_X + REPO_W / 2}px, ${REPO_Y + REPO_H / 2}px); opacity: 1; }
-            35%  { transform: translate(${REVIEWER_X + REVIEWER_W / 2}px, ${REVIEWER_Y + REVIEWER_H / 2}px); opacity: 1; }
-            40%  { transform: translate(${REVIEWER_X + REVIEWER_W / 2}px, ${REVIEWER_Y + REVIEWER_H / 2}px); opacity: 0; }
-            100% { transform: translate(${REVIEWER_X + REVIEWER_W / 2}px, ${REVIEWER_Y + REVIEWER_H / 2}px); opacity: 0; }
-          }
-
-          /* dot-b travels reviewer → report row. */
-          .architecture-centerpiece .in-flight .dot-b {
-            animation: kelp-fly-b 12s linear infinite;
-            animation-delay: calc(2.4s + var(--i) * 0.6s);
-          }
-          @keyframes kelp-fly-b {
-            0%   { transform: translate(${REVIEWER_X + REVIEWER_W}px, ${REVIEWER_Y + REVIEWER_H / 2}px); opacity: 0; }
-            5%   { opacity: 1; }
-            50%  { transform: translate(${REPORT_X + 18}px, calc(${REPORT_Y + 60}px + var(--i) * 46px)); opacity: 1; }
-            55%  { opacity: 0; }
-            100% { transform: translate(${REPORT_X + 18}px, calc(${REPORT_Y + 60}px + var(--i) * 46px)); opacity: 0; }
-          }
-
-          /* Report rows fade in staggered to match the dot arrivals. */
-          .architecture-centerpiece .report-item {
-            opacity: 0;
-            animation: kelp-row 12s linear infinite;
-            animation-delay: calc(2.9s + var(--i) * 0.6s);
-          }
-          @keyframes kelp-row {
-            0%   { opacity: 0; transform: translateX(4px); }
-            3%   { opacity: 1; transform: translateX(0); }
-            80%  { opacity: 1; }
-            90%  { opacity: 0; }
+          @keyframes kelp-active {
+            0%   { opacity: 0; }
+            2%   { opacity: 1; }
+            20%  { opacity: 1; }
+            22%  { opacity: 0; }
             100% { opacity: 0; }
           }
+
+          /* Outbound beam draws in the first 40% of the slice. */
+          .architecture-centerpiece .beam-out {
+            animation: kelp-beam-out 12s linear infinite;
+            animation-delay: calc(var(--i) * 2.4s);
+          }
+          @keyframes kelp-beam-out {
+            0%   { stroke-dashoffset: 100; opacity: 0; }
+            1%   { opacity: 1; }
+            8%   { stroke-dashoffset: 0; opacity: 1; }
+            13%  { opacity: 1; }
+            16%  { opacity: 0; }
+            100% { stroke-dashoffset: 0; opacity: 0; }
+          }
+
+          /* Target flashes when the outbound beam arrives. */
+          .architecture-centerpiece .target-flash {
+            animation: kelp-flash 12s linear infinite;
+            animation-delay: calc(var(--i) * 2.4s + 0.6s);
+          }
+          @keyframes kelp-flash {
+            0%   { opacity: 0; }
+            5%   { opacity: 1; }
+            15%  { opacity: 0.4; }
+            25%  { opacity: 0; }
+            100% { opacity: 0; }
+          }
+
+          /* Return beam draws in the second half of the slice. */
+          .architecture-centerpiece .beam-return {
+            animation: kelp-beam-return 12s linear infinite;
+            animation-delay: calc(var(--i) * 2.4s + 0.7s);
+          }
+          .architecture-centerpiece .beam-return.dropped {
+            /* dropped leads never make it past the reviewer — the return
+               beam plays a short fade instead of a full draw. */
+            animation: kelp-beam-dropped 12s linear infinite;
+            animation-delay: calc(var(--i) * 2.4s + 0.7s);
+          }
+          @keyframes kelp-beam-return {
+            0%   { stroke-dashoffset: 100; opacity: 0; }
+            1%   { opacity: 1; }
+            10%  { stroke-dashoffset: 0; opacity: 1; }
+            15%  { opacity: 1; }
+            18%  { opacity: 0; }
+            100% { stroke-dashoffset: 0; opacity: 0; }
+          }
+          @keyframes kelp-beam-dropped {
+            0%   { stroke-dashoffset: 100; opacity: 0; }
+            1%   { opacity: 0.6; }
+            5%   { stroke-dashoffset: 50; opacity: 0.6; }
+            10%  { stroke-dashoffset: 65; opacity: 0; }
+            100% { opacity: 0; }
+          }
+
+          /* Reviewer flash — one per specialist. Colour comes from the
+             severity in the inline stroke attr. */
+          .architecture-centerpiece .reviewer-flash {
+            animation: kelp-flash 12s linear infinite;
+            animation-delay: calc(var(--i) * 2.4s + 1.4s);
+          }
+
+          /* Report row appears when the reviewer confirms. Rows persist —
+             opacity goes back to 0 only at the very end of the cycle so the
+             report is legible while filling up. */
+          .architecture-centerpiece .report-row {
+            opacity: 0;
+            transform: translateX(6px);
+            animation: kelp-row 12s linear infinite;
+            animation-delay: calc(var(--i) * 2.4s + 1.6s);
+            transform-box: fill-box;
+          }
+          @keyframes kelp-row {
+            0%, 12% { opacity: 0; transform: translateX(6px); }
+            15%     { opacity: 1; transform: translateX(0); }
+            88%     { opacity: 1; }
+            96%     { opacity: 0; }
+            100%    { opacity: 0; }
+          }
         }
-      `}</style>
-    </div>
-  );
-}
+`;
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + "…";
