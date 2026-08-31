@@ -59,16 +59,21 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-auto space-y-3">
-        <Link
-          href="/dashboard/billing"
+        {/* OSS-mode: replaced the "Upgrade" card with a repo/docs pointer.
+            Continuous-cover framing is unchanged; the paid tier just isn't
+            surfaced here. */}
+        <a
+          href="https://github.com/Mic52M/kelp"
+          target="_blank"
+          rel="noreferrer noopener"
           className="block rounded-xl border border-aqua-600/30 bg-aqua-500/[0.06] p-3 text-xs transition-colors hover:border-aqua-600/50"
         >
-          <div className="font-medium text-fog-50">Free plan</div>
-          <p className="mt-1 text-fog-400">Upgrade for continuous cover and auto-fix.</p>
-          <span className="mt-2 block w-full rounded-md bg-gradient-to-r from-aqua-400 to-aqua-600 px-2 py-1.5 text-center font-medium text-ink-950">
-            Upgrade
+          <div className="font-medium text-fog-50">Kelp is open source</div>
+          <p className="mt-1 text-fog-400">MIT-licensed. Contribute a detection, or run the CLI locally.</p>
+          <span className="mt-2 block w-full rounded-md border border-aqua-500/40 px-2 py-1.5 text-center font-medium text-aqua-100">
+            View on GitHub ↗
           </span>
-        </Link>
+        </a>
 
         <form action={signOut}>
           <button

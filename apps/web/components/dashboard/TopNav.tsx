@@ -14,7 +14,9 @@ const NAV: { label: string; href: string }[] = [
   { label: "Findings",      href: "/dashboard/findings" },
   { label: "Projects",      href: "/dashboard/projects" },
   { label: "Configuration", href: "/dashboard/configuration" },
-  { label: "Billing",       href: "/dashboard/billing" },
+  // Billing is hidden from the OSS-mode nav — the hosted app has no paid
+  // tier at the moment. The /dashboard/billing route still exists for the
+  // internal `founder` tier + future paid plans, just not linked here.
   { label: "Settings",      href: "/dashboard/settings" },
 ];
 

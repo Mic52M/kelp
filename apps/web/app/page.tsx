@@ -2,7 +2,6 @@ import Link from "next/link";
 import { buttonClasses } from "@/components/Button";
 import { Logo } from "@/components/Logo";
 import { Reveal } from "@/components/Reveal";
-import { CountUp } from "@/components/CountUp";
 import { FreeScanInput } from "@/components/free-scan/FreeScanInput";
 import { MultiAgentConsole } from "@/components/MultiAgentConsole";
 import { ArchitectureCenterpiece } from "@/components/ArchitectureCenterpiece";
@@ -11,54 +10,67 @@ import { ArchitectureCenterpiece } from "@/components/ArchitectureCenterpiece";
 
 const checks = [
   {
-    tag: "RLS-001",
+    tag: "SEC-001",
+    title: "Hardcoded secrets in source.",
+    body:
+      "Service-role keys, Stripe secrets, and OpenAI tokens committed to the repo — including those bundled to the client. Kelp finds them with provider patterns plus entropy fallback, and never persists the raw value: only a masked preview reaches your report.",
+  },
+  {
+    tag: "RLS-002",
     title: "Row-Level Security, checked policy-by-policy.",
     body:
-      "Kelp reads your Supabase schema and finds the tables and columns anyone can read or write. Fixes ship as an owner-scoped policy you can review before running.",
+      "Kelp reads your Supabase schema and finds the tables and columns anyone can read or write. The reviewer re-runs the check before it lands — if it doesn't reproduce, it doesn't ship.",
   },
   {
-    tag: "SEC-002",
-    title: "Secrets exfiltrated by the frontend.",
+    tag: "EDGE-003",
+    title: "Edge functions that skip the JWT.",
     body:
-      "Service-role keys, Stripe secrets, and OpenAI tokens committed to the client bundle. Kelp opens a pull request that moves them to env vars and flags rotation.",
-  },
-  {
-    tag: "BOLA-003",
-    title: "Broken object authorization, actively probed.",
-    body:
-      "With your consent, one authenticated user tries to reach another's data by ID. It's the exact failure behind the loudest public breaches of AI-generated apps.",
+      "verify_jwt=false in supabase/config.toml, unauthenticated replays, permissive CORS. Every finding comes with the exact curl the executor ran and the response it got.",
   },
 ];
 
-const steps = [
-  { n: "01", t: "Connect", d: "Sign in with GitHub and link your Supabase project. Scoped tokens only — the service_role key stays in your project." },
-  { n: "02", t: "Scan",    d: "Kelp reads your schema and code, then runs authorized probes. Every request is logged in your audit trail." },
-  { n: "03", t: "Fix",     d: "Read a plain-language report, apply ready-made fixes with one click, and stay covered on every push to main." },
+const surfaces = [
+  {
+    n: "01",
+    t: "CLI — for local + CI shells",
+    d: "One command, no signup, no keys. Uses the same @kelp/core scanners as everything else.",
+    code: "npx kelp scan ./my-app",
+  },
+  {
+    n: "02",
+    t: "GitHub Action — for pull-request gating",
+    d: "Fails the check when a PR introduces new critical or high findings against the base branch. Auto-comments the verdict, updated in place on each commit.",
+    code: "uses: kelp-security/kelp-action@v1",
+  },
+  {
+    n: "03",
+    t: "Hosted app — for continuous scanning",
+    d: "Connect a repo once, get scans on every push, dashboards, agent chat per finding, and one-click fix PRs. Optional — the CLI and Action need nothing.",
+    code: "kelp.build",
+  },
 ];
 
 const faqs = [
   {
-    q: "Do I need to give Kelp my Supabase service-role key?",
-    a: "No. Kelp connects with a scoped Management API token, and we are moving to a per-project read-only Postgres role. Your service-role key never leaves your project.",
+    q: "Is Kelp actually free?",
+    a: "The engine, CLI, and GitHub Action are MIT-licensed and free to use forever — for any purpose, including commercial. The hosted app at kelp.build runs on infrastructure that costs money, so it may add a paid tier for high-usage workflows later, but the code itself stays open.",
   },
   {
-    q: "Will Kelp change anything in my code without asking?",
-    a: "Never. Fixes for secrets are opened as pull requests against a fresh kelp/… branch, never pushed to your default branch. Database fixes are proposed as migrations you review and run yourself.",
+    q: "Do I need to sign up for anything?",
+    a: "No. `npx kelp scan ./my-app` works with zero configuration. `uses: kelp-security/kelp-action@v1` runs in CI without any Kelp-side account. Signup only matters if you want the hosted app's continuous scanning + history.",
   },
   {
-    q: "How is active testing safe on my production app?",
-    a: "Every campaign runs through a hard consent gate you accept per project — no consent, no probe. Evidence is stored as category plus count, never raw customer data, and every request is auditable.",
+    q: "Does Kelp change my code without asking?",
+    a: "Never. Fixes are opened as PRs against a fresh kelp/… branch, never pushed to your default branch. Database fixes are proposed as migrations you review and run yourself. The CLI never touches your code at all — it only reads.",
   },
   {
     q: "Does Kelp claim to find every vulnerability?",
-    a: "No. We cover a small set of high-impact classes with high precision — the ones that actually breach AI-generated apps. Real fixes for RLS, secrets, and broken authorization beat a forty-page report of maybes.",
+    a: "No. Kelp covers a small set of high-impact classes (secrets, RLS, edge-function auth, CORS) with high precision — the ones that actually breach AI-generated apps. Real fixes for those beats a forty-page report of maybes. See docs/SECURITY-MODEL.md for what's explicitly out of scope.",
   },
-];
-
-const tiers = [
-  { name: "Free",    price: "0",  cadence: "one scan",          tag: "One full scan, report only.",     features: ["1 project", "All three checks", "Full findings report"], cta: "Start free scan", href: "/onboarding" },
-  { name: "Starter", price: "29", cadence: "per month",         tag: "Continuous cover for your app.",  features: ["1 project", "Continuous scanning", "Auto-fix for RLS & secrets", "Re-scan on every push"], cta: "Choose Starter", href: "/onboarding", featured: true },
-  { name: "Agency",  price: "89", cadence: "per month",         tag: "For studios shipping many apps.", features: ["Up to 5 projects", "Everything in Starter", "Priority human review", "Email alerts"], cta: "Choose Agency", href: "/onboarding" },
+  {
+    q: "How do I extend Kelp — new secret pattern, new backend?",
+    a: "Open a PR against packages/core/src/scanners/ for a new pattern, or read docs/ADAPTERS.md for adding a whole new backend (Firebase, Convex, etc.). CONTRIBUTING.md has the full walkthrough.",
+  },
 ];
 
 /* ── Small primitives, inlined ─────────────────────────────────────────────── */
@@ -105,7 +117,22 @@ function SectionHead({
   );
 }
 
+function CodeSnippet({ children }: { children: string }) {
+  return (
+    <div className="mt-5 border border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/60 px-4 py-3">
+      <code className="font-mono text-[12.5px] text-[color:var(--color-paper-100)]">
+        <span className="text-[color:var(--color-signal-dim)]">$ </span>
+        {children}
+      </code>
+    </div>
+  );
+}
+
 /* ── Page ──────────────────────────────────────────────────────────────────── */
+
+const REPO_URL = "https://github.com/Mic52M/kelp";
+const DOCS_URL = "https://github.com/Mic52M/kelp/tree/master/docs";
+const ACTION_URL = "https://github.com/kelp-security/kelp-action";
 
 export default function Landing() {
   return (
@@ -122,20 +149,32 @@ export default function Landing() {
           <Logo />
         </Link>
         <nav className="hidden items-center gap-9 text-[13.5px] text-[color:var(--color-paper-300)] md:flex">
-          <a href="#checks" className="transition-colors hover:text-[color:var(--color-paper-50)]">What we check</a>
-          <a href="#how" className="transition-colors hover:text-[color:var(--color-paper-50)]">How it works</a>
-          <a href="#pricing" className="transition-colors hover:text-[color:var(--color-paper-50)]">Pricing</a>
+          <a href="#install" className="transition-colors hover:text-[color:var(--color-paper-50)]">Install</a>
+          <a href="#checks" className="transition-colors hover:text-[color:var(--color-paper-50)]">Coverage</a>
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="transition-colors hover:text-[color:var(--color-paper-50)]"
+          >
+            Docs ↗
+          </a>
         </nav>
         <div className="flex items-center gap-5">
           <Link
             href="/dashboard"
-            className="text-[13.5px] text-[color:var(--color-paper-300)] transition-colors hover:text-[color:var(--color-paper-50)]"
+            className="text-[13.5px] text-[color:var(--color-paper-400)] transition-colors hover:text-[color:var(--color-paper-50)]"
           >
-            Sign in
+            Hosted app
           </Link>
-          <Link href="/onboarding" className={buttonClasses("primary", "md", "cta-lift")}>
-            Start free scan
-          </Link>
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={buttonClasses("primary", "md", "cta-lift")}
+          >
+            Star on GitHub
+          </a>
         </div>
       </header>
 
@@ -149,7 +188,7 @@ export default function Landing() {
         <div className="grid gap-14 lg:grid-cols-12 lg:gap-16">
           <div className="lg:col-span-7">
             <Reveal>
-              <Eyebrow n="§ 00">Security review · vibe-coded apps</Eyebrow>
+              <Eyebrow n="§ 00">Open source · MIT</Eyebrow>
             </Reveal>
             <Reveal delay={120} duration={720}>
               <h1 className="font-display mt-8 text-[56px] leading-[0.98] text-[color:var(--color-paper-50)] sm:text-[72px] lg:text-[84px]">
@@ -159,9 +198,9 @@ export default function Landing() {
             </Reveal>
             <Reveal delay={280}>
               <p className="mt-8 max-w-[560px] text-[17px] leading-[1.6] text-[color:var(--color-paper-300)]">
-                The security agent for vibe-coded apps. We probe your backend the way an attacker would —
-                with real user context, no theatre — and hand you the fix, ready to paste back into
-                whatever AI tool built it.
+                Open-source security scanner for vibe-coded apps. Hardcoded secrets, permissive
+                Supabase RLS, unauthenticated edge functions — Kelp probes the way an attacker
+                would and hands you the fix, ready to paste back into whatever AI tool built the app.
               </p>
             </Reveal>
             <Reveal delay={400}>
@@ -170,12 +209,20 @@ export default function Landing() {
               </div>
             </Reveal>
             <Reveal delay={520}>
-              <div className="mt-6">
+              <div className="mt-6 flex items-center gap-5">
                 <a
-                  href="#how"
+                  href="#install"
                   className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)] underline-offset-4 transition-colors hover:text-[color:var(--color-paper-50)] hover:underline"
                 >
-                  Or see how it works ↓
+                  Or install locally ↓
+                </a>
+                <a
+                  href={REPO_URL}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)] underline-offset-4 transition-colors hover:text-[color:var(--color-paper-50)] hover:underline"
+                >
+                  Read the source ↗
                 </a>
               </div>
             </Reveal>
@@ -225,38 +272,13 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── STAT STRIP ───────────────────────────────────────────────────── */}
-      <section className="border-y border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/40">
-        <div className="mx-auto grid max-w-[1120px] grid-cols-1 divide-y divide-[color:var(--color-hair)] px-6 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-          {[
-            { count: 62,   fmt: "percent" as const,     label: "of AI-generated apps ship a security flaw" },
-            { count: 3,    fmt: "plain" as const,       label: "classes covered end-to-end, with real evidence" },
-            { count: 10,   fmt: "lessThanMin" as const, label: "median time to first actionable fix" },
-          ].map((k, i) => (
-            <Reveal key={k.label} delay={i * 90}>
-              <div className="px-6 py-10 sm:px-10">
-                <CountUp
-                  to={k.count}
-                  format={k.fmt}
-                  duration={1600}
-                  className="font-display tabular text-[44px] leading-none text-[color:var(--color-paper-50)]"
-                />
-                <div className="mt-4 text-[13.5px] leading-snug text-[color:var(--color-paper-400)]">
-                  {k.label}
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ── WHAT WE CHECK ────────────────────────────────────────────────── */}
+      {/* ── COVERAGE ─────────────────────────────────────────────────────── */}
       <section id="checks" className="mx-auto max-w-[1120px] px-6 pt-28 pb-24">
         <SectionHead
-          eyebrowIndex="§ 01"
+          eyebrowIndex="§ 02"
           eyebrow="Coverage"
-          title="Three classes. Real evidence. No wall of warnings."
-          kicker="We cover the vulnerabilities that actually breach AI-generated apps, and we ship a fix for each. Everything else is honestly out of scope."
+          title="Small on purpose. Every finding is real."
+          kicker="Kelp covers the classes that actually breach vibe-coded apps, and it ships evidence for each. Everything else is honestly out of scope — see docs/SECURITY-MODEL.md for what Kelp explicitly won't verify."
         />
         <div className="mt-16 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
           {checks.map((c, i) => (
@@ -284,27 +306,29 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── HOW IT WORKS ─────────────────────────────────────────────────── */}
-      <section id="how" className="border-y border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/40">
+      {/* ── INSTALL / SURFACES ───────────────────────────────────────────── */}
+      <section id="install" className="border-y border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/40">
         <div className="mx-auto max-w-[1120px] px-6 py-24">
           <SectionHead
-            eyebrowIndex="§ 02"
-            eyebrow="How it works"
-            title="Connect, scan, fix. In that order."
+            eyebrowIndex="§ 03"
+            eyebrow="Install"
+            title="One engine. Three surfaces. Pick what fits."
+            kicker="The detection engine is the same everywhere. Run it locally with the CLI, gate PRs with the GitHub Action, or connect a repo to the hosted app for continuous scanning. None of them require a Kelp account by default."
           />
-          <div className="mt-16 grid grid-cols-1 gap-y-12 md:grid-cols-3 md:gap-x-10 md:gap-y-0 md:divide-x md:divide-[color:var(--color-hair)]">
-            {steps.map((s, i) => (
+          <div className="mt-14 grid grid-cols-1 gap-y-12 md:grid-cols-3 md:gap-x-10 md:gap-y-0 md:divide-x md:divide-[color:var(--color-hair)]">
+            {surfaces.map((s, i) => (
               <Reveal key={s.n} delay={i * 100}>
                 <div className="md:px-8 first:md:pl-0 last:md:pr-0">
                   <div className="font-mono tabular text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-signal-dim)]">
-                    Step {s.n}
+                    Surface {s.n}
                   </div>
-                  <h3 className="font-display mt-5 text-[28px] leading-[1.1] text-[color:var(--color-paper-50)]">
+                  <h3 className="font-display mt-5 text-[24px] leading-[1.15] text-[color:var(--color-paper-50)]">
                     {s.t}
                   </h3>
                   <p className="mt-4 text-[14.5px] leading-[1.7] text-[color:var(--color-paper-300)]">
                     {s.d}
                   </p>
+                  <CodeSnippet>{s.code}</CodeSnippet>
                 </div>
               </Reveal>
             ))}
@@ -312,38 +336,38 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── PROVEN, NOT THEORETICAL ─────────────────────────────────────── */}
+      {/* ── EVIDENCE-GATING ─────────────────────────────────────────────── */}
       <section className="mx-auto max-w-[1120px] px-6 py-24">
         <SectionHead
-          eyebrowIndex="§ 02b"
-          eyebrow="Evidence, not maybes"
-          title="Proven, not theoretical."
-          kicker="Every finding Kelp files has been reproduced. Our executor re-runs the model's exploit before it becomes a ticket — no observable, no finding. That's why our reports are shorter than a scanner's, and why every line is real."
+          eyebrowIndex="§ 04"
+          eyebrow="Evidence-gating"
+          title="Kelp's model never decides a finding is real."
+          kicker="Every agent-produced lead requires a reproduction — a probe with an expected observable, or a source citation. The executor re-runs it. Only findings that survive the re-run reach your report. Autonomy in reasoning, zero fabrication."
         />
         <div className="mt-14 grid grid-cols-1 gap-y-10 md:grid-cols-3 md:gap-x-10 md:gap-y-0 md:divide-x md:divide-[color:var(--color-hair)]">
           {[
             {
               n: "01",
-              t: "Agents reason, adversaries prove.",
-              d: "Kelp's agents form hypotheses freely; the executor accepts them only when the exploit reproduces against your actual endpoints, with real user context.",
+              t: "Agents reason, the executor proves.",
+              d: "Specialists form hypotheses freely; the executor accepts them only when the exploit reproduces against your actual endpoints, with real user context.",
             },
             {
               n: "02",
-              t: "Auth model as ground truth.",
-              d: "Before any finding is filed, Kelp derives your app's auth model — cookies, CORS, JWTs, one-time tokens — and refuses findings that don't survive it. No CSRF cries on bearer-JWT apps.",
+              t: "The reviewer only narrows.",
+              d: "A second pass reads each specialist's transcript, spawns targeted follow-ups, and drops the leads that don't reproduce. It never adds noise.",
             },
             {
               n: "03",
               t: "Full transcript per finding.",
-              d: "Every finding ships with the reasoning, the probe, and the response. Not a black box — the receipt for exactly how we know.",
+              d: "Every finding ships with the reasoning, the probe, and the response — the receipt for exactly how Kelp knows. Read the full principle in docs/EVIDENCE-GATING.md.",
             },
           ].map((s, i) => (
             <Reveal key={s.n} delay={i * 100}>
               <div className="md:px-8 first:md:pl-0 last:md:pr-0">
                 <div className="font-mono tabular text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-signal-dim)]">
-                  Guarantee · {s.n}
+                  Invariant · {s.n}
                 </div>
-                <h3 className="font-display mt-5 text-[26px] leading-[1.15] text-[color:var(--color-paper-50)]">
+                <h3 className="font-display mt-5 text-[24px] leading-[1.15] text-[color:var(--color-paper-50)]">
                   {s.t}
                 </h3>
                 <p className="mt-4 text-[14.5px] leading-[1.7] text-[color:var(--color-paper-300)]">
@@ -355,65 +379,30 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── PRICING ──────────────────────────────────────────────────────── */}
-      <section id="pricing" className="border-y border-[color:var(--color-hair)]">
+      {/* ── FAQ ──────────────────────────────────────────────────────────── */}
+      <section className="border-y border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/40">
         <div className="mx-auto max-w-[1120px] px-6 py-24">
           <SectionHead
-            eyebrowIndex="§ 03"
-            eyebrow="Pricing"
-            title="Simple, per-project, no seat count."
-            kicker="Every plan gets the same three checks. Paid plans add continuous cover, auto-fix, and priority review."
+            eyebrowIndex="§ 05"
+            eyebrow="Questions"
+            title="What people ask before they run Kelp."
           />
           <div className="mt-14 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
-            {tiers.map((t, i) => (
-              <Reveal key={t.name} delay={i * 90}>
-                <div className="grid grid-cols-1 gap-8 py-10 lg:grid-cols-12 lg:items-center lg:gap-10">
-                  <div className="lg:col-span-3">
-                    <div className="flex items-center gap-3">
-                      <span className="font-display text-[28px] leading-none text-[color:var(--color-paper-50)]">
-                        {t.name}
-                      </span>
-                      {t.featured && (
-                        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--color-signal)]">
-                          Recommended
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-3 flex items-baseline gap-2">
-                      <span className="font-display tabular text-[44px] leading-none text-[color:var(--color-paper-50)]">
-                        €{t.price}
-                      </span>
-                      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
-                        {t.cadence}
-                      </span>
+            {faqs.map((f, i) => (
+              <Reveal key={f.q} delay={i * 80}>
+                <div className="grid grid-cols-1 gap-6 py-10 lg:grid-cols-12 lg:gap-10">
+                  <div className="lg:col-span-2">
+                    <div className="font-mono tabular text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
+                      Q · {String(i + 1).padStart(2, "0")}
                     </div>
                   </div>
-                  <div className="lg:col-span-6">
-                    <p className="text-[14.5px] leading-[1.6] text-[color:var(--color-paper-300)]">
-                      {t.tag}
+                  <div className="lg:col-span-10">
+                    <h3 className="font-display text-[22px] leading-[1.2] text-[color:var(--color-paper-50)]">
+                      {f.q}
+                    </h3>
+                    <p className="mt-3 max-w-[70ch] text-[14.5px] leading-[1.7] text-[color:var(--color-paper-300)]">
+                      {f.a}
                     </p>
-                    <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
-                      {t.features.map((f) => (
-                        <li
-                          key={f}
-                          className="flex items-start gap-2 font-mono text-[12.5px] text-[color:var(--color-paper-300)]"
-                        >
-                          <span
-                            aria-hidden
-                            className="mt-[7px] inline-block h-px w-3 bg-[color:var(--color-signal-dim)]"
-                          />
-                          <span>{f}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="lg:col-span-3 lg:text-right">
-                    <Link
-                      href={t.href}
-                      className={buttonClasses(t.featured ? "primary" : "secondary", "lg", "cta-lift")}
-                    >
-                      {t.cta}
-                    </Link>
                   </div>
                 </div>
               </Reveal>
@@ -422,55 +411,39 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── FAQ ──────────────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-[1120px] px-6 py-24">
-        <SectionHead
-          eyebrowIndex="§ 04"
-          eyebrow="Questions"
-          title="What people ask before they connect a repo."
-        />
-        <div className="mt-14 divide-y divide-[color:var(--color-hair)] border-y border-[color:var(--color-hair)]">
-          {faqs.map((f, i) => (
-            <Reveal key={f.q} delay={i * 80}>
-              <div className="grid grid-cols-1 gap-6 py-10 lg:grid-cols-12 lg:gap-10">
-                <div className="lg:col-span-2">
-                  <div className="font-mono tabular text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
-                    Q · {String(i + 1).padStart(2, "0")}
-                  </div>
-                </div>
-                <div className="lg:col-span-10">
-                  <h3 className="font-display text-[22px] leading-[1.2] text-[color:var(--color-paper-50)]">
-                    {f.q}
-                  </h3>
-                  <p className="mt-3 max-w-[70ch] text-[14.5px] leading-[1.7] text-[color:var(--color-paper-300)]">
-                    {f.a}
-                  </p>
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
       {/* ── CLOSING CTA ──────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-[1120px] px-6 pb-28">
+      <section className="mx-auto max-w-[1120px] px-6 py-28">
         <Reveal>
           <div className="border border-[color:var(--color-hair-strong)] px-8 py-14 sm:px-14 sm:py-20">
             <div className="grid gap-10 lg:grid-cols-12">
               <div className="lg:col-span-8">
-                <Eyebrow n="§ 05">Ready</Eyebrow>
+                <Eyebrow n="§ 06">Ship it</Eyebrow>
                 <h2 className="font-display mt-6 text-[42px] leading-[1.05] text-[color:var(--color-paper-50)] sm:text-[52px]">
                   Scan your app before your users do.
                 </h2>
                 <p className="mt-5 max-w-[52ch] text-[15.5px] leading-[1.6] text-[color:var(--color-paper-300)]">
-                  Connect a GitHub repo, accept the consent, and see your first findings within ten minutes.
-                  Free plan is a real full scan, not a teaser.
+                  Two minutes with the CLI. Six lines of YAML for the Action. Kelp is
+                  MIT-licensed — clone it, fork it, or send a PR to add the vuln class
+                  you wish it caught.
                 </p>
               </div>
-              <div className="flex items-end lg:col-span-4 lg:justify-end">
-                <Link href="/onboarding" className={buttonClasses("primary", "lg", "cta-lift")}>
-                  Start free scan
-                </Link>
+              <div className="flex flex-col items-start gap-3 lg:col-span-4 lg:items-end lg:justify-end">
+                <a
+                  href={REPO_URL}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className={buttonClasses("primary", "lg", "cta-lift")}
+                >
+                  Star on GitHub
+                </a>
+                <a
+                  href={ACTION_URL}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)] underline-offset-4 transition-colors hover:text-[color:var(--color-paper-50)] hover:underline"
+                >
+                  Or add the GitHub Action ↗
+                </a>
               </div>
             </div>
           </div>
@@ -479,23 +452,17 @@ export default function Landing() {
 
       {/* ── FOOTER ───────────────────────────────────────────────────────── */}
       <footer className="border-t border-[color:var(--color-hair)]">
-        <div className="mx-auto flex max-w-[1120px] flex-col gap-8 px-6 py-12 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <Logo />
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-paper-500)]">
-              Made in Europe
-            </span>
-          </div>
-          <nav className="flex flex-wrap gap-x-7 gap-y-2 font-mono text-[12px] text-[color:var(--color-paper-400)]">
-            <a href="#checks" className="hover:text-[color:var(--color-paper-50)]">Coverage</a>
-            <a href="#how" className="hover:text-[color:var(--color-paper-50)]">How</a>
-            <a href="#pricing" className="hover:text-[color:var(--color-paper-50)]">Pricing</a>
-            <Link href="/dashboard" className="hover:text-[color:var(--color-paper-50)]">Dashboard</Link>
-            <a href="mailto:hello@kelp.build" className="hover:text-[color:var(--color-paper-50)]">Contact</a>
-          </nav>
+        <div className="mx-auto flex max-w-[1120px] flex-col gap-6 px-6 py-10 sm:flex-row sm:items-center sm:justify-between">
           <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
-            © 2026 Kelp Labs
+            © {new Date().getFullYear()} Kelp · MIT · built by <a href="https://github.com/Mic52M" target="_blank" rel="noreferrer noopener" className="hover:text-[color:var(--color-paper-50)]">@Mic52M</a>
           </div>
+          <nav className="flex flex-wrap items-center gap-6 text-[12.5px] text-[color:var(--color-paper-400)]">
+            <a href={REPO_URL} target="_blank" rel="noreferrer noopener" className="hover:text-[color:var(--color-paper-50)]">GitHub</a>
+            <a href={DOCS_URL} target="_blank" rel="noreferrer noopener" className="hover:text-[color:var(--color-paper-50)]">Docs</a>
+            <a href={`${REPO_URL}/blob/master/SECURITY.md`} target="_blank" rel="noreferrer noopener" className="hover:text-[color:var(--color-paper-50)]">Security</a>
+            <Link href="/docs/action" className="hover:text-[color:var(--color-paper-50)]">Action</Link>
+            <Link href="/dashboard" className="hover:text-[color:var(--color-paper-50)]">Hosted app</Link>
+          </nav>
         </div>
       </footer>
     </main>

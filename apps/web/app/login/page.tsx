@@ -35,12 +35,17 @@ export default function LoginPage() {
             <span>{mode === "signin" ? "Return" : "Get started"}</span>
           </div>
           <h1 className="font-display mt-4 text-[30px] leading-[1.1] text-[color:var(--color-paper-50)]">
-            {mode === "signin" ? "Sign in to Kelp." : "Create your account."}
+            {mode === "signin" ? "Sign in to the hosted app." : "Create a hosted account."}
           </h1>
           <p className="mt-3 text-[13.5px] leading-[1.6] text-[color:var(--color-paper-300)]">
             {mode === "signin"
-              ? "Welcome back. Pick up where you left off."
-              : "Start with one free security scan — no card, no time limit."}
+              ? "Welcome back. Continuous scanning, history, and fix PRs live here."
+              : "Only needed for continuous scanning. The CLI and Action work with zero signup."}
+          </p>
+          <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-500)]">
+            <a href="https://github.com/Mic52M/kelp" target="_blank" rel="noreferrer noopener" className="hover:text-[color:var(--color-paper-300)]">
+              ← Prefer the CLI? npx kelp scan
+            </a>
           </p>
 
           {/* GitHub is the load-bearing OAuth (#46): consent screen doubles
