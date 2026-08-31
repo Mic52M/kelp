@@ -8,7 +8,7 @@
 
 import { runScan } from "./commands/scan.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 function usage(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps

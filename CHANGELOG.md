@@ -6,19 +6,43 @@ All notable changes to Kelp are documented here. The format follows
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.2.0] — 2026-08-31
+
+The open-source release. Repo is now public + MIT-licensed. First
+standalone CLI. Full contributor docs.
+
 ### Added
-- `apps/cli` — first standalone CLI, `kelp scan <path>`. Reuses the same
-  `@kelp/core` scanners the hosted app runs.
-- `docs/` folder with architecture, CLI reference, adapter API, security
-  model, and evidence-gating principle.
-- OSS scaffolding — LICENSE (MIT), SECURITY.md, CONTRIBUTING.md,
-  CODE_OF_CONDUCT.md, CHANGELOG.md, GitHub issue and PR templates, and a
-  CI workflow.
+- **`apps/cli` (`@kelp/cli`)** — first standalone CLI, `kelp scan <path>`,
+  with `--json` and `--severity` flags. Reuses the same `@kelp/core`
+  scanners as the hosted app and the GitHub Action, so CLI results are
+  identical to CI results.
+- **`docs/` folder** — `ARCHITECTURE.md`, `CLI.md`, `ADAPTERS.md`,
+  `SECURITY-MODEL.md`, `EVIDENCE-GATING.md` (the anti-fabrication invariant,
+  promoted to a first-class doc).
+- **OSS scaffolding** — `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), `CHANGELOG.md`.
+- **GitHub scaffolding** — issue templates (`bug_report`, `feature_request`,
+  `vulnerability_class`), PR template, `.github/workflows/ci.yml`
+  (build + typecheck + tests).
+- **`examples/workflows/kelp-check.yml`** — copy-paste starter for the
+  Action.
 
 ### Changed
-- Root README rewritten as a portfolio/OSS hero doc — quickstarts for CLI,
-  Action, and hosted app.
-- Repository is now public.
+- **Root `README.md`** rewritten as a portfolio/OSS hero doc — badges,
+  quickstarts for CLI, Action, and hosted app, links to `docs/`.
+- **Landing (kelp.build)** repositioned around the OSS story — pricing
+  section removed, Install/Coverage/Docs replaced the paid-tier nav,
+  "Star on GitHub" is the primary CTA. Sign-in demoted to a small
+  "Hosted app" link.
+- **Login page** copy makes clear signing in is only needed for the
+  hosted app's continuous scanning; CLI and Action work with zero signup.
+- **Dashboard chrome** — Billing hidden from the top-level nav (the
+  route still exists for the internal `founder` tier); sidebar
+  "Upgrade" card replaced with a repo/docs pointer.
+- **Repository is now public**, `Mic52M/kelp`. 12 discovery topics set,
+  issues + discussions enabled.
 
 ## [0.1.0] — 2026-07-15
 
