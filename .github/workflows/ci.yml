@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: build + typecheck + unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build shared packages
+        run: |
+          npm run build --workspace=@kelp/core
+          npm run build --workspace=@kelp/worker
+
+      - name: Typecheck web
+        run: npx tsc --noEmit
+        working-directory: apps/web
+
+      - name: Unit tests (core)
+        run: npm test --workspace=@kelp/core --if-present
+
+      - name: Unit tests (worker)
+        run: npm test --workspace=@kelp/worker --if-present

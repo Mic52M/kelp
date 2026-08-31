@@ -1,0 +1,26 @@
+# Drop this file at .github/workflows/kelp-check.yml in your own repo.
+# Requires the Kelp GitHub App installed on your org, and the repo connected
+# at https://kelp.build/dashboard.
+#
+# See https://github.com/Mic52M/kelp/blob/master/docs/CLI.md for the full
+# story of how the Action fits with the CLI and hosted app.
+
+name: kelp/check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: kelp-security/kelp-action@v1
+        # Optional overrides — all defaults are sensible.
+        # with:
+        #   fail-on: critical,high        # sev at or above these will fail the check
+        #   poll-timeout-seconds: "300"   # bump for large repos

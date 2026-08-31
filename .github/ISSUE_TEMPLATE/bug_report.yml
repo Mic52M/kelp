@@ -1,0 +1,72 @@
+name: Bug report
+description: Something is broken or doesn't behave the way the docs say it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill out as much as
+        you can — a minimal reproduction is worth more than a long description.
+
+        **Do NOT report security vulnerabilities here.** Use
+        [Security Advisories](https://github.com/Mic52M/kelp/security/advisories/new)
+        instead.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      options:
+        - CLI (`kelp scan`)
+        - Hosted app (kelp.build)
+        - GitHub Action (`kelp-security/kelp-action`)
+        - Core / worker library (embedded use)
+        - Docs / README
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: For the CLI, output of `kelp --version`. For the hosted app, the current date + browser. For the Action, the ref you're using (e.g. `@v1`).
+      placeholder: "kelp v0.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear description of the actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: A clear description of what you thought should happen.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: |
+        Exact steps to reproduce. Ideal: a public repo or a minimal snippet.
+        The more copy-paste-runnable, the faster we can fix it.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / output
+      description: Paste the CLI output, browser console errors, or the Action's log. Redact any credentials.
+      render: shell
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this hasn't been reported.
+          required: true
+        - label: I removed any secrets from the reproduction and logs above.
+          required: true

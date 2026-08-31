@@ -1,0 +1,36 @@
+name: Feature request
+description: A change or addition to Kelp's behavior — not a bug, not a new detection class.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a **new detection class** (a whole new vuln type), use the
+        "New detection class" template instead — it asks slightly different
+        questions.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the user pain first, the solution second. If you can, name a specific real-world case where this hurt.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should Kelp do? Include the surface (CLI, Action, hosted, core) and rough shape.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Optional but very helpful. "I tried X but it didn't work because Y" often changes the answer.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this hasn't been proposed.
+          required: true

@@ -1,106 +1,147 @@
+<div align="center">
+
 # Kelp
 
-> **New here (human or AI)? Read [`docs/HANDOFF.md`](docs/HANDOFF.md) first** — it
-> has the full context: vision, north star, architecture, what's built & verified,
-> how to run, credentials, and what's next.
+**Security scanner for vibe-coded apps.**
+Finds the doors AI code generators leave open — hardcoded secrets, permissive
+RLS, unauthenticated edge functions — and gates them out of your pull requests.
 
-Self-serve security agent for **vibe-coded apps** — apps built with Lovable, Bolt.new,
-Replit, Cursor or v0, typically on a Supabase backend. Kelp finds and helps fix the
-security holes these tools routinely ship, for solo founders and small agencies who
-have no security team.
+[![License: MIT](https://img.shields.io/badge/License-MIT-signal.svg?labelColor=0a0a0c&color=b8f2c9)](LICENSE)
+[![CI](https://github.com/Mic52M/kelp/actions/workflows/ci.yml/badge.svg)](https://github.com/Mic52M/kelp/actions/workflows/ci.yml)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-signal.svg?labelColor=0a0a0c&color=b8f2c9)](CONTRIBUTING.md)
+[![Deploy](https://img.shields.io/badge/kelp.build-live-signal.svg?labelColor=0a0a0c&color=b8f2c9)](https://kelp.build)
 
-**Positioning.** Not an enterprise scanner. Sign up alone, no sales call, value in
-under 10 minutes. We never claim 100% coverage — we cover specific vulnerability
-**classes** with high precision.
+[Live app](https://kelp.build) · [Docs](docs/) · [CLI](docs/CLI.md) · [GitHub Action](https://github.com/kelp-security/kelp-action) · [Architecture](docs/ARCHITECTURE.md)
 
-## What Kelp checks (MVP)
+</div>
 
-| Class | Detection | Fix in MVP |
-|-------|-----------|------------|
-| **RLS** missing/misconfigured on Supabase | Read schema via Supabase Management API; check RLS enabled per table + policies match standard access patterns | Generate `CREATE POLICY` SQL as a **proposed migration** (never auto-applied) |
-| **Secrets** in code | Static scan of the connected GitHub repo (known key patterns + entropy) | Open a **PR** moving the value to an env var + rotation guidance |
-| **BOLA** (broken object-level authz) | **Active test**: with two user-provided test accounts, try to read account B's resources using account A's session | **Report + human review only** (no auto-PR). See consent gate below |
-| Auth weaknesses | *(stretch / V1.1)* | — |
+---
+
+## What it does
+
+Kelp scans an app's **backend surface** — Supabase (managed backends included),
+edge functions, RLS policies, source tree — the way an attacker would. Every
+finding is **evidence-gated**: a reviewer re-runs the reproduction before it
+lands in your report, so what you see is what an attacker would actually get.
+
+Three surfaces, one detection engine:
+
+| Surface | For | How you use it |
+|---|---|---|
+| **CLI** — [`kelp`](docs/CLI.md) | Local scans, CI shells, scripts | `npx kelp scan ./my-app` |
+| **GitHub Action** — [`kelp/check`](https://github.com/kelp-security/kelp-action) | Pull-request gating | `uses: kelp-security/kelp-action@v1` |
+| **Hosted app** — [kelp.build](https://kelp.build) | Continuous scanning, dashboard, PR fixes | Connect a repo, sign in with GitHub |
+
+Zero configuration in the common case. The Action reads the workflow's
+`GITHUB_TOKEN`, the hosted app installs a GitHub App, the CLI walks the
+filesystem.
+
+## Quickstart — CLI
+
+```bash
+npx kelp scan ./my-app
+```
+
+```
+kelp v0.1.0  ·  scanning ./my-app  ·  214 files walked
+
+CRITICAL  src/lib/db.ts:14   VITE_SERVICE_ROLE — Supabase service_role JWT
+HIGH      src/api/orders.ts  hardcoded Stripe secret (sk_live_…)
+MEDIUM    supabase/config.toml  verify_jwt=false on get-order
+
+3 findings · 8s · report at ./kelp-report.json
+```
+
+Add `--json` for machine-readable output, `--severity high` to filter, or see
+[docs/CLI.md](docs/CLI.md) for the full reference.
+
+## Quickstart — GitHub Action
+
+Add `.github/workflows/kelp-check.yml`:
+
+```yaml
+name: kelp/check
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: kelp-security/kelp-action@v1
+```
+
+Kelp will run on every PR, comment the verdict on the PR, and fail the check
+when new **critical or high** findings are introduced against the base branch.
+See [the action docs](https://github.com/kelp-security/kelp-action) for inputs
+and required-status-check setup.
+
+## What Kelp checks today
+
+| Class | How | Output |
+|---|---|---|
+| **Secrets** in source | Provider patterns (AWS/GCP/Stripe/Supabase/…) + entropy fallback | Masked preview + line + severity |
+| **Supabase RLS** | Reads schema + policies, flags tables open to `anon` | Proposed migration snippet |
+| **Edge functions** | Replays without a JWT to detect `verify_jwt=false` | Function name + reproduction curl |
+| **CORS + auth flows** | Reads config + auth callbacks for permissive defaults | Config diff |
+| **BOLA** (opt-in, hosted only) | Active test with two user-provided test accounts | Human-review only, never auto-fix |
+
+New detections land in [packages/core/src/scanners/](packages/core/src/scanners/).
+See [docs/ADAPTERS.md](docs/ADAPTERS.md) for extending Kelp to other backends
+(Firebase, Convex, PocketBase — see the [north-star issue](https://github.com/Mic52M/kelp/issues/45)).
 
 ## Architecture
 
-Monorepo (npm workspaces). Deploy targets reflect the workload split:
+Monorepo (npm workspaces). Three surfaces share one engine:
 
 ```
 apps/
-  web/      Next.js (React + Tailwind) — UI + light API. Deploys to Vercel.
-  worker/   Long-running scan jobs (RLS/secret/BOLA). Deploys to Railway/Fly.
-            Pulls from a queue; serverless timeouts don't fit long scans.
+├─ web/           Next.js — hosted app at kelp.build
+└─ cli/           kelp binary — standalone Node CLI
 packages/
-  db/       SQL schema + migrations. The SQL is the source of truth.
-  core/     Framework-agnostic domain logic: types + the consent guard.
+├─ core/          detection engine (pure, no I/O)
+├─ worker/        scan pipeline + integrations (GitHub, Supabase, queue)
+└─ db/            SQL migrations
 ```
 
-- **Our database:** Postgres (Supabase-compatible), **multi-tenant from day one** —
-  every tenant row carries `org_id` and is isolated by RLS (see
-  `packages/db/migrations/0002_rls_policies.sql`). The web app connects as the
-  `authenticated` role (RLS-scoped); the worker uses a privileged role that
-  bypasses RLS by design and is never exposed to the browser.
-- **Reasoning vs. determinism:** the Anthropic API (Claude) handles interpretation,
-  fix generation and plain-language explanations. Everything that must not be
-  probabilistic — reading schema, pattern-matching secrets, opening PRs — is
-  deterministic code.
-- **Integrations:** GitHub App (OAuth + PR creation, minimal scopes), Supabase
-  Management API (read-only schema/policies), Stripe (billing), Anthropic.
+The **core** is intentionally I/O-free: it takes `SourceFile[]` and returns
+`Finding[]`. The CLI shells file-reads to it; the worker adds the GitHub App
+plumbing; the web app adds auth, storage, and the reviewer loop.
 
-## Legal constraints enforced in code (not just in the ToS)
+Full breakdown: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-These are product requirements implemented as technical controls:
+## Evidence-gating
 
-1. **BOLA consent is a hard gate.** The active-test module runs only through
-   `runWithActiveTestConsent()` in `packages/core/src/consent.ts`, which refuses
-   unless a non-revoked `active_test_consents` row has `consented = true`. There is
-   no other entry point to the BOLA scanner.
-2. **No arbitrary third-party targets.** Active tests only ever run against a
-   project connected through the authenticated OAuth flow — never a URL typed in.
-3. **No end-user PII in clear text.** Exposed personal data of the customer's *end
-   users* is stored/shown only as category + count (`finding_exposure_summary`),
-   never raw values.
-4. **Audit everything.** Every access to customer data writes to `audit_log`.
-5. **Credentials encrypted at rest.** `project_credentials` / `bola_test_accounts`
-   hold ciphertext only and are not selectable by the browser role. We avoid the
-   Supabase `service_role` key when a lower-privilege key suffices.
+Kelp's most important invariant: **the model never decides a finding is real.**
+Every agent-produced lead requires a reproduction (probe + expected observable,
+or a source citation). The executor re-runs it and records the finding only if
+the observable holds. Autonomy in reasoning, zero fabrication.
 
-## Pricing (to implement)
+Read the full principle at [docs/EVIDENCE-GATING.md](docs/EVIDENCE-GATING.md).
 
-- **Free** — one full initial scan, report only (lead gen).
-- **Starter (~€29/mo)** — continuous scanning + auto-fix (RLS, secrets), 1 project.
-- **Agency (~€79–99/mo)** — up to 5 projects, same coverage.
+## Contributing
 
-## Status
+PRs, bug reports, and new detection classes are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup and the review checklist.
+Security vulnerabilities go through [SECURITY.md](SECURITY.md), not the public
+issue tracker.
 
-**Done and verified (no API keys required):**
-- Monorepo skeleton, multi-tenant schema + RLS policies, BOLA consent guard.
-- Credential encryption (AES-256-GCM), stable finding fingerprints.
-- Secret scanner (provider patterns, service_role vs anon JWT, client-side bump,
-  entropy fallback). RLS analyzer + owner-scoped policy migration generator.
-- Remediation generators: secret PR metadata, BOLA human-review report.
-- Scan orchestrator behind connector interfaces; worker with mock connectors and
-  a runnable end-to-end `demo`. **52 unit tests, all green.**
-- Premium web app: landing, dashboard, and consent-gated onboarding wizard.
-  Production build passes; pages verified in-browser.
+Good first contributions:
+- A new secret provider pattern in
+  [`packages/core/src/scanners/secrets.ts`](packages/core/src/scanners/secrets.ts).
+- A new edge-function heuristic in
+  [`packages/core/src/agent/edge-functions.ts`](packages/core/src/agent/edge-functions.ts).
+- Docs improvements — the tutorials in `docs/` are always in flight.
 
-**Blocked on credentials / external services (next):**
-1. Real GitHub App connector — needs `GITHUB_APP_*`. OAuth connect + PR creation.
-2. Real Supabase Management API connector — needs a user token. Schema read.
-3. App database + Supabase Auth — needs a Supabase project / `DATABASE_URL`.
-4. Redis-backed queue for the worker — needs `REDIS_URL`.
-5. Claude-written explanations — needs `ANTHROPIC_API_KEY`.
-6. Stripe billing + plan gating — needs Stripe keys. GitHub push webhook → re-scan.
+## License
 
-Run the pipeline now, without keys: `npm install && npm run build` then
-`node apps/worker/dist/demo.js`.
+MIT — see [LICENSE](LICENSE).
 
-## Local setup
+## Acknowledgements
 
-```bash
-cp .env.example .env.local      # fill in values
-npm install
-npm run typecheck
-# Apply packages/db/migrations/*.sql in order via psql or the Supabase CLI.
-```
+Kelp exists because vibe-code tools ship a lot of the same footguns, and the
+people using them shouldn't need a security team to catch them. Built by
+[@Mic52M](https://github.com/Mic52M) — solo, in the open.

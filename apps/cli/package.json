@@ -1,0 +1,46 @@
+{
+  "name": "@kelp/cli",
+  "version": "0.1.0",
+  "description": "Kelp — security scanner for vibe-coded apps. Standalone CLI.",
+  "keywords": [
+    "security",
+    "scanner",
+    "vulnerabilities",
+    "supabase",
+    "secrets",
+    "vibe-code",
+    "kelp"
+  ],
+  "author": "Michele Mastroberti (https://github.com/Mic52M)",
+  "license": "MIT",
+  "homepage": "https://github.com/Mic52M/kelp/blob/master/apps/cli/README.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mic52M/kelp.git",
+    "directory": "apps/cli"
+  },
+  "type": "module",
+  "bin": {
+    "kelp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "node --import tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@kelp/core": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
