@@ -31,9 +31,9 @@ interface Step {
   finding?: boolean;
 }
 
-// 9-line loop — a complete narrative arc: probe → discover → review → deliver.
-// Frame height is locked (script.length × 30px) so the hero never reflows,
-// but the story finishes on a definitive line instead of trailing off.
+// 7-line loop. Kept short so the terminal frame fits the H1 without
+// growing the hero on smaller viewports — the interleave itself is the
+// pitch, not the count of specialists.
 const SCRIPT: Step[] = [
   { ts: "13:04:12", agent: "postgrest", text: "probing rls on public schema…" },
   { ts: "13:04:12", agent: "edge-fn",   text: "listing functions… found 6" },
@@ -42,8 +42,6 @@ const SCRIPT: Step[] = [
   { ts: "13:04:14", agent: "postgrest", text: "profiles.email — READ open to anon", finding: true },
   { ts: "13:04:14", agent: "edge-fn",   text: "get-order verify_jwt=false", finding: true },
   { ts: "13:04:15", agent: "secrets",   text: "VITE_SERVICE_ROLE at src/lib/db.ts:14", finding: true },
-  { ts: "13:04:16", agent: "reviewer",  text: "merging 3 leads → confirmed 3, 0 dropped" },
-  { ts: "13:04:18", agent: "reviewer",  text: "report ready · 3 findings · 00:06.2", finding: true },
 ];
 
 const AGENT_COLOR: Record<AgentTag, string> = {
