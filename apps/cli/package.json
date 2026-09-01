@@ -1,6 +1,6 @@
 {
   "name": "@kelp-security/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Kelp — security scanner for vibe-coded apps. Standalone CLI.",
   "keywords": [
     "security",
@@ -28,15 +28,16 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -b",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --minify",
+    "build:types": "tsc -b",
     "dev": "node --import tsx src/index.ts",
     "start": "node dist/index.js"
   },
-  "dependencies": {
-    "@kelp/core": "*"
-  },
+  "dependencies": {},
   "devDependencies": {
+    "@kelp/core": "*",
     "@types/node": "^22.10.5",
+    "esbuild": "^0.25.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   },

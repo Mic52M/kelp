@@ -8,6 +8,15 @@ All notable changes to Kelp are documented here. The format follows
 
 _Nothing yet._
 
+## [0.2.1] — 2026-09-01
+
+### Fixed
+- `@kelp-security/cli` — bundle the CLI with esbuild instead of publishing
+  a workspace-linked tsc output. v0.2.0 declared `@kelp/core: "*"` as a
+  runtime dependency, which was a workspace-only alias and 404'd on
+  `npm install`, breaking every downstream install. v0.2.1 is a single
+  self-contained ESM bundle (~13 KB) with zero runtime dependencies.
+
 ## [0.2.0] — 2026-08-31
 
 The open-source release. Repo is now public + MIT-licensed. First
