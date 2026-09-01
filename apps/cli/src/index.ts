@@ -7,11 +7,11 @@
 // would see.
 
 import { runScan } from "./commands/scan.js";
-import { runAgentScan } from "./commands/scan-agent.js";
 import { listRules } from "./commands/list-rules.js";
 import { loadConfig, suggestedConfigPath } from "./config.js";
+import { isDepth, type Depth } from "./agent/depth.js";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 function usage(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps
@@ -29,14 +29,25 @@ COMMANDS
 
 OPTIONS (scan)
   --agent                    Run the multi-agent scan on top of the static
-                             checks. Requires ANTHROPIC_API_KEY (env or
-                             ~/.config/kelp/config.json). Streams the
-                             agent transcript to stderr in real time.
-  --model <id>               Anthropic model id (default: claude-sonnet-5)
-  --max-cost-cents <n>       Abort the agent when accumulated cost exceeds
-                             <n> cents (default: 100 = \$1.00)
-  --max-iterations <n>       Abort the agent after <n> tool-use rounds
-                             (default: 24)
+                             checks. Requires ANTHROPIC_API_KEY.
+  --depth <preset>           Preset for --agent that sets model + cost cap
+                             + iterations at once:
+                               quick     (haiku, \$0.15,  10 iter)
+                               standard  (sonnet, \$1.00, 24 iter) [default]
+                               thorough  (sonnet, \$3.00, 40 iter)
+                               paranoid  (opus,  \$10.00, 80 iter)
+  --focus <classes>          Comma-separated: secrets,auth,rls,edge-fn,redirects
+                             Narrows the agent to those classes only
+  --observations             Surface the agent's non-verified suspicions
+                             (things it noticed but couldn't cite evidence for)
+  --dry-run                  Show what would be scanned + estimated worst-case
+                             cost, without calling Anthropic
+  --model <id>               Override the depth preset's model
+  --max-cost-cents <n>       Override the depth preset's cost cap
+  --max-iterations <n>       Override the depth preset's iteration cap
+  --static-only              Skip the agent, static checks only (default when
+                             --agent is not passed)
+  --no-static                Skip the static checks, agent only
   --json                     Emit findings as JSON on stdout
   --severity <sev>           Only include findings at or above <sev>
                              (critical | high | medium | low)
@@ -103,6 +114,11 @@ async function main(): Promise<void> {
     const json = rest.includes("--json");
     const verbose = rest.includes("--verbose") || rest.includes("-V");
     const agent = rest.includes("--agent");
+    const observations = rest.includes("--observations");
+    const dryRun = rest.includes("--dry-run");
+    const staticOnly = rest.includes("--static-only");
+    const noStatic = rest.includes("--no-static");
+
     const sevIdx = rest.indexOf("--severity");
     const minSeverity = sevIdx >= 0 ? (rest[sevIdx + 1] ?? null) : null;
     const modelIdx = rest.indexOf("--model");
@@ -112,9 +128,43 @@ async function main(): Promise<void> {
     const iterIdx = rest.indexOf("--max-iterations");
     const maxIterations = iterIdx >= 0 ? Number(rest[iterIdx + 1]) : undefined;
 
-    // Static scan always runs — it's fast and offline. The agent is layered
-    // on top when --agent is passed and an ANTHROPIC_API_KEY is available.
-    await runScan({ path: targetPath, json, minSeverity, verbose, version: VERSION, runAgentAfter: agent, model, maxCostCents, maxIterations });
+    const depthIdx = rest.indexOf("--depth");
+    const depthRaw = depthIdx >= 0 ? rest[depthIdx + 1] ?? null : null;
+    let agentDepth: Depth | null = null;
+    if (depthRaw) {
+      if (!isDepth(depthRaw)) {
+        process.stderr.write(`kelp scan: invalid --depth "${depthRaw}". Use quick, standard, thorough, or paranoid.\n`);
+        process.exit(2);
+      }
+      agentDepth = depthRaw;
+    }
+
+    const focusIdx = rest.indexOf("--focus");
+    const focus =
+      focusIdx >= 0 && rest[focusIdx + 1]
+        ? rest[focusIdx + 1]!
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : null;
+
+    await runScan({
+      path: targetPath,
+      json,
+      minSeverity,
+      verbose,
+      version: VERSION,
+      runAgentAfter: agent,
+      staticOnly,
+      noStatic,
+      agentDepth,
+      model,
+      maxCostCents,
+      maxIterations,
+      focus,
+      observations,
+      dryRun,
+    });
     return;
   }
 

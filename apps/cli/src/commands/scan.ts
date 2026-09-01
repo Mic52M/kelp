@@ -22,6 +22,8 @@ import { detectVerifyJwt, type VerifyJwtFinding } from "../checks/verify-jwt.js"
 import { loadConfig } from "../config.js";
 import { renderReport } from "../output/report.js";
 
+import type { Depth } from "../agent/depth.js";
+
 interface ScanOptions {
   path: string;
   json: boolean;
@@ -29,9 +31,15 @@ interface ScanOptions {
   verbose: boolean;
   version: string;
   runAgentAfter?: boolean;
+  staticOnly?: boolean;
+  noStatic?: boolean;
+  agentDepth?: Depth | null;
   model?: string;
   maxCostCents?: number;
   maxIterations?: number;
+  focus?: readonly string[] | null;
+  observations?: boolean;
+  dryRun?: boolean;
 }
 
 const SEV_ORDER: Record<Severity, number> = {
@@ -56,7 +64,7 @@ export interface Finding {
   provider?: string;
   confidence?: "high" | "medium";
   clientSide?: boolean;
-  source: "secrets" | "supabase-config";
+  source: "secrets" | "supabase-config" | "agent";
 }
 
 function isSeverity(v: string): v is Severity {
@@ -126,10 +134,17 @@ export async function runScan(opts: ScanOptions): Promise<void> {
   // and a `ranOn`/`applicable` flag so we can say "n/a — no config.toml"
   // instead of pretending we scanned something we didn't.
 
-  progress("running SEC-001 (secret patterns + entropy)", opts.verbose);
-  const secretFindings: SecretFinding[] = detectSecrets(files);
+  // --no-static skips the static phase entirely (agent-only run).
+  const runStatic = !opts.noStatic;
+  progress(
+    runStatic
+      ? "running SEC-001 (secret patterns + entropy)"
+      : "skipping static checks (--no-static)",
+    opts.verbose,
+  );
+  const secretFindings: SecretFinding[] = runStatic ? detectSecrets(files) : [];
 
-  const hasSupabaseConfig = files.some((f) => /supabase\/config\.toml$/i.test(f.path));
+  const hasSupabaseConfig = runStatic && files.some((f) => /supabase\/config\.toml$/i.test(f.path));
   progress(
     `running EDGE-003 (verify_jwt=false in supabase/config.toml) — ${hasSupabaseConfig ? "applicable" : "n/a"}`,
     opts.verbose,
@@ -138,7 +153,7 @@ export async function runScan(opts: ScanOptions): Promise<void> {
     ? detectVerifyJwt(files)
     : [];
 
-  const hasEdgeFns = files.some((f) => /supabase\/functions\//i.test(f.path));
+  const hasEdgeFns = runStatic && files.some((f) => /supabase\/functions\//i.test(f.path));
   progress(
     `running edge-fn recon (informational) — ${hasEdgeFns ? "applicable" : "n/a"}`,
     opts.verbose,
@@ -222,7 +237,14 @@ export async function runScan(opts: ScanOptions): Promise<void> {
 
   // ── agent mode (opt-in, requires API key) ──────────────────────────
   let agentFindings: Finding[] = [];
-  let agentInfo: { costUsdCents: number; iterations: number; durationMs: number; aborted: string | null } | null = null;
+  let agentObservations: string[] = [];
+  let agentInfo: {
+    costUsdCents: number;
+    iterations: number;
+    durationMs: number;
+    aborted: string | null;
+    model: string;
+  } | null = null;
 
   if (opts.runAgentAfter) {
     if (!config.anthropicApiKey) {
@@ -236,16 +258,22 @@ export async function runScan(opts: ScanOptions): Promise<void> {
     const r = await runAgentScan({
       target: abs,
       apiKey: config.anthropicApiKey,
+      depth: opts.agentDepth,
       model: opts.model,
       maxCostCents: opts.maxCostCents,
       maxIterations: opts.maxIterations,
+      focus: opts.focus,
+      observations: opts.observations,
+      dryRun: opts.dryRun,
     });
     agentInfo = {
       costUsdCents: r.costUsdCents,
       iterations: r.iterations,
       durationMs: r.durationMs,
       aborted: r.aborted,
+      model: r.model,
     };
+    agentObservations = r.observations;
     agentFindings = r.findings.map<Finding>((f) => ({
       fingerprint: `agent-${f.ruleId}-${f.path}-${f.line ?? 0}`,
       ruleId: f.ruleId,
@@ -253,7 +281,7 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       severity: f.severity,
       path: f.path,
       line: f.line ?? 1,
-      source: "supabase-config", // temporary; agent findings surface in report same as static
+      source: "agent",
     }));
   }
 
@@ -276,14 +304,18 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       agent: agentInfo,
     });
   } else if (agentInfo) {
-    // Terse agent summary at the end of the human-readable report.
-    process.stdout.write(`\n`);
-    process.stdout.write(
-      `  agent: ${agentFindings.length} finding${agentFindings.length === 1 ? "" : "s"} · ` +
-        `${agentInfo.iterations} iterations · $${(agentInfo.costUsdCents / 100).toFixed(3)}` +
-        (agentInfo.aborted ? ` · ${agentInfo.aborted}` : "") +
-        `\n`,
-    );
+    // A proper AGENT section — findings integrated with the static ones
+    // + observations if any + cost/iteration summary.
+    const { renderAgentSection } = await import("../output/agent-section.js");
+    renderAgentSection({
+      findings: agentFindings,
+      observations: agentObservations,
+      costUsdCents: agentInfo.costUsdCents,
+      iterations: agentInfo.iterations,
+      durationMs: agentInfo.durationMs,
+      aborted: agentInfo.aborted,
+      model: agentInfo.model,
+    });
   }
 
   process.exit(merged.length === 0 ? 0 : 1);

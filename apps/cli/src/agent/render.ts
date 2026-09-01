@@ -25,6 +25,12 @@ export function makeEventRenderer(startMs: number) {
         break;
       }
       case "tool_result": {
+        // NEVER print the raw content the agent got back — for read_file /
+        // grep that's the actual repo source, which routinely includes .env
+        // values, API keys, private schema. The MODEL sees the full content
+        // (that's the whole point) but the human transcript gets a bytes-
+        // level summary only. Redaction is enforced upstream in loop.ts;
+        // this is the belt-and-braces render pass.
         const glyph = e.isError ? c.red("✗") : c.gray("←");
         err.write(`${ts} ${glyph} ${c.dim(e.summary)}\n`);
         break;

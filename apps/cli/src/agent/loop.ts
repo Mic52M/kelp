@@ -9,7 +9,7 @@
 
 import type { SourceFile } from "@kelp/core";
 import { TOOLS, executeTool, type ExecuteContext } from "./tools.js";
-import { SYSTEM_PROMPT, userBrief } from "./prompt.js";
+import { buildSystemPrompt, userBrief } from "./prompt.js";
 import { createDriver } from "./driver.js";
 import { computeCostCents } from "./pricing.js";
 import type { AgentEvent, AgentFinding, Cost } from "./types.js";
@@ -23,6 +23,8 @@ export interface RunAgentInput {
   maxIterations?: number;
   maxCostCents?: number;
   onEvent: (e: AgentEvent) => void;
+  /** Overrides the default system prompt — used by the depth/focus options. */
+  systemPrompt?: string;
 }
 
 export interface RunAgentResult {
@@ -39,7 +41,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const driver = createDriver({
     apiKey: input.apiKey,
     model: input.model,
-    system: SYSTEM_PROMPT,
+    system: input.systemPrompt ?? buildSystemPrompt(),
     tools: TOOLS,
   });
   const ctx: ExecuteContext = { root: input.root, files: input.files };
@@ -96,10 +98,17 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         });
       }
 
+      // Emit a SAFE-BY-CONSTRUCTION summary. The tool result content
+      // (which may include full file bytes for read_file, or matched
+      // source lines for grep) never enters the event stream — those
+      // would leak the target repo's secrets into the CLI transcript,
+      // defeating the purpose of running a security scanner in the
+      // first place. The model still receives the full content via the
+      // driver conversation; only the human-facing renderer is redacted.
       input.onEvent({
         kind: "tool_result",
         name: call.name,
-        summary: truncSummary(res.content),
+        summary: safeSummary(call.name, res),
         isError: res.isError,
       });
 
@@ -140,7 +149,52 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   return { findings, cost: finalCost, iterations };
 }
 
-function truncSummary(s: string): string {
+/** Never leak the raw tool output into the transcript. Emit bytes/counts
+ *  instead — the model still has the full content, the human sees a shape. */
+function safeSummary(toolName: string, res: { content: string; isError: boolean; data?: unknown }): string {
+  if (res.isError) {
+    return truncOneLine(res.content);
+  }
+  switch (toolName) {
+    case "read_file": {
+      // The read_file tool packs the file into a JSON envelope with
+      // `content` + `truncated`. Report size only.
+      try {
+        const parsed = JSON.parse(res.content) as { content?: string; truncated?: boolean };
+        const bytes = parsed.content?.length ?? 0;
+        const suffix = parsed.truncated ? " (truncated at 200 KB)" : "";
+        return `${humanBytes(bytes)}${suffix}`;
+      } catch {
+        return `${humanBytes(res.content.length)}`;
+      }
+    }
+    case "grep": {
+      // Grep result starts with "N match(es):" or "0 matches" — pull the
+      // count, drop the payload.
+      const m = res.content.match(/^(\d+)\s+match/);
+      if (m) return `${m[1]} matches`;
+      if (/^0 matches/.test(res.content)) return "0 matches";
+      return "matches";
+    }
+    case "list_files": {
+      const lines = res.content.split("\n").filter((l) => l.length > 0);
+      const truncated = /\(\+\s*\d+\s+more truncated\)/.test(res.content);
+      return `${lines.length}${truncated ? "+" : ""} files`;
+    }
+    case "report_finding":
+      return res.content; // "accepted (verified in path)" — no secrets in there
+    default:
+      return truncOneLine(res.content);
+  }
+}
+
+function truncOneLine(s: string): string {
   const flat = s.replace(/\s+/g, " ").trim();
-  return flat.length > 120 ? flat.slice(0, 117) + "…" : flat;
+  return flat.length > 100 ? flat.slice(0, 97) + "…" : flat;
+}
+
+function humanBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
