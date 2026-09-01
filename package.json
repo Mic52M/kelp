@@ -15,7 +15,7 @@
     "build": "tsc -b",
     "dev": "concurrently -n web,worker -c cyan,magenta \"npm -w @kelp/web run dev\" \"npm run dev:worker\"",
     "dev:worker": "tsc -b apps/worker && node --env-file=.env.local apps/worker/dist/index.js",
-    "cli": "npm -w @kelp/cli run dev --",
+    "cli": "npm -w @kelp-security/cli run dev --",
     "test": "tsc -b packages/core && node --test packages/core/dist/*.test.js packages/core/dist/scanners/*.test.js packages/core/dist/remediation/*.test.js packages/core/dist/agent/*.test.js packages/core/dist/agent/specialists/*.test.js",
     "db:migrate": "node --experimental-strip-types packages/db/src/migrate.ts"
   },

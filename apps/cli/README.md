@@ -7,13 +7,13 @@ what you see locally is what CI would see.
 ## Install
 
 ```bash
-npx kelp scan ./my-app
+npx @kelp-security/cli scan ./my-app
 ```
 
 Or install globally:
 
 ```bash
-npm install -g @kelp/cli
+npm install -g @kelp-security/cli
 kelp scan ./my-app
 ```
 

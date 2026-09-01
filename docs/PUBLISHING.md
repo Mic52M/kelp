@@ -1,6 +1,6 @@
 # Publishing
 
-How to cut a new release + push `@kelp/cli` to npm. Not something contributors
+How to cut a new release + push `@kelp-security/cli` to npm. Not something contributors
 usually touch — this is the maintainer's checklist.
 
 ## Cutting a new release
@@ -26,39 +26,18 @@ usually touch — this is the maintainer's checklist.
    ```bash
    gh release create vX.Y.Z --title "vX.Y.Z — one-line summary" --notes-file /tmp/notes.md
    ```
-6. **Publish `@kelp/cli` to npm** — see below.
+6. **Publish `@kelp-security/cli` to npm** — see below.
 
-## Publishing `@kelp/cli` to npm
+## Publishing `@kelp-security/cli` to npm
 
-### One-time setup (only needed the very first time)
+### One-time setup — already done
 
-The `@kelp` scope has to exist on npm before you can publish under it. It
-does NOT exist yet as of v0.2.0 — the previous cut only produced a GitHub
-Release.
+The `@kelp-security` npm org exists (owner: `mic52m`). Free tier, public
+packages only. Matches the GitHub org that owns `kelp-security/kelp-action`.
 
-Two options:
-
-**Option A — reserve the `@kelp` npm org** (recommended, matches the
-workspace name):
-
-1. `npm login`  (browser-based, 2FA)
-2. Create the org at https://www.npmjs.com/org/create — pick "Free" tier,
-   name = `kelp`. Public packages only, which is what we want.
-3. Done. `npm publish --access public` from `apps/cli/` will now work.
-
-**Option B — publish unscoped as `kelp-scan`** (also available, no org
-gymnastics):
-
-1. Rename `apps/cli/package.json` `"name"` to `"kelp-scan"`.
-2. Update the root `package.json` `scripts.cli` to reference the new
-   workspace name.
-3. `npm login`.
-4. `cd apps/cli && npm publish --access public`.
-
-Either option is fine. Option A gives us `npx @kelp/cli scan …` and pairs
-better with a possible future `@kelp/core` publish. Option B gives us
-`npx kelp-scan …` which is arguably shorter to type. Pick and commit — do
-NOT mix.
+`@kelp-security/cli@0.2.0` was published on 2026-09-01. Nothing more to
+set up — subsequent publishes just need `npm login` (or a granular access
+token) and the "every release after that" flow below.
 
 ### Every release after that
 
@@ -66,7 +45,7 @@ NOT mix.
 # From the repo root
 npm run build --workspace=@kelp/core
 npm run build --workspace=@kelp/worker   # only if the CLI ever depends on it
-npm run build --workspace=@kelp/cli
+npm run build --workspace=@kelp-security/cli   # note: still lives in apps/cli
 
 # Dry-run to sanity-check the tarball
 cd apps/cli
@@ -82,11 +61,11 @@ cd ../..
 ### Verifying the published package
 
 ```bash
-npx @kelp/cli --version
-npx @kelp/cli scan ./some-repo
+npx @kelp-security/cli --version
+npx @kelp-security/cli scan ./some-repo
 ```
 
-The bin name inside the package is `kelp`, so after `npm i -g @kelp/cli`
+The bin name inside the package is `kelp`, so after `npm i -g @kelp-security/cli`
 the invocation is `kelp scan …` regardless of the package name.
 
 ## Publishing `kelp-security/kelp-action` (separate repo)

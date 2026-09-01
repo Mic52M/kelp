@@ -14,7 +14,7 @@ The open-source release. Repo is now public + MIT-licensed. First
 standalone CLI. Full contributor docs.
 
 ### Added
-- **`apps/cli` (`@kelp/cli`)** — first standalone CLI, `kelp scan <path>`,
+- **`apps/cli` (`@kelp-security/cli`)** — first standalone CLI, `kelp scan <path>`,
   with `--json` and `--severity` flags. Reuses the same `@kelp/core`
   scanners as the hosted app and the GitHub Action, so CLI results are
   identical to CI results.

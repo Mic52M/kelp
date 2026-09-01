@@ -10,13 +10,13 @@ CLI results are identical to CI results.
 Zero-install:
 
 ```bash
-npx kelp scan ./my-app
+npx @kelp-security/cli scan ./my-app
 ```
 
 Or global:
 
 ```bash
-npm install -g @kelp/cli
+npm install -g @kelp-security/cli
 kelp scan ./my-app
 ```
 

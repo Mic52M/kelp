@@ -28,7 +28,7 @@ Three surfaces, one detection engine:
 
 | Surface | For | How you use it |
 |---|---|---|
-| **CLI** — [`kelp`](docs/CLI.md) | Local scans, CI shells, scripts | `npx kelp scan ./my-app` |
+| **CLI** — [`kelp`](docs/CLI.md) | Local scans, CI shells, scripts | `npx @kelp-security/cli scan ./my-app` |
 | **GitHub Action** — [`kelp/check`](https://github.com/kelp-security/kelp-action) | Pull-request gating | `uses: kelp-security/kelp-action@v1` |
 | **Hosted app** — [kelp.build](https://kelp.build) | Continuous scanning, dashboard, PR fixes | Connect a repo, sign in with GitHub |
 
@@ -39,7 +39,7 @@ filesystem.
 ## Quickstart — CLI
 
 ```bash
-npx kelp scan ./my-app
+npx @kelp-security/cli scan ./my-app
 ```
 
 ```
