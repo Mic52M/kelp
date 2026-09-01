@@ -8,6 +8,52 @@ All notable changes to Kelp are documented here. The format follows
 
 _Nothing yet._
 
+## [0.3.0] — 2026-09-01
+
+Modernizes the CLI surface + ships the first working multi-agent scan.
+
+### Added
+- **Multi-agent scan** — `kelp scan <path> --agent` runs an autonomous
+  Claude-driven auditor over the target repo. Streams a live transcript
+  to stderr (timestamped, colored) so you see the agent reasoning +
+  every tool call + every finding in real time. **Evidence-gated**:
+  each `report_finding` must include a `source_contains` substring that
+  is actually present at the cited path — the executor re-reads the
+  file and drops the finding if the substring is absent. No fabrication.
+- **Local agent toolbox**: `list_files` (glob-ish), `read_file`
+  (200 KB cap), `grep` (regex), `report_finding` (evidence-gated).
+  No shell, no HTTP, no writes to disk. Fully sandboxed.
+- **Cost tracking** — per-scan cost in USD cents, running total
+  emitted after each iteration. `--max-cost-cents` (default 100 = \$1)
+  aborts the loop when exceeded. `--max-iterations` (default 24) is a
+  belt-and-braces second cap.
+- **Model selection** — `--model claude-sonnet-5` (default), or
+  `claude-haiku-4-5`, `claude-opus-5`. Pricing table for each in
+  `apps/cli/src/agent/pricing.ts`, updated 2026-09.
+- **`@anthropic-ai/sdk`** added as a runtime dependency. Static-scan
+  users don't pay any cost here — the SDK is only loaded when
+  `--agent` is passed.
+
+### Changed (Phase A — visual polish, no behaviour change)
+- **ASCII banner** at the top of every scan run — 6-line KELP wordmark
+  in the same signal green as the site.
+- **Severity chips** — `▐ CRITICAL ▐` colored pills on TTY, brackets
+  fallback on non-TTY.
+- **Section rules** — unicode-heavy `━━ TARGET ━━━━━━` headers cap at
+  terminal width.
+- **Check status glyphs** — `✓ ok` / `⚠ warn` / `○ skip` per row.
+- **INFO section** for edge-fn discovery uses `● mutating` /
+  `● non-mutating` colored badges.
+- **braille spinner** primitive (`⠋⠙⠹...`) available for future
+  long-ops; auto-degrades in CI. Not yet wired to the static scan
+  (fast enough to not need one) — used by the agent transcript.
+
+### Notes
+- Bundle: 26 KB → 44 KB (still esbuild-bundled). `@anthropic-ai/sdk`
+  is marked `--external` so users get the current SDK from npm rather
+  than a bundle-frozen copy — the SDK ships new features frequently
+  and this keeps installs on the latest client.
+
 ## [0.2.2] — 2026-09-01
 
 Answers the "what is this thing actually scanning?" question. Previous

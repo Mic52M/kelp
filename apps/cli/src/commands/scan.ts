@@ -28,6 +28,10 @@ interface ScanOptions {
   minSeverity: string | null;
   verbose: boolean;
   version: string;
+  runAgentAfter?: boolean;
+  model?: string;
+  maxCostCents?: number;
+  maxIterations?: number;
 }
 
 const SEV_ORDER: Record<Severity, number> = {
@@ -177,31 +181,28 @@ export async function runScan(opts: ScanOptions): Promise<void> {
 
   const durationMs = Date.now() - startedAt;
 
-  if (opts.json) {
-    const report = {
-      version: 2,
-      tool: { name: "kelp", version: opts.version },
-      target: abs,
-      scannedAt: new Date().toISOString(),
-      filesScanned: files.length,
-      filesSkipped: { oversize: skippedBig, unreadable: skippedUnreadable },
-      checks: {
-        secrets: { applicable: true, findings: secretFindings.length },
-        supabaseConfigVerifyJwt: {
-          applicable: hasSupabaseConfig,
-          findings: verifyJwtFindings.length,
-        },
-        edgeFnRecon: {
-          applicable: hasEdgeFns,
-          discovered: edgeFns.length,
-          mutating: edgeFns.filter((e) => e.mutating).length,
-        },
-      },
+  if (opts.json && !opts.runAgentAfter) {
+    // JSON mode + no agent: emit and exit right away. Agent-augmented
+    // JSON is handled after the agent runs so the payload includes both
+    // static and agent findings.
+    emitJson({
+      opts,
+      abs,
+      files,
+      skippedBig,
+      skippedUnreadable,
+      secretsCount: secretFindings.length,
+      hasSupabaseConfig,
+      verifyJwtCount: verifyJwtFindings.length,
+      hasEdgeFns,
+      edgeFns,
       durationMs,
       findings,
-    };
-    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-  } else {
+    });
+    process.exit(findings.length === 0 ? 0 : 1);
+  }
+
+  if (!opts.json) {
     renderReport({
       version: opts.version,
       target: opts.path,
@@ -219,5 +220,119 @@ export async function runScan(opts: ScanOptions): Promise<void> {
     });
   }
 
-  process.exit(findings.length === 0 ? 0 : 1);
+  // ── agent mode (opt-in, requires API key) ──────────────────────────
+  let agentFindings: Finding[] = [];
+  let agentInfo: { costUsdCents: number; iterations: number; durationMs: number; aborted: string | null } | null = null;
+
+  if (opts.runAgentAfter) {
+    if (!config.anthropicApiKey) {
+      process.stderr.write(
+        "\nkelp scan --agent: no ANTHROPIC_API_KEY found. " +
+          "Set it in your env or write ~/.config/kelp/config.json — run `kelp config` for details.\n",
+      );
+      process.exit(2);
+    }
+    const { runAgentScan } = await import("./scan-agent.js");
+    const r = await runAgentScan({
+      target: abs,
+      apiKey: config.anthropicApiKey,
+      model: opts.model,
+      maxCostCents: opts.maxCostCents,
+      maxIterations: opts.maxIterations,
+    });
+    agentInfo = {
+      costUsdCents: r.costUsdCents,
+      iterations: r.iterations,
+      durationMs: r.durationMs,
+      aborted: r.aborted,
+    };
+    agentFindings = r.findings.map<Finding>((f) => ({
+      fingerprint: `agent-${f.ruleId}-${f.path}-${f.line ?? 0}`,
+      ruleId: f.ruleId,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line ?? 1,
+      source: "supabase-config", // temporary; agent findings surface in report same as static
+    }));
+  }
+
+  const merged: Finding[] = [...findings, ...agentFindings];
+
+  if (opts.json) {
+    emitJson({
+      opts,
+      abs,
+      files,
+      skippedBig,
+      skippedUnreadable,
+      secretsCount: secretFindings.length,
+      hasSupabaseConfig,
+      verifyJwtCount: verifyJwtFindings.length,
+      hasEdgeFns,
+      edgeFns,
+      durationMs: durationMs + (agentInfo?.durationMs ?? 0),
+      findings: merged,
+      agent: agentInfo,
+    });
+  } else if (agentInfo) {
+    // Terse agent summary at the end of the human-readable report.
+    process.stdout.write(`\n`);
+    process.stdout.write(
+      `  agent: ${agentFindings.length} finding${agentFindings.length === 1 ? "" : "s"} · ` +
+        `${agentInfo.iterations} iterations · $${(agentInfo.costUsdCents / 100).toFixed(3)}` +
+        (agentInfo.aborted ? ` · ${agentInfo.aborted}` : "") +
+        `\n`,
+    );
+  }
+
+  process.exit(merged.length === 0 ? 0 : 1);
+}
+
+function emitJson(input: {
+  opts: ScanOptions;
+  abs: string;
+  files: SourceFile[];
+  skippedBig: number;
+  skippedUnreadable: number;
+  secretsCount: number;
+  hasSupabaseConfig: boolean;
+  verifyJwtCount: number;
+  hasEdgeFns: boolean;
+  edgeFns: DiscoveredEdgeFunction[];
+  durationMs: number;
+  findings: Finding[];
+  agent?: { costUsdCents: number; iterations: number; durationMs: number; aborted: string | null } | null;
+}): void {
+  const report = {
+    version: 2,
+    tool: { name: "kelp", version: input.opts.version },
+    target: input.abs,
+    scannedAt: new Date().toISOString(),
+    filesScanned: input.files.length,
+    filesSkipped: { oversize: input.skippedBig, unreadable: input.skippedUnreadable },
+    checks: {
+      secrets: { applicable: true, findings: input.secretsCount },
+      supabaseConfigVerifyJwt: {
+        applicable: input.hasSupabaseConfig,
+        findings: input.verifyJwtCount,
+      },
+      edgeFnRecon: {
+        applicable: input.hasEdgeFns,
+        discovered: input.edgeFns.length,
+        mutating: input.edgeFns.filter((e) => e.mutating).length,
+      },
+      agent: input.agent
+        ? {
+            ran: true,
+            iterations: input.agent.iterations,
+            costUsdCents: input.agent.costUsdCents,
+            aborted: input.agent.aborted,
+          }
+        : { ran: false },
+    },
+    durationMs: input.durationMs,
+    findings: input.findings,
+  };
+  process.stdout.write(JSON.stringify(report, null, 2) + "\n");
 }

@@ -7,10 +7,11 @@
 // would see.
 
 import { runScan } from "./commands/scan.js";
+import { runAgentScan } from "./commands/scan-agent.js";
 import { listRules } from "./commands/list-rules.js";
 import { loadConfig, suggestedConfigPath } from "./config.js";
 
-const VERSION = "0.3.0-alpha.1";
+const VERSION = "0.3.0";
 
 function usage(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps
@@ -27,6 +28,15 @@ COMMANDS
   config             Show the effective config (env + ~/.config/kelp/config.json)
 
 OPTIONS (scan)
+  --agent                    Run the multi-agent scan on top of the static
+                             checks. Requires ANTHROPIC_API_KEY (env or
+                             ~/.config/kelp/config.json). Streams the
+                             agent transcript to stderr in real time.
+  --model <id>               Anthropic model id (default: claude-sonnet-5)
+  --max-cost-cents <n>       Abort the agent when accumulated cost exceeds
+                             <n> cents (default: 100 = \$1.00)
+  --max-iterations <n>       Abort the agent after <n> tool-use rounds
+                             (default: 24)
   --json                     Emit findings as JSON on stdout
   --severity <sev>           Only include findings at or above <sev>
                              (critical | high | medium | low)
@@ -92,9 +102,19 @@ async function main(): Promise<void> {
     }
     const json = rest.includes("--json");
     const verbose = rest.includes("--verbose") || rest.includes("-V");
+    const agent = rest.includes("--agent");
     const sevIdx = rest.indexOf("--severity");
     const minSeverity = sevIdx >= 0 ? (rest[sevIdx + 1] ?? null) : null;
-    await runScan({ path: targetPath, json, minSeverity, verbose, version: VERSION });
+    const modelIdx = rest.indexOf("--model");
+    const model = modelIdx >= 0 ? rest[modelIdx + 1] : undefined;
+    const costIdx = rest.indexOf("--max-cost-cents");
+    const maxCostCents = costIdx >= 0 ? Number(rest[costIdx + 1]) : undefined;
+    const iterIdx = rest.indexOf("--max-iterations");
+    const maxIterations = iterIdx >= 0 ? Number(rest[iterIdx + 1]) : undefined;
+
+    // Static scan always runs — it's fast and offline. The agent is layered
+    // on top when --agent is passed and an ANTHROPIC_API_KEY is available.
+    await runScan({ path: targetPath, json, minSeverity, verbose, version: VERSION, runAgentAfter: agent, model, maxCostCents, maxIterations });
     return;
   }
 
