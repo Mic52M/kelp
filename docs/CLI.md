@@ -34,12 +34,39 @@ supported classes. Returns a pretty table by default, or a JSON report with
 kelp scan <path> [options]
 
 OPTIONS
+  --agent                    Run the multi-agent Claude-driven scan on top
+                             of the static checks. Requires ANTHROPIC_API_KEY.
+  --model <id>               Anthropic model (default: claude-sonnet-5;
+                             also: claude-haiku-4-5, claude-opus-5)
+  --max-cost-cents <n>       Cost cap for --agent (default: 100 = $1.00)
+  --max-iterations <n>       Iteration cap for --agent (default: 24)
   --json                     Emit findings as JSON on stdout
   --severity <sev>           Only include findings at or above <sev>
                              (critical | high | medium | low)
+  --verbose, -V              Print per-check progress to stderr
   --help, -h                 Show help
   --version, -v              Print version
 ```
+
+### Agent-mode examples
+
+```bash
+# Set the key once
+export ANTHROPIC_API_KEY=sk-ant-…
+
+# Default: sonnet-5, capped at $1 and 24 iterations
+kelp scan . --agent
+
+# Cheaper — haiku-4-5, 50 cents cap
+kelp scan . --agent --model claude-haiku-4-5 --max-cost-cents 50
+
+# Deeper — opus-5, $5 cap, more iterations
+kelp scan . --agent --model claude-opus-5 --max-cost-cents 500 --max-iterations 40
+```
+
+The agent transcript streams to stderr as it happens (one timestamped line
+per event), so you can watch it reason + call tools + verify findings in
+real time.
 
 ### `kelp --version`
 
@@ -83,19 +110,40 @@ filter (`shouldScanPath` in `@kelp/core`): lockfiles, sourcemaps, and
 
 ## What's detected
 
-v0.1 CLI runs the **secret** scanner from `@kelp/core`:
+### Static checks (always run)
 
-- Provider patterns (AWS, GCP, Stripe, Supabase, GitHub, Slack, OpenAI, …)
-- Entropy fallback for high-entropy quoted strings that no pattern matched
-- Client-side severity bump — a secret shipped to every visitor is more
-  dangerous than one in server code (`clientSide: true` in the JSON output)
+- **SEC-001 — Hardcoded secrets.** Provider patterns (AWS, GCP, Stripe, Supabase,
+  GitHub, Slack, OpenAI, Anthropic, …) plus an entropy fallback for high-entropy
+  quoted strings that no pattern matched. Client-side severity bump — a secret
+  shipped to every visitor is more dangerous than one in server code
+  (`clientSide: true` in the JSON output). Values are always masked
+  (`sk_live_…`) — the raw secret never leaves the scanner boundary.
+- **EDGE-003 — Supabase `verify_jwt=false`.** Parses `supabase/config.toml`
+  for per-function `verify_jwt = false`; HIGH severity finding.
+- **RECON — Edge function discovery** (informational). Enumerates
+  `supabase/functions/*/index.ts`, classifies mutating vs non-mutating.
+  No finding filed; hosted app probes the live URLs.
 
-Secret **values** never leave the scanner boundary. Findings carry a masked
-preview (`sk_live_…`) only — you can safely pipe `kelp scan --json` into a
-public log without leaking anything.
+### Agent-driven scan (opt-in, needs `ANTHROPIC_API_KEY`)
 
-Other classes (RLS, edge functions, CORS, BOLA) live in `@kelp/core` too and
-will land in the CLI progressively.
+`kelp scan . --agent` runs an autonomous Claude-driven auditor over the repo.
+The agent has a small local toolbox (`list_files`, `read_file`, `grep`,
+`report_finding`) and is trained to look for:
+
+- Missing auth checks in server actions / API routes
+- Edge functions that check identity from the body/query instead of the JWT
+- Open redirects in auth callbacks
+- Client-side leaks of backend-only env vars (`SUPABASE_SERVICE_ROLE_KEY` and friends)
+- Secret variants the pattern scanner missed
+
+**Evidence gate**: every `report_finding` requires a `source_contains`
+substring. The executor re-reads the cited file and drops the finding if the
+substring isn't found. Autonomy in reasoning, zero fabrication.
+
+**Cost caps**: default `--max-cost-cents 100` (\$1). Bump for larger repos
+(`--max-cost-cents 500` = \$5 typical for a mid-size Next.js + Supabase app).
+
+Full list at any time: `kelp list-rules`.
 
 ## JSON output schema
 

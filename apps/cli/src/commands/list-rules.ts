@@ -51,10 +51,26 @@ const STATIC: RuleGroup[] = [
   },
 ];
 
+const AGENT: RuleGroup[] = [
+  {
+    id: "AGENT",
+    title: "Multi-agent scan · `kelp scan --agent` (needs ANTHROPIC_API_KEY)",
+    rules: [
+      "Autonomous Claude-driven auditor reads the repo source",
+      "Toolbox: list_files, read_file, grep, report_finding",
+      "Evidence-gated: every finding requires a source_contains substring",
+      "Executor re-verifies the substring — rejects any lead it can't cite",
+      "Cost + iteration caps enforced (--max-cost-cents, --max-iterations)",
+      "Focus classes: verify_jwt=false, missing auth checks in server actions,",
+      "  open redirects, client-side backend secret leaks, and more",
+    ],
+  },
+];
+
 const LIVE_ONLY: RuleGroup[] = [
   {
     id: "RLS-002",
-    title: "Row-Level Security (needs a live Supabase project)",
+    title: "Row-Level Security (hosted app only — needs a live Supabase project)",
     rules: [
       "Missing RLS on user-facing tables",
       "Permissive policies (open to anon)",
@@ -63,7 +79,7 @@ const LIVE_ONLY: RuleGroup[] = [
   },
   {
     id: "EDGE-003 (live)",
-    title: "Edge function replay (needs the deployed URL)",
+    title: "Edge function replay (hosted app only — needs the deployed URL)",
     rules: [
       "Replay non-mutating functions without a JWT",
       "Compare vs an authenticated baseline",
@@ -71,19 +87,10 @@ const LIVE_ONLY: RuleGroup[] = [
   },
   {
     id: "BOLA-004",
-    title: "Broken object-level authz (needs two test accounts + consent)",
+    title: "Broken object-level authz (hosted app only — needs two test accounts + consent)",
     rules: [
       "user A tries to read user B's resources by id",
       "Manual review only, never auto-fixed",
-    ],
-  },
-  {
-    id: "AGENT-∞",
-    title: "Multi-specialist agent squad (needs ANTHROPIC_API_KEY)",
-    rules: [
-      "postgrest / edge-fn / auth / secrets specialists probe in parallel",
-      "Every finding evidence-gated — the executor re-runs the reproduction",
-      "Reviewer confirms or drops each lead before it lands in the report",
     ],
   },
 ];
@@ -100,7 +107,14 @@ export function listRules(): void {
     out.write("\n");
   }
 
-  out.write(`${col("▶ Live (hosted app / future CLI agent mode)", BOLD)}\n\n`);
+  out.write(`${col("▶ Agent-driven (kelp scan --agent, needs ANTHROPIC_API_KEY)", BOLD)}\n\n`);
+  for (const g of AGENT) {
+    out.write(`  ${col(g.id, DIM)}  ${col(g.title, BOLD)}\n`);
+    for (const r of g.rules) out.write(`    · ${r}\n`);
+    out.write("\n");
+  }
+
+  out.write(`${col("▶ Live (hosted app only)", BOLD)}\n\n`);
   for (const g of LIVE_ONLY) {
     out.write(`  ${col(g.id, DIM)}  ${col(g.title, BOLD)}\n`);
     for (const r of g.rules) out.write(`    · ${r}\n`);
