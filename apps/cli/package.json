@@ -1,6 +1,6 @@
 {
   "name": "@kelp-security/cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Kelp — security scanner for vibe-coded apps. Standalone CLI.",
   "keywords": [
     "security",

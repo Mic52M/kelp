@@ -8,6 +8,44 @@ All notable changes to Kelp are documented here. The format follows
 
 _Nothing yet._
 
+## [0.2.2] — 2026-09-01
+
+Answers the "what is this thing actually scanning?" question. Previous
+versions ran a single deterministic scanner and printed nothing when
+that scanner had nothing to say — legitimately looked like a facade.
+This release makes every check the CLI runs (and every check it can't
+run and why) visible in the output.
+
+### Added
+- **`kelp scan` output — completely rewritten.** Every static check is
+  named, its rule count is shown, and n/a cases are surfaced with the
+  reason (no `supabase/config.toml`, no `supabase/functions/`, etc.).
+  On a clean run you see the checks that ran + a "what Kelp cannot
+  catch offline" block pointing at RLS live probing, edge-fn replay,
+  BOLA, and the agent-driven scan.
+- **`EDGE-003` static check** — parses `supabase/config.toml` for
+  `verify_jwt = false` per function. High-severity finding; repo-only,
+  no network needed.
+- **`RECON` — edge function discovery.** Lists Supabase edge functions
+  under `supabase/functions/`, classifies mutating vs non-mutating,
+  informational only (no finding filed — hosted app probes the live URLs).
+- **`kelp list-rules`** — introspect every rule the CLI runs, grouped
+  by static vs live-only. Answers "what does this cover?" without
+  needing to trigger a scan.
+- **`kelp config`** — show the effective config: whether an Anthropic
+  API key is set + where it came from (env vs `~/.config/kelp/config.json`)
+  and where to write the file.
+- **`--verbose` / `-V`** — per-check progress printed to stderr.
+- **`ANTHROPIC_API_KEY` detection** — CLI now recognizes the env var
+  and reads `~/.config/kelp/config.json` (XDG-aware). Not yet wired to
+  agent-driven scans — the hint in `scan` output says what's coming.
+
+### Changed
+- JSON output schema bumped to `version: 2` — adds a `checks` block
+  with per-check applicability + count, and `filesSkipped` breakdown.
+  Existing `findings[]` shape is stable.
+- Bundle size: 13 KB → 24 KB (still zero runtime deps).
+
 ## [0.2.1] — 2026-09-01
 
 ### Fixed

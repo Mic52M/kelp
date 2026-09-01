@@ -2,42 +2,55 @@
 
 // kelp — security scanner CLI for vibe-coded apps.
 //
-// This is the standalone entry point. It runs against a local directory using
-// the same detection engine (@kelp/core) as the hosted app and the GitHub
-// Action, so what you see locally is what CI would see.
+// Standalone entry point. Uses the same detection engine (@kelp/core) as
+// the hosted app and the GitHub Action, so what you see locally is what CI
+// would see.
 
 import { runScan } from "./commands/scan.js";
+import { listRules } from "./commands/list-rules.js";
+import { loadConfig, suggestedConfigPath } from "./config.js";
 
-const VERSION = "0.2.1";
+const VERSION = "0.2.2";
 
 function usage(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps
 
 USAGE
   kelp scan <path> [options]
+  kelp list-rules
+  kelp config
 
 COMMANDS
-  scan <path>    Scan a local directory for hardcoded secrets and other vulns
+  scan <path>        Scan a local directory for hardcoded secrets, edge-fn
+                     misconfiguration, and other supported static classes
+  list-rules         List every check the CLI runs, with rule ids
+  config             Show the effective config (env + ~/.config/kelp/config.json)
 
-OPTIONS
-  --json                     Emit findings as JSON on stdout (machine-readable)
-  --severity <critical|high|medium|low>
-                             Only include findings at or above this severity
-  --help, -h                 Show this help
+OPTIONS (scan)
+  --json                     Emit findings as JSON on stdout
+  --severity <sev>           Only include findings at or above <sev>
+                             (critical | high | medium | low)
+  --verbose, -V              Print per-check progress to stderr
+  --help, -h                 Show help
   --version, -v              Print version
 
 EXAMPLES
   kelp scan ./my-app
   kelp scan ./my-app --json > findings.json
   kelp scan . --severity high
+  kelp scan . --verbose
 
 EXIT CODES
-  0   Scan completed and found no gating findings
-  1   Scan completed and found at least one finding
-  2   Scan failed to run (invalid input, unreadable path, etc.)
+  0   Scan completed, no findings above the severity floor
+  1   Scan completed, at least one finding above the floor
+  2   Scan failed (bad path, unreadable target, invalid flag)
+
+CONFIG
+  ~/.config/kelp/config.json can carry an Anthropic API key for the
+  upcoming agent-driven scan. ANTHROPIC_API_KEY env var wins over the file.
 
 Docs: https://github.com/Mic52M/kelp/blob/master/docs/CLI.md
-Report issues: https://github.com/Mic52M/kelp/issues
+Issues: https://github.com/Mic52M/kelp/issues
 `);
 }
 
@@ -54,17 +67,34 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  if (cmd === "list-rules") {
+    listRules();
+    process.exit(0);
+  }
+
+  if (cmd === "config") {
+    const c = loadConfig();
+    process.stdout.write(`kelp v${VERSION} — effective config\n\n`);
+    process.stdout.write(`  anthropic api key   ${c.anthropicApiKey ? `set (${c.source})` : "not set"}\n`);
+    process.stdout.write(`  config file         ${c.filePath ?? "(none — write to " + suggestedConfigPath() + ")"}\n`);
+    process.stdout.write(
+      `\nExample: create ${suggestedConfigPath()}\n{\n  "anthropicApiKey": "sk-ant-..."\n}\n`,
+    );
+    process.exit(0);
+  }
+
   if (cmd === "scan") {
     const rest = argv.slice(1);
-    const targetPath = rest.find((a) => !a.startsWith("--"));
+    const targetPath = rest.find((a) => !a.startsWith("--") && !a.startsWith("-"));
     if (!targetPath) {
       process.stderr.write("kelp scan: missing <path>. Run `kelp --help` for usage.\n");
       process.exit(2);
     }
     const json = rest.includes("--json");
+    const verbose = rest.includes("--verbose") || rest.includes("-V");
     const sevIdx = rest.indexOf("--severity");
     const minSeverity = sevIdx >= 0 ? (rest[sevIdx + 1] ?? null) : null;
-    await runScan({ path: targetPath, json, minSeverity, version: VERSION });
+    await runScan({ path: targetPath, json, minSeverity, verbose, version: VERSION });
     return;
   }
 
