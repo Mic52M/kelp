@@ -1,43 +1,21 @@
-// The scan result renderer. Prints one coherent block: what target was
-// scanned, what checks ran (and which didn't apply and why), the findings,
-// any informational observations, and next-step hints. Ollama-style: dense
-// but scannable.
+// Scan result renderer — Kelp CLI's main visible output.
+//
+// Structure (top to bottom, always in the same order):
+//   1. banner (once per run)
+//   2. ━━ TARGET ━━ header + target + walk stats
+//   3. ━━ CHECKS ━━ what ran, with rule counts + n/a reasons
+//   4. ━━ FINDINGS ━━ colored severity chips + preview
+//   5. ━━ INFO ━━ non-findings observations (edge fn discovery)
+//   6. ━━ NEXT ━━ live-check hints + agent-mode hint
+//   7. done timing
 
 import type { DiscoveredEdgeFunction, Severity } from "@kelp/core";
 import type { Finding } from "../commands/scan.js";
 import type { KelpConfig } from "../config.js";
-
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const DIM = "\x1b[2m";
-const RED = "\x1b[31m";
-const YELLOW = "\x1b[33m";
-const BLUE = "\x1b[34m";
-const GRAY = "\x1b[90m";
-const GREEN = "\x1b[32m";
-
-const SEV_COLOR: Record<Severity, string> = {
-  critical: RED,
-  high: YELLOW,
-  medium: BLUE,
-  low: GRAY,
-};
-const SEV_LABEL: Record<Severity, string> = {
-  critical: "CRITICAL",
-  high: "HIGH    ",
-  medium: "MEDIUM  ",
-  low: "LOW     ",
-};
-
-const USE_COLOR = process.stdout.isTTY && !process.env.NO_COLOR;
-
-function col(s: string, code: string): string {
-  return USE_COLOR ? `${code}${s}${RESET}` : s;
-}
-
-function sectionHeader(label: string): string {
-  return col(`▶ ${label}`, BOLD);
-}
+import { c } from "../ui/style.js";
+import { ruleLabel } from "../ui/rule.js";
+import { severityChip, statusChip } from "../ui/chip.js";
+import { banner } from "../ui/banner.js";
 
 interface RenderInput {
   version: string;
@@ -56,6 +34,7 @@ interface RenderInput {
 }
 
 export function renderReport(input: RenderInput): void {
+  const out = process.stdout;
   const {
     version,
     target,
@@ -67,140 +46,141 @@ export function renderReport(input: RenderInput): void {
     durationMs,
     config,
   } = input;
-  const seconds = (durationMs / 1000).toFixed(1);
 
-  const out = process.stdout;
-  out.write("\n");
-  out.write(`${col("kelp", BOLD)} v${version}\n`);
-  out.write("\n");
+  out.write(banner(version));
 
-  // ── Target + walk stats ─────────────────────────────────────────────
-  out.write(`${sectionHeader("Target")}         ${target}\n`);
+  // ── TARGET ─────────────────────────────────────────────────────────
+  out.write(`${ruleLabel("TARGET")}\n\n`);
+  out.write(`  ${c.dim("path")}          ${target}\n`);
+  const filtered = pathsWalked - filesScanned;
   out.write(
-    `${sectionHeader("Files walked")}   ${filesScanned}  ${col(
-      `(from ${pathsWalked} total paths, ${pathsWalked - filesScanned} filtered out)`,
-      DIM,
+    `  ${c.dim("files")}         ${c.bold(String(filesScanned))} ${c.dim(
+      `(${pathsWalked} walked, ${filtered} filtered)`,
     )}\n`,
   );
+  out.write(`\n`);
 
-  // ── Checks that ran (or didn't, and why) ────────────────────────────
-  out.write("\n");
-  out.write(`${sectionHeader("Checks run")}\n`);
-  out.write(
-    `  ${checkBullet(checks.secretsApplicable)}  ${col("SEC-001", DIM)}   secret patterns + entropy fallback ${countSuffix(
-      findings.filter((f) => f.source === "secrets").length,
-    )}\n`,
+  // ── CHECKS ─────────────────────────────────────────────────────────
+  out.write(`${ruleLabel("CHECKS")}\n\n`);
+  writeCheckRow(
+    "SEC-001",
+    "hardcoded secrets — provider patterns + entropy",
+    checks.secretsApplicable,
+    checks.secretsApplicable ? findings.filter((f) => f.source === "secrets").length : null,
+    null,
   );
-  out.write(
-    `  ${checkBullet(checks.supabaseConfigApplicable)}  ${col("EDGE-003", DIM)}  verify_jwt=false in supabase/config.toml ${
-      checks.supabaseConfigApplicable
-        ? countSuffix(findings.filter((f) => f.source === "supabase-config").length)
-        : col("(n/a — no supabase/config.toml)", DIM)
-    }\n`,
+  writeCheckRow(
+    "EDGE-003",
+    "verify_jwt=false in supabase/config.toml",
+    checks.supabaseConfigApplicable,
+    checks.supabaseConfigApplicable
+      ? findings.filter((f) => f.source === "supabase-config").length
+      : null,
+    checks.supabaseConfigApplicable ? null : "no supabase/config.toml in target",
   );
-  out.write(
-    `  ${checkBullet(checks.edgeFnReconApplicable)}  ${col("RECON  ", DIM)}   edge function discovery ${
-      checks.edgeFnReconApplicable
-        ? col(`(${edgeFns.length} functions, ${edgeFns.filter((e) => e.mutating).length} mutating)`, DIM)
-        : col("(n/a — no supabase/functions/)", DIM)
-    }\n`,
+  const edgeMutating = edgeFns.filter((e) => e.mutating).length;
+  writeCheckRow(
+    "RECON",
+    "edge function discovery",
+    checks.edgeFnReconApplicable,
+    null,
+    checks.edgeFnReconApplicable
+      ? `${edgeFns.length} functions · ${edgeMutating} mutating`
+      : "no supabase/functions/ in target",
   );
+  out.write(`\n`);
 
-  // ── Findings ────────────────────────────────────────────────────────
-  out.write("\n");
+  // ── FINDINGS ───────────────────────────────────────────────────────
+  out.write(`${ruleLabel("FINDINGS")}\n\n`);
   if (findings.length === 0) {
-    out.write(`${sectionHeader("Findings")}\n`);
-    out.write(`  ${col("✓ clean", GREEN)} — no findings from the checks above.\n`);
+    out.write(`  ${statusChip("ok")} ${c.dim("no findings from the checks above.")}\n\n`);
   } else {
-    out.write(`${sectionHeader("Findings")}       ${col(`${findings.length}`, BOLD)}\n\n`);
     const maxLoc = Math.max(...findings.map((f) => `${f.path}:${f.line}`.length));
     for (const f of findings) {
-      const sev = col(SEV_LABEL[f.severity], SEV_COLOR[f.severity]);
+      const chip = severityChip(f.severity);
       const loc = `${f.path}:${f.line}`.padEnd(maxLoc);
-      const tail = f.preview ? "  " + col(`(${f.preview})`, DIM) : "";
-      out.write(`  ${sev}  ${col(loc, DIM)}  ${f.title}${tail}\n`);
+      const preview = f.preview ? " " + c.dim(`(${f.preview})`) : "";
+      out.write(`  ${chip}  ${c.dim(loc)}  ${f.title}${preview}\n`);
     }
-    out.write("\n");
-    out.write(`  ${summaryLine(findings)}\n`);
+    out.write(`\n  ${summaryLine(findings)}\n\n`);
   }
 
-  // ── Info block (edge-fn discovery, non-findings) ────────────────────
+  // ── INFO (edge fn discovery, non-findings) ─────────────────────────
   if (edgeFns.length > 0) {
-    const mutating = edgeFns.filter((e) => e.mutating);
-    const safe = edgeFns.filter((e) => !e.mutating);
-    out.write("\n");
-    out.write(`${sectionHeader("Info")}\n`);
-    out.write(
-      `  Discovered ${col(`${edgeFns.length}`, BOLD)} Supabase edge functions in supabase/functions/.\n`,
-    );
-    if (mutating.length > 0) {
-      out.write(
-        `  ${col(`${mutating.length}`, DIM)} are mutating and are ${col("skipped by design", DIM)} in any probe mode\n`,
-      );
-      out.write(`  ${col("(delete/create/charge names or bodies that write to the DB).", DIM)}\n`);
+    out.write(`${ruleLabel("INFO · edge functions discovered")}\n\n`);
+    for (const e of edgeFns) {
+      const badge = e.mutating
+        ? c.gray("● mutating · skipped")
+        : c.cyan("● non-mutating · probable via hosted app");
+      out.write(`  ${badge}   ${c.bold(e.name)}  ${c.dim(e.path)}\n`);
     }
-    if (safe.length > 0) {
-      out.write(
-        `  ${col(`${safe.length}`, DIM)} are non-mutating and would be probed against a live target — ` +
-          `${col("use the hosted app at kelp.build for that.", DIM)}\n`,
-      );
-    }
+    out.write(`\n`);
   }
 
-  // ── Next-step hints ─────────────────────────────────────────────────
-  out.write("\n");
-  out.write(`${sectionHeader("What Kelp cannot catch offline")}\n`);
+  // ── NEXT (live-check hints + agent) ────────────────────────────────
+  out.write(`${ruleLabel("NEXT · what the CLI does NOT catch offline")}\n\n`);
   out.write(
-    `  The CLI runs the ${col("static", BOLD)} checks — anything that only needs your\n` +
-      `  source tree. The deeper checks below need a live target and aren't\n` +
-      `  in the CLI yet:\n`,
+    `  ${c.dim("The CLI runs static checks — anything that only needs your source.")}\n`,
   );
-  out.write(`    ${col("RLS-002", DIM)}   live RLS probing over PostgREST (needs Supabase URL + anon key)\n`);
-  out.write(`    ${col("EDGE-003", DIM)}  edge-fn replay without JWT (needs the deployed URL)\n`);
-  out.write(`    ${col("BOLA-004", DIM)}  broken object-level authz (needs two test accounts + consent)\n`);
-  out.write(`    ${col("AGENT-∞ ", DIM)}  multi-specialist agent squad (needs ANTHROPIC_API_KEY)\n`);
-  out.write("\n");
+  out.write(
+    `  ${c.dim("These need a live target and aren't in the CLI yet:")}\n\n`,
+  );
+  out.write(
+    `    ${c.dim("RLS-002")}    ${c.dim("live RLS probing over PostgREST")}\n` +
+      `    ${c.dim("EDGE-003")}   ${c.dim("edge-fn replay without JWT (needs deployed URL)")}\n` +
+      `    ${c.dim("BOLA-004")}   ${c.dim("broken object-level authz (needs two test accounts + consent)")}\n` +
+      `    ${c.dim("AGENT-∞")}    ${c.dim("multi-specialist agent squad (needs ANTHROPIC_API_KEY)")}\n\n`,
+  );
+
   if (config.anthropicApiKey) {
     out.write(
-      `  ${col("✓", GREEN)} ${col(`ANTHROPIC_API_KEY detected (${config.source}).`, DIM)}\n` +
-        `  ${col("Agent-driven scans arrive in the next minor release — hosted app has it today.", DIM)}\n`,
+      `  ${statusChip("ok")} ${c.dim(`ANTHROPIC_API_KEY detected (${config.source}).`)}\n` +
+        `  ${c.dim("Agent-driven scans land in the next release; hosted app runs them today.")}\n`,
     );
   } else {
     out.write(
-      `  ${col("Set", DIM)} ${col("ANTHROPIC_API_KEY", BOLD)} ${col(
-        "in your env to enable the agent-driven scan (coming soon),",
-        DIM,
-      )}\n` +
-        `  ${col("or use the hosted app at ", DIM)}${col("https://kelp.build", BOLD)}${col(
-          " for the full pipeline today.",
-          DIM,
-        )}\n`,
+      `  ${c.dim("Set")} ${c.bold("ANTHROPIC_API_KEY")} ${c.dim("for the coming agent mode, or use")} ${c.bold(
+        "https://kelp.build",
+      )} ${c.dim("today.")}\n`,
     );
   }
+  out.write(`\n`);
 
-  out.write("\n");
-  out.write(`${col(`done in ${seconds}s`, DIM)}\n`);
+  // ── done ───────────────────────────────────────────────────────────
+  const seconds = (durationMs / 1000).toFixed(2);
+  out.write(`  ${c.dim(`done in ${seconds}s`)}\n`);
 }
 
-function checkBullet(applicable: boolean): string {
-  return applicable ? col("·", GREEN) : col("·", GRAY);
-}
-
-function countSuffix(n: number): string {
-  return col(`(${n} ${n === 1 ? "finding" : "findings"})`, DIM);
+function writeCheckRow(
+  id: string,
+  desc: string,
+  applicable: boolean,
+  findingCount: number | null,
+  reason: string | null,
+): void {
+  const out = process.stdout;
+  const chip = applicable
+    ? findingCount !== null && findingCount > 0
+      ? statusChip("warn")
+      : statusChip("ok")
+    : statusChip("skip");
+  const idBlock = c.dim(id.padEnd(9));
+  let tail = "";
+  if (applicable && findingCount !== null) {
+    tail = c.dim(`· ${findingCount} ${findingCount === 1 ? "finding" : "findings"}`);
+  } else if (reason) {
+    tail = c.dim(`· ${reason}`);
+  }
+  out.write(`  ${chip}  ${idBlock} ${desc}  ${tail}\n`);
 }
 
 function summaryLine(findings: Finding[]): string {
-  const counts = {
-    critical: findings.filter((f) => f.severity === "critical").length,
-    high: findings.filter((f) => f.severity === "high").length,
-    medium: findings.filter((f) => f.severity === "medium").length,
-    low: findings.filter((f) => f.severity === "low").length,
-  };
+  const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
+  for (const f of findings) counts[f.severity]++;
   const parts: string[] = [];
-  if (counts.critical > 0) parts.push(col(`${counts.critical} critical`, RED));
-  if (counts.high > 0) parts.push(col(`${counts.high} high`, YELLOW));
-  if (counts.medium > 0) parts.push(col(`${counts.medium} medium`, BLUE));
-  if (counts.low > 0) parts.push(col(`${counts.low} low`, GRAY));
-  return `Summary  ${parts.join("  ·  ")}`;
+  if (counts.critical > 0) parts.push(c.red(`${counts.critical} critical`));
+  if (counts.high > 0) parts.push(c.yellow(`${counts.high} high`));
+  if (counts.medium > 0) parts.push(c.blue(`${counts.medium} medium`));
+  if (counts.low > 0) parts.push(c.gray(`${counts.low} low`));
+  return `${c.dim("summary")}  ${parts.join(c.dim("  ·  "))}`;
 }

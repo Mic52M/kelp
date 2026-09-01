@@ -10,7 +10,7 @@ import { runScan } from "./commands/scan.js";
 import { listRules } from "./commands/list-rules.js";
 import { loadConfig, suggestedConfigPath } from "./config.js";
 
-const VERSION = "0.2.2";
+const VERSION = "0.3.0-alpha.1";
 
 function usage(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps
