@@ -1,5 +1,12 @@
 # @kelp-security/cli — changelog
 
+## 0.5.1 — 2026-09-02
+
+- Publish hygiene: the tarball for 0.5.0 accidentally shipped every
+  `.d.ts` + `.js.map` from the type-check (75 files, 200 KB). 0.5.1 is
+  the same code, packed to just the esbuild bundle (4 files, 76 KB).
+  Functionally identical — upgrade only if you care about disk.
+
 ## 0.5.0 — 2026-09-02
 
 **Discoverability**
