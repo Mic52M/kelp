@@ -8,71 +8,81 @@
 
 import { runScan } from "./commands/scan.js";
 import { listRules } from "./commands/list-rules.js";
+import { explain } from "./commands/explain.js";
 import { loadConfig, suggestedConfigPath } from "./config.js";
 import { isDepth, type Depth } from "./agent/depth.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 
-function usage(): void {
+function usageTop(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps
 
 USAGE
-  kelp scan <path> [options]
-  kelp list-rules
-  kelp config
+  kelp scan <path> [options]     scan a local directory
+  kelp explain                   the manual — read this first
+  kelp list-rules                every check the CLI runs, with rule ids
+  kelp config                    show effective config
+  kelp --version                 print version
 
-COMMANDS
-  scan <path>        Scan a local directory for hardcoded secrets, edge-fn
-                     misconfiguration, and other supported static classes
-  list-rules         List every check the CLI runs, with rule ids
-  config             Show the effective config (env + ~/.config/kelp/config.json)
+Run \`kelp scan --help\` for scan-specific options.
+Run \`kelp explain\` for the full guide.
 
-OPTIONS (scan)
+Docs: https://kelp.build/docs · Source: https://github.com/Mic52M/kelp
+`);
+}
+
+function usageScan(): void {
+  process.stdout.write(`kelp scan <path> — scan a directory
+
+OPTIONS
   --agent                    Run the multi-agent scan on top of the static
                              checks. Requires ANTHROPIC_API_KEY.
-  --depth <preset>           Preset for --agent that sets model + cost cap
-                             + iterations at once:
-                               quick     (haiku, \$0.15,  10 iter)
-                               standard  (sonnet, \$1.00, 24 iter) [default]
-                               thorough  (sonnet, \$3.00, 40 iter)
-                               paranoid  (opus,  \$10.00, 80 iter)
+  --depth <preset>           quick | standard (default) | thorough | paranoid
+                             — sets model + cost cap + iterations at once.
   --focus <classes>          Comma-separated: secrets,auth,rls,edge-fn,redirects
-                             Narrows the agent to those classes only
-  --observations             Surface the agent's non-verified suspicions
-                             (things it noticed but couldn't cite evidence for)
-  --dry-run                  Show what would be scanned + estimated worst-case
-                             cost, without calling Anthropic
-  --model <id>               Override the depth preset's model
-  --max-cost-cents <n>       Override the depth preset's cost cap
-  --max-iterations <n>       Override the depth preset's iteration cap
-  --static-only              Skip the agent, static checks only (default when
-                             --agent is not passed)
-  --no-static                Skip the static checks, agent only
-  --json                     Emit findings as JSON on stdout
-  --severity <sev>           Only include findings at or above <sev>
+                             Narrows the agent to those classes only.
+  --observations             Surface the agent's soft hints as a separate
+                             section (not mixed with verified findings).
+  --dry-run                  Show what would be scanned + estimated cost
+                             without calling Anthropic.
+  --report <file>            Write a full report to <file>. Extension picks
+                             the format: .html (styled) or .md (Markdown).
+  --model <id>               Override the depth preset's model.
+  --max-cost-cents <n>       Override the depth preset's cost cap.
+  --max-iterations <n>       Override the depth preset's iteration cap.
+  --static-only              Skip the agent (default when --agent absent).
+  --no-static                Skip the static checks, agent only.
+  --json                     Emit findings as JSON on stdout.
+  --severity <sev>           Only include findings at or above <sev>.
                              (critical | high | medium | low)
-  --verbose, -V              Print per-check progress to stderr
-  --help, -h                 Show help
-  --version, -v              Print version
+  --verbose, -V              Print per-check progress to stderr.
+  --help, -h                 Show this help.
 
 EXAMPLES
   kelp scan ./my-app
-  kelp scan ./my-app --json > findings.json
-  kelp scan . --severity high
-  kelp scan . --verbose
+  kelp scan . --agent --depth thorough --report audit.html
+  kelp scan . --agent --focus auth,rls
+  kelp scan . --json > findings.json
 
 EXIT CODES
-  0   Scan completed, no findings above the severity floor
-  1   Scan completed, at least one finding above the floor
-  2   Scan failed (bad path, unreadable target, invalid flag)
+  0   No findings above the severity floor
+  1   At least one finding above the floor
+  2   Scan failed (bad path, invalid flag, missing key)
 
-CONFIG
-  ~/.config/kelp/config.json can carry an Anthropic API key for the
-  upcoming agent-driven scan. ANTHROPIC_API_KEY env var wins over the file.
-
-Docs: https://github.com/Mic52M/kelp/blob/master/docs/CLI.md
-Issues: https://github.com/Mic52M/kelp/issues
+See \`kelp explain\` for the full manual (depth trade-offs, safety model, etc.).
 `);
+}
+
+function maybeFirstRunHint(): void {
+  // If neither ANTHROPIC_API_KEY nor a config file is present, one-line hint
+  // pointing at the manual. Printed to stderr so it never contaminates
+  // --json output on stdout.
+  const c = loadConfig();
+  if (!c.anthropicApiKey) {
+    process.stderr.write(
+      `  (tip: no ANTHROPIC_API_KEY set — agent mode disabled. Run \`kelp explain\` for the full guide.)\n\n`,
+    );
+  }
 }
 
 async function main(): Promise<void> {
@@ -80,11 +90,16 @@ async function main(): Promise<void> {
   const cmd = argv[0];
 
   if (!cmd || cmd === "--help" || cmd === "-h" || cmd === "help") {
-    usage();
+    usageTop();
     process.exit(0);
   }
   if (cmd === "--version" || cmd === "-v" || cmd === "version") {
     process.stdout.write(`kelp v${VERSION}\n`);
+    process.exit(0);
+  }
+
+  if (cmd === "explain") {
+    explain();
     process.exit(0);
   }
 
@@ -106,9 +121,13 @@ async function main(): Promise<void> {
 
   if (cmd === "scan") {
     const rest = argv.slice(1);
+    if (rest.includes("--help") || rest.includes("-h")) {
+      usageScan();
+      process.exit(0);
+    }
     const targetPath = rest.find((a) => !a.startsWith("--") && !a.startsWith("-"));
     if (!targetPath) {
-      process.stderr.write("kelp scan: missing <path>. Run `kelp --help` for usage.\n");
+      process.stderr.write("kelp scan: missing <path>. Run `kelp scan --help` for usage.\n");
       process.exit(2);
     }
     const json = rest.includes("--json");
@@ -127,6 +146,12 @@ async function main(): Promise<void> {
     const maxCostCents = costIdx >= 0 ? Number(rest[costIdx + 1]) : undefined;
     const iterIdx = rest.indexOf("--max-iterations");
     const maxIterations = iterIdx >= 0 ? Number(rest[iterIdx + 1]) : undefined;
+    const reportIdx = rest.indexOf("--report");
+    const reportPath = reportIdx >= 0 ? rest[reportIdx + 1] ?? null : null;
+    if (reportIdx >= 0 && !reportPath) {
+      process.stderr.write("kelp scan: --report needs a filename (e.g. --report audit.html)\n");
+      process.exit(2);
+    }
 
     const depthIdx = rest.indexOf("--depth");
     const depthRaw = depthIdx >= 0 ? rest[depthIdx + 1] ?? null : null;
@@ -148,6 +173,10 @@ async function main(): Promise<void> {
             .filter(Boolean)
         : null;
 
+    // First-run hint printed once when the caller hasn't asked for --agent
+    // but also hasn't got a key on file — helps them find the guide.
+    if (!agent && !json) maybeFirstRunHint();
+
     await runScan({
       path: targetPath,
       json,
@@ -164,6 +193,7 @@ async function main(): Promise<void> {
       focus,
       observations,
       dryRun,
+      reportPath,
     });
     return;
   }

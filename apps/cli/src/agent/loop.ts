@@ -32,6 +32,7 @@ export interface RunAgentResult {
   cost: Cost;
   iterations: number;
   aborted?: string;
+  coverage: { filesRead: number; grepsRun: number; listsRun: number };
 }
 
 export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
@@ -46,6 +47,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   });
   const ctx: ExecuteContext = { root: input.root, files: input.files };
   const findings: AgentFinding[] = [];
+  const coverage = { filesRead: 0, grepsRun: 0, listsRun: 0 };
 
   const currentCost = (): Cost => {
     const u = driver.getUsage();
@@ -78,6 +80,9 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     for (const call of step.toolCalls) {
       input.onEvent({ kind: "tool_call", name: call.name, input: call.input });
       const res = await executeTool(ctx, call.name, call.input);
+      if (call.name === "read_file" && !res.isError) coverage.filesRead++;
+      else if (call.name === "grep" && !res.isError) coverage.grepsRun++;
+      else if (call.name === "list_files" && !res.isError) coverage.listsRun++;
 
       if (call.name === "report_finding" && res.data) {
         const finding = res.data as AgentFinding;
@@ -129,7 +134,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         reason: `cost cap reached — ${cost.usdCents}¢ > ${maxCost}¢ max. Raise with --max-cost-cents.`,
         cost,
       });
-      return { findings, cost, iterations, aborted: "cost-cap" };
+      return { findings, cost, iterations, aborted: "cost-cap", coverage };
     }
     if (iterations >= maxIter) {
       input.onEvent({
@@ -137,7 +142,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         reason: `iteration cap reached — ${iterations} >= ${maxIter}. Raise with --max-iterations.`,
         cost,
       });
-      return { findings, cost, iterations, aborted: "iteration-cap" };
+      return { findings, cost, iterations, aborted: "iteration-cap", coverage };
     }
 
     step = await driver.provideResults(results);
@@ -146,7 +151,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
 
   const finalCost = currentCost();
   input.onEvent({ kind: "done", findings, cost: finalCost, iterations });
-  return { findings, cost: finalCost, iterations };
+  return { findings, cost: finalCost, iterations, coverage };
 }
 
 /** Never leak the raw tool output into the transcript. Emit bytes/counts

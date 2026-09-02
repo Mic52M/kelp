@@ -36,6 +36,7 @@ export interface AgentScanResult {
   durationMs: number;
   aborted: string | null;
   model: string;
+  coverage: { filesRead: number; grepsRun: number; listsRun: number };
 }
 
 export async function runAgentScan(opts: AgentScanOpts): Promise<AgentScanResult> {
@@ -88,6 +89,7 @@ export async function runAgentScan(opts: AgentScanOpts): Promise<AgentScanResult
       durationMs: 0,
       aborted: "dry-run",
       model: preset.model,
+      coverage: { filesRead: 0, grepsRun: 0, listsRun: 0 },
     };
   }
 
@@ -128,5 +130,6 @@ export async function runAgentScan(opts: AgentScanOpts): Promise<AgentScanResult
     durationMs: Date.now() - startedAt,
     aborted: res.aborted ?? null,
     model: preset.model,
+    coverage: res.coverage,
   };
 }

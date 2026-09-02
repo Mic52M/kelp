@@ -16,6 +16,7 @@ interface Input {
   durationMs: number;
   aborted: string | null;
   model: string;
+  coverage?: { filesRead: number; grepsRun: number; listsRun: number };
 }
 
 export function renderAgentSection(input: Input): void {
@@ -56,6 +57,10 @@ export function renderAgentSection(input: Input): void {
       `  ${c.dim("cost")}           ${c.bold(usd)}\n` +
       `  ${c.dim("duration")}       ${c.bold(seconds + "s")}\n`,
   );
+  if (input.coverage) {
+    const cov = `${input.coverage.filesRead} files read · ${input.coverage.grepsRun} greps · ${input.coverage.listsRun} listings`;
+    out.write(`  ${c.dim("coverage")}       ${c.bold(cov)}\n`);
+  }
   if (input.aborted) {
     out.write(`  ${c.dim("aborted")}        ${c.yellow(input.aborted)}\n`);
   }

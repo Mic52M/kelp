@@ -1,5 +1,32 @@
 # @kelp-security/cli — changelog
 
+## 0.5.0 — 2026-09-02
+
+**Discoverability**
+
+- `kelp explain` — the full manual on one screen. Depth trade-offs, focus
+  classes, the safety model (evidence-gating, redacted transcript, no
+  telemetry), cost expectations, examples. This is now the "read this
+  first" page.
+- `kelp scan --help` — subcommand-scoped help with only the scan flags,
+  instead of the everything-help dump.
+- First-run hint — if no `ANTHROPIC_API_KEY` is set, a single line points
+  the user at `kelp explain` before the scan output.
+
+**Reports**
+
+- `--report <file>` writes a full report to disk. Extension picks the
+  format: `.html` is styled (Fraunces/Inter Tight/JetBrains Mono, light +
+  dark), opens with double-click; `.md` is a paste-into-a-PR-description
+  Markdown. Both include per-finding remediation hints, agent run summary,
+  and observations (when `--observations` was passed).
+
+**Agent transparency**
+
+- Coverage report — the agent run summary now shows how many files the
+  agent actually read, how many greps it ran, how many directories it
+  listed. Makes it obvious when a scan finished suspiciously fast.
+
 ## 0.4.0 — 2026-09-01
 
 **Critical fix**

@@ -40,6 +40,7 @@ interface ScanOptions {
   focus?: readonly string[] | null;
   observations?: boolean;
   dryRun?: boolean;
+  reportPath?: string | null;
 }
 
 const SEV_ORDER: Record<Severity, number> = {
@@ -244,6 +245,7 @@ export async function runScan(opts: ScanOptions): Promise<void> {
     durationMs: number;
     aborted: string | null;
     model: string;
+    coverage: { filesRead: number; grepsRun: number; listsRun: number };
   } | null = null;
 
   if (opts.runAgentAfter) {
@@ -272,6 +274,7 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       durationMs: r.durationMs,
       aborted: r.aborted,
       model: r.model,
+      coverage: r.coverage,
     };
     agentObservations = r.observations;
     agentFindings = r.findings.map<Finding>((f) => ({
@@ -315,7 +318,35 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       durationMs: agentInfo.durationMs,
       aborted: agentInfo.aborted,
       model: agentInfo.model,
+      coverage: agentInfo.coverage,
     });
+  }
+
+  if (opts.reportPath) {
+    const { writeReport } = await import("../report/writer.js");
+    await writeReport(opts.reportPath, {
+      version: opts.version,
+      target: opts.path,
+      scannedAt: new Date(),
+      filesScanned: files.length,
+      durationMs: durationMs + (agentInfo?.durationMs ?? 0),
+      findings: merged,
+      agent: agentInfo
+        ? {
+            ran: true,
+            model: agentInfo.model,
+            iterations: agentInfo.iterations,
+            costUsdCents: agentInfo.costUsdCents,
+            durationMs: agentInfo.durationMs,
+            aborted: agentInfo.aborted,
+            observations: agentObservations,
+            coverage: agentInfo.coverage,
+          }
+        : null,
+    });
+    if (!opts.json) {
+      process.stdout.write(`\n  ${"·"} report written to ${opts.reportPath}\n\n`);
+    }
   }
 
   process.exit(merged.length === 0 ? 0 : 1);
