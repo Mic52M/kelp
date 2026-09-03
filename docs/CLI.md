@@ -101,6 +101,11 @@ The CLI's walker skips these directories up front without stat'ing them:
 Dotfiles and dotdirs are skipped **except `.env*`** — those are exactly the
 files the scanner needs to inspect.
 
+`.gitignore` files (root and nested) are honored on by default: anything
+ignored — including an ignored `.env*` — is never walked. A deeper
+`.gitignore` can re-include (`!pattern`) what a shallower one ignored,
+matching git semantics.
+
 Files larger than **1 MB** are skipped so a stray CSV or lockfile doesn't
 stall the scan.
 

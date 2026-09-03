@@ -32,11 +32,13 @@
     "prepack": "rm -rf dist && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --minify --external:@anthropic-ai/sdk",
     "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --minify --external:@anthropic-ai/sdk",
     "build:types": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
     "dev": "node --import tsx src/index.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.65.0"
+    "@anthropic-ai/sdk": "^0.65.0",
+    "ignore": "^7.0.8"
   },
   "devDependencies": {
     "@kelp/core": "*",
