@@ -6,6 +6,17 @@ All notable changes to Kelp are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **"Open fix PR" lives on the finding panel** — click a button to open
+  a real draft PR against the connected repo instead of pasting a fix prompt.
+  Closes #47. The PR is always **draft** (never auto-merged, never ready-for-
+  review), on a dedicated `kelp/fix-<fingerprint>` branch forked from the default
+  branch, with a `Kelp-Finding: <fingerprint>` trailer in both the PR body and the
+  commit message so the push-webhook closure path (commit 74013cc) can match a
+  merged PR back to the finding. The button is gated by `isPatchable`
+  (`@kelp/core`); when the gate fails the button stays visible with the reason as
+  its tooltip instead of being hidden. Idempotent: a second click returns the
+  existing PR URL. Event: `fix_pr.opened` (was `finding.pr_opened`).
 ### Changed
 - **CLI walker honors `.gitignore`** — `kelp scan <path>` now reads
   `.gitignore` files in the target tree (root and nested, via the

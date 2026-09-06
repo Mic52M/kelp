@@ -280,6 +280,9 @@ export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubCon
           body: input.body,
           head: input.branch,
           base,
+          // Always draft. A user must explicitly mark the PR ready for
+          // review and merge. See issue #47.
+          draft: true,
         }),
       );
       return { url: pr.html_url, alreadyExisted: false };
@@ -379,6 +382,9 @@ export function createGitHubConnector(cfg: GitHubConnectorConfig): RealGitHubCon
           body: input.body,
           head: input.branch,
           base,
+          // Always draft, for the same reason as openFixPr (#47). Never
+          // auto-merge, never ready-for-review without a human.
+          draft: true,
         }),
       );
       return { status: "opened", url: pr.html_url };

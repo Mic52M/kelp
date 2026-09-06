@@ -20,9 +20,14 @@ const secret: SecretFinding = {
 test("secret PR maps rule to the right env var and never leaks the value", () => {
   const pr = generateSecretPr(secret);
   assert.equal(pr.envVar, "SUPABASE_SERVICE_ROLE_KEY");
-  assert.match(pr.branch, /^kelp\/remove-secret-supabase-abcd1234$/);
+  // Per #47: branch is kelp/fix-<fingerprint> (the closure path on
+  // PR merge keys off this exact format).
+  assert.equal(pr.branch, "kelp/fix-abcd1234ef567890");
   assert.match(pr.body, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(pr.body, /Rotate this key now/); // critical → rotation guidance
+  // Kelp-Finding trailer must appear in the body (the closure path
+  // on PR merge keys off it).
+  assert.match(pr.body, /^Kelp-Finding: abcd1234ef567890$/m);
   assert.ok(!pr.body.includes("eyJhbGci"), "must not contain a real secret");
 });
 

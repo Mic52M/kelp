@@ -7,6 +7,7 @@ import { classMeta, ClassIcon } from "./findings/vuln-class";
 import { EvidencePanel } from "./findings/EvidencePanel";
 import { FindingChat } from "./findings/FindingChat";
 import { MarkdownLite } from "./findings/MarkdownLite";
+import { isPatchable } from "@kelp/core";
 import { track } from "./PostHogProvider";
 import { Button, buttonClasses } from "./Button";
 import { SeverityBadge } from "./SeverityBadge";
@@ -47,7 +48,22 @@ export function FindingCard({
   const [fixPr, fixPrAction, fixPrPending] = useActionState<FixPrState, FormData>(openFixPr, {});
 
   const prUrl = finding.prUrl ?? fixPr.url;
-  const canOpenPr = finding.autofixable && finding.status === "open" && !prUrl;
+  // Per #47: gate the "Open fix PR" button on isPatchable (in @kelp/core)
+  // so the UI and the worker agree on the decision. When the gate fails,
+  // `prDisabledReason` carries the human-readable reason — we render it as
+  // a tooltip on the disabled button instead of just hiding the button.
+  const patchability = isPatchable({
+    vuln_class: finding.vulnClass,
+    confidence: finding.autofixable ? "high" : "medium",
+  });
+  const prDisabledReason = patchability.ok
+    ? finding.status === "open" && !prUrl
+      ? null
+      : finding.status !== "open"
+        ? "Kelp already opened a fix PR for this finding, or the finding is no longer open."
+        : "A fix PR is already open for this finding."
+    : patchability.reason;
+  const canOpenPr = prDisabledReason === null;
   const cls = classMeta(finding.vulnClass);
   const status = STATUS[finding.status];
   const sevColor = SEV_COLOR[finding.severity];
@@ -188,13 +204,24 @@ export function FindingCard({
                   Queued · Kelp review
                 </span>
               )}
-              {canOpenPr && (
+              {canOpenPr ? (
                 <form action={fixPrAction}>
                   <input type="hidden" name="findingId" value={finding.id} />
                   <Button type="submit" disabled={fixPrPending}>
                     {fixPrPending ? "Opening PR…" : "Open fix PR"}
                   </Button>
                 </form>
+              ) : (
+                // #47: render a disabled button with the gate reason as a
+                // tooltip. Hidden is misleading — users need to know WHY.
+                <Button
+                  type="button"
+                  disabled
+                  title={prDisabledReason ?? undefined}
+                  aria-label={prDisabledReason ?? undefined}
+                >
+                  Open fix PR
+                </Button>
               )}
               {prUrl && (
                 <a
