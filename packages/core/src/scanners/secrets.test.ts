@@ -147,3 +147,90 @@ test("reports a stable fingerprint across identical scans", () => {
   const b = detectSecrets([file])[0]!;
   assert.equal(a.fingerprint, b.fingerprint);
 });
+
+test("detects a modern Anthropic API key (sk-ant-api03-...) as critical", () => {
+  // Obviously fake but syntactically valid: 90 base64url chars after the
+  // "sk-ant-api03-" prefix, drawn from the same character class as a real
+  // key so the regex matches but the value is not anyone's real key.
+  const fakeKey =
+    "sk-ant-api03-" +
+    "Xk92Lm4Qz7Rt1Yw8Nb3Vc6Pd0" +
+    "Xk92Lm4Qz7Rt1Yw8Nb3Vc6Pd0" +
+    "Xk92Lm4Qz7Rt1Yw8Nb3Vc6Pd0" +
+    "Xk92Lm4Qz7Rt1Yw8";
+  const findings = detectSecrets([
+    { path: "server/llm.ts", content: `const k = "${fakeKey}";` },
+  ]);
+  const f = findings.find((x) => x.ruleId === "anthropic-key");
+  assert.ok(f, "anthropic key must be detected");
+  assert.equal(f!.provider, "Anthropic");
+  assert.equal(f!.severity, "critical");
+  assert.ok(!f!.preview.includes("AAAA"), "value must be masked");
+});
+
+test("detects a legacy Anthropic API key (sk-ant-...) as critical", () => {
+  // Pre-2024 format. No "api\d+" infix.
+  const fakeKey =
+    "sk-ant-" +
+    "AbCdEfGh1234_-" +
+    "AbCdEfGh1234_-" +
+    "AbCdEfGh1234_-" +
+    "AbCdEfGh1234_-" +
+    "AbCdEfGh1234_-" +
+    "AbCdEfGh1234_-" +
+    "AbCdEfGh";
+  const findings = detectSecrets([
+    { path: "server/llm.ts", content: `const k = "${fakeKey}";` },
+  ]);
+  const f = findings.find((x) => x.ruleId === "anthropic-key");
+  assert.ok(f, "legacy anthropic key must be detected");
+  assert.equal(f!.severity, "critical");
+});
+
+test("Anthropic key is not mislabelled as OpenAI", () => {
+  // Regression for #48: the OpenAI rule's broader sk-(?:proj-)?... regex
+  // would otherwise catch Anthropic keys and mislabel them. The fix is a
+  // (?!ant-) negative lookahead on the OpenAI rule. This test pins that.
+  const fakeKey =
+    "sk-ant-api03-" +
+    "Q7p2Xz9kLm4Rt1Yw8Nb3Vc6Pd0" +
+    "Q7p2Xz9kLm4Rt1Yw8Nb3Vc6Pd0" +
+    "Q7p2Xz9kLm4Rt1Yw8Nb3Vc6Pd0" +
+    "Q7p2Xz9kLm4Rt1Yw8";
+  const findings = detectSecrets([
+    { path: "server/llm.ts", content: `const k = "${fakeKey}";` },
+  ]);
+  assert.equal(
+    findings.filter((x) => x.ruleId === "openai-key").length,
+    0,
+    "Anthropic key must not be flagged as OpenAI",
+  );
+  assert.equal(
+    findings.filter((x) => x.ruleId === "anthropic-key").length,
+    1,
+    "Anthropic key must be flagged exactly once, as Anthropic",
+  );
+});
+
+test("does not flag a docstring that mentions sk-ant- without a real key", () => {
+  // Negative case: the prefix is referenced in prose with no real suffix.
+  // The 80-char minimum and the trailing \b boundary keep this from matching.
+  const findings = detectSecrets([
+    {
+      path: "docs/llm-setup.md",
+      content:
+        "// Set ANTHROPIC_API_KEY in your .env. Keys look like sk-ant-api03-..." +
+        " replace the placeholder with the value from console.anthropic.com.",
+    },
+  ]);
+  assert.equal(findings.length, 0, "docstring referencing sk-ant- must not be flagged");
+});
+
+test("does not flag a too-short sk-ant- string (below the 80-char suffix minimum)", () => {
+  // Negative case: prefix is there but the suffix is way too short to be a
+  // real key.
+  const findings = detectSecrets([
+    { path: "src/example.ts", content: 'const example = "sk-ant-api03-abc123";' },
+  ]);
+  assert.equal(findings.length, 0, "under-length sk-ant- prefix must not be flagged");
+});

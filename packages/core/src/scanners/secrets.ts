@@ -80,10 +80,21 @@ const RULES: Rule[] = [
     severity: "high",
   },
   {
+    // Anthropic API keys. Modern: `sk-ant-api03-...`; legacy: `sk-ant-...`.
+    // ~100 chars total, base64url-shaped suffix. The OpenAI rule below
+    // excludes the "ant-" infix via a negative lookahead so the same key
+    // is not double-flagged.
+    id: "anthropic-key",
+    provider: "Anthropic",
+    title: "Anthropic API key",
+    regex: /(?<![\w-])sk-ant-(?:api\d+-)?[A-Za-z0-9_-]{80,}\b/g,
+    severity: "critical",
+  },
+  {
     id: "openai-key",
     provider: "OpenAI",
     title: "OpenAI API key",
-    regex: /\bsk-(?:proj-)?[0-9A-Za-z_-]{20,}\b/g,
+    regex: /\bsk-(?!ant-)(?:proj-)?[0-9A-Za-z_-]{20,}\b/g,
     severity: "high",
   },
   {

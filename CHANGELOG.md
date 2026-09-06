@@ -6,6 +6,13 @@ All notable changes to Kelp are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Anthropic API key detection** — `sk-ant-api03-...` (modern) and
+  `sk-ant-...` (legacy) keys are now flagged as `critical` in
+  `packages/core/src/scanners/secrets.ts`. Closes #48. The OpenAI
+  rule excludes the `ant-` infix via a negative lookahead so the same
+  key is not double-reported.
+
 ### Changed
 - **CLI walker honors `.gitignore`** — `kelp scan <path>` now reads
   `.gitignore` files in the target tree (root and nested, via the
