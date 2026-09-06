@@ -25,7 +25,9 @@ export async function openFixPr(_prev: FixPrState, formData: FormData): Promise<
   if (!result.ok) return { error: result.error };
 
   const ident = identityForUser(auth.user ?? null);
-  if (ident) track(ident.distinctId, "finding.pr_opened", { findingId: id });
+  if (ident) // Per #47: event name is fix_pr.opened (the closure variant lives on the
+  // webhook path; this is the user-initiated click).
+  track(ident.distinctId, "fix_pr.opened", { findingId: id });
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/findings");
   return { url: result.url };

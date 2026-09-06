@@ -15,6 +15,14 @@ All notable changes to Kelp are documented here. The format follows
   keys are flagged as `critical` via a dedicated `openai-project-key` rule.
   Closes #49. The generic `openai-key` rule now excludes both `ant-` and
   `proj-` via a combined negative lookahead so a key never fires twice.
+- **"Open fix PR" hardening** (@MayurK-cmd, #56). The existing per-finding
+  fix PR button now always opens a **draft** PR (never auto-merged), on a
+  dedicated `kelp/fix-<fingerprint>` branch, with a `Kelp-Finding: <fingerprint>`
+  trailer in both the PR body and the commit message so the push-webhook
+  closure path can match a merged PR back to the finding. The button is
+  gated by a shared `isPatchable` helper (`@kelp/core`); when the gate fails
+  the button stays visible with the reason as its tooltip. Idempotent: a
+  second click returns the existing PR URL. Event renamed to `fix_pr.opened`.
 
 ### Changed
 - **CLI walker honors `.gitignore`** — `kelp scan <path>` now reads
