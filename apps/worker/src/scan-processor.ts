@@ -10,9 +10,7 @@ import {
   MONTHLY_CAMPAIGN_CAP_CENTS,
   PlanLimitError,
   assertActivePentestAvailable,
-  discoverEdgeFunctions,
-  parseRepoSchema,
-  detectSupabaseConfig,
+  defaultBackendRegistry,
   reviewCampaign,
   runFollowup,
   triageCampaign,
@@ -285,7 +283,11 @@ async function executeActivePentestScan(scan: {
   let edgeFunctions: DiscoveredEdgeFunction[] = [];
   let sourceFiles: Awaited<ReturnType<ReturnType<typeof createGitHubConnector>["listSourceFiles"]>> = [];
   let repoSchema: TableIntel[] = [];
-  let repoConfig: ReturnType<typeof detectSupabaseConfig> = null;
+  // repoConfig is the Supabase-shaped (url, ref, anonKey|null) we surface to
+  // downstream code. The BackendAdapter interface doesn't expose this directly;
+  // only the Supabase adapter fills it today, and we type it as a structural
+  // shape that any Supabase-compatible adapter can satisfy. See #45.
+  let repoConfig: { url: string; ref: string; anonKey: string | null } | null = null;
   if (project.repoFullName && project.installationId != null) {
     try {
       const github = createGitHubConnector({
@@ -294,9 +296,24 @@ async function executeActivePentestScan(scan: {
         installationId: project.installationId,
       });
       const allFiles = await github.listSourceFiles(project.repoFullName);
-      edgeFunctions = discoverEdgeFunctions(allFiles);
-      repoSchema = parseRepoSchema(allFiles);
-      repoConfig = detectSupabaseConfig(allFiles);
+      // Pick the backend adapter once; all repo-recon ops go through it. The
+      // default registry only ships Supabase today, but the worker no longer
+      // imports the Supabase-specific helpers directly. Future adapters (
+      // Firebase in #38) plug in here without touching this file. We call
+      // detectFromRepo() ourselves to get the BackendMeta (project URL, ref)
+      // for the log line below, since the adapter interface doesn't expose a
+      // dedicated meta accessor.
+      const backend = defaultBackendRegistry.detect(allFiles);
+      const backendMeta = backend?.detectFromRepo(allFiles) ?? null;
+      edgeFunctions = backend ? backend.discoverFunctions(allFiles) : [];
+      repoSchema = backend ? backend.parseSchema(allFiles) : [];
+      // repoConfig preserves the worker-local shape (url, ref, anonKey) so the
+      // downstream code keeps working unchanged. Only Supabase fills it today;
+      // a non-Supabase backend yields null and the worker gracefully no-ops the
+      // DB-side recon. See #45 for the expansion order.
+      repoConfig = backend && backend.type === "supabase"
+        ? (backendMeta as { ref: string; url: string; anonKey: string | null } | null)
+        : null;
       // Hand the agents only the security-relevant backend source — not the
       // hundreds of UI/doc files that would bury the attack surface and burn
       // their step budget before they reach config.toml / edge functions.
