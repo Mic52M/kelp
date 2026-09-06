@@ -6,6 +6,9 @@ All notable changes to Kelp are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **BackendAdapter interface (north-star for #40)** — every backend detection now goes through `BackendAdapter` in `@kelp/core/adapters`. The interface defines four mandatory operations: `detectFromRepo`, `parseSchema`, `discoverFunctions`, `analyzeAuth`. A strict registry rejects adapters missing any method or with the wrong arity. The Supabase adapter is the first implementation; the worker dispatches via `defaultBackendRegistry`. Sets the expansion order: Tier 1 (Supabase done, Firebase in #38), Tier 2 (Convex/Neon/PocketBase on demand), Tier 3 (Xano/Bubble/Airtable — never). No behavior change to existing scan paths.
+
 ### Changed
 - **CLI walker honors `.gitignore`** — `kelp scan <path>` now reads
   `.gitignore` files in the target tree (root and nested, via the
