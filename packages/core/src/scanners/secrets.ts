@@ -87,10 +87,22 @@ const RULES: Rule[] = [
     severity: "critical",
   },
   {
+    // OpenAI project-scoped keys (sk-proj-...). Newer format scoped to a
+    // specific org/project. Project keys have org-wide blast radius, so
+    // this is a distinct rule at critical severity. The generic openai-key
+    // rule below excludes both 'ant-' (Anthropic) and 'proj-' via negative
+    // lookaheads so the same key never fires twice.
+    id: "openai-project-key",
+    provider: "OpenAI",
+    title: "OpenAI project-scoped API key",
+    regex: /(?<![\w-])sk-proj-[A-Za-z0-9_-]{40,}\b/g,
+    severity: "critical",
+  },
+  {
     id: "openai-key",
     provider: "OpenAI",
     title: "OpenAI API key",
-    regex: /\bsk-(?!ant-)(?:proj-)?[0-9A-Za-z_-]{20,}\b/g,
+    regex: /\bsk-(?!ant-|proj-)[0-9A-Za-z_-]{20,}\b/g,
     severity: "high",
   },
   {

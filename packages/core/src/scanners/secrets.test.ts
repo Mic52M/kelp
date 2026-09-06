@@ -48,14 +48,20 @@ test("ignores Anthropic key prefixes used in prose", () => {
 });
 
 test("keeps both OpenAI key formats attributed to OpenAI", () => {
-  const classic = "sk-" + "Ab3d".repeat(8);
-  const project = "sk-proj-" + "Ef5g".repeat(12);
-  for (const key of [classic, project]) {
+  // Classic sk-... falls under the generic openai-key rule; the project
+  // sk-proj-... shape has its own openai-project-key rule (added in #55)
+  // that carries a higher severity. Both must resolve to provider "OpenAI"
+  // and never fire twice.
+  const cases: Array<{ key: string; ruleId: string }> = [
+    { key: "sk-" + "Ab3d".repeat(8), ruleId: "openai-key" },
+    { key: "sk-proj-" + "Ef5g".repeat(12), ruleId: "openai-project-key" },
+  ];
+  for (const { key, ruleId } of cases) {
     const findings = detectSecrets([
       { path: "server/openai.ts", content: `const key = "${key}"` },
     ]);
     assert.equal(findings.length, 1);
-    assert.equal(findings[0]!.ruleId, "openai-key");
+    assert.equal(findings[0]!.ruleId, ruleId);
     assert.equal(findings[0]!.provider, "OpenAI");
   }
 });
@@ -213,4 +219,78 @@ test("does not flag an sk-ant- prefix under the length floor", () => {
     0,
     "under-length body must not match",
   );
+});
+
+test("detects an OpenAI project-scoped key (sk-proj-...) as critical", () => {
+  // 60 base64url chars after "sk-proj-", well above the 40-char minimum.
+  const fakeKey =
+    "sk-proj-" +
+    "Xk92Lm4Qz7Rt1Yw8Nb3Vc6Pd0" +
+    "Xk92Lm4Qz7Rt1Yw8Nb3Vc6Pd0" +
+    "Xk92Lm4";
+  const findings = detectSecrets([
+    { path: "server/openai.ts", content: `const k = "${fakeKey}";` },
+  ]);
+  const f = findings.find((x) => x.ruleId === "openai-project-key");
+  assert.ok(f, "openai project key must be detected");
+  assert.equal(f!.provider, "OpenAI");
+  assert.equal(f!.severity, "critical");
+  assert.ok(!f!.preview.includes("AAAA"), "value must be masked");
+});
+
+test("An OpenAI project key is not double-reported as the generic openai-key", () => {
+  // Regression for #49: the generic openai-key rule's broader sk-... regex
+  // would otherwise also catch project keys and double-report them. The fix
+  // is a (?!proj-) negative lookahead on the openai-key rule.
+  const fakeKey =
+    "sk-proj-" +
+    "Q7p2Xz9kLm4Rt1Yw8Nb3Vc6Pd0" +
+    "Q7p2Xz9kLm4Rt1Yw8Nb3Vc6Pd0" +
+    "Q7p2Xz9";
+  const findings = detectSecrets([
+    { path: "server/openai.ts", content: `const k = "${fakeKey}";` },
+  ]);
+  assert.equal(
+    findings.filter((x) => x.ruleId === "openai-key").length,
+    0,
+    "Project key must not be flagged as the generic openai-key",
+  );
+  assert.equal(
+    findings.filter((x) => x.ruleId === "openai-project-key").length,
+    1,
+    "Project key must be flagged exactly once, as openai-project-key",
+  );
+});
+
+test("classic OpenAI sk-... key still hits the openai-key rule (not project)", () => {
+  // Regression: tightening the openai-key regex with (?!proj-) must not
+  // exclude the classic sk-... format.
+  const fakeKey = "sk-" + "AbCdEfGh1234_-AbCdEfGh1234_-AbCdEfGh"; // 36 chars after sk-
+  const findings = detectSecrets([
+    { path: "server/openai.ts", content: `const k = "${fakeKey}";` },
+  ]);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.ruleId, "openai-key");
+  assert.equal(findings[0]!.severity, "high");
+});
+
+test("does not flag a too-short sk-proj- string (below the 40-char suffix minimum)", () => {
+  // Negative case: prefix is there but the suffix is way too short.
+  const findings = detectSecrets([
+    { path: "src/example.ts", content: 'const example = "sk-proj-abc123";' },
+  ]);
+  assert.equal(findings.length, 0, "under-length sk-proj- prefix must not be flagged");
+});
+
+test("does not flag a docstring that mentions sk-proj- without a real key", () => {
+  // Negative case: the prefix is referenced in prose with no real suffix.
+  const findings = detectSecrets([
+    {
+      path: "docs/openai-setup.md",
+      content:
+        "// Set OPENAI_API_KEY in your .env. Project keys look like sk-proj-..." +
+        " get the value from platform.openai.com/api-keys.",
+    },
+  ]);
+  assert.equal(findings.length, 0, "docstring referencing sk-proj- must not be flagged");
 });

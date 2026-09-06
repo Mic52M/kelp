@@ -7,9 +7,14 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- **Anthropic API key detection** — recognize current `sk-ant-api03-…` and
-  legacy `sk-ant-…` credentials as critical findings with Anthropic
-  attribution, without overlapping the existing OpenAI key rule.
+- **Anthropic API key detection** (@be-student, #53). Recognizes current
+  `sk-ant-api03-…` and legacy `sk-ant-…` credentials as critical findings
+  with Anthropic attribution. Closes #48. Fixes the pre-existing bug where
+  `sk-ant-…` values were mis-classified as `openai-key`.
+- **OpenAI project-scoped key detection** (@MayurK-cmd, #55). `sk-proj-…`
+  keys are flagged as `critical` via a dedicated `openai-project-key` rule.
+  Closes #49. The generic `openai-key` rule now excludes both `ant-` and
+  `proj-` via a combined negative lookahead so a key never fires twice.
 
 ### Changed
 - **CLI walker honors `.gitignore`** — `kelp scan <path>` now reads
