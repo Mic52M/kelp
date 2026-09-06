@@ -7,6 +7,16 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **BackendAdapter interface** (@MayurK-cmd, #57). Every backend detection
+  now goes through `BackendAdapter` in `@kelp/core/adapters`. The interface
+  defines four mandatory operations: `detectFromRepo`, `parseSchema`,
+  `discoverFunctions`, `analyzeAuth`. A strict registry rejects adapters
+  missing any method or with the wrong arity. The Supabase adapter is the
+  first implementation; the worker dispatches via `defaultBackendRegistry`
+  and a shared `reconRepoViaRegistry()` helper. Sets the expansion order:
+  Tier 1 (Supabase done, Firebase in #38), Tier 2 (Convex/Neon/PocketBase
+  on demand), Tier 3 (Xano/Bubble/Airtable, never). No behavior change to
+  existing scan paths.
 - **Anthropic API key detection** (@be-student, #53). Recognizes current
   `sk-ant-api03-…` and legacy `sk-ant-…` credentials as critical findings
   with Anthropic attribution. Closes #48. Fixes the pre-existing bug where

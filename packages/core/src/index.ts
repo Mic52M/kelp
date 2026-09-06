@@ -32,3 +32,5 @@ export * from "./agent/specialists/ssrf.js";
 export * from "./agent/specialists/exposure.js";
 export * from "./agent/specialists/rls-deep.js";
 export * from "./agent/specialists/weak-crypto.js";
+
+export * from "./adapters/index.js";
