@@ -1,5 +1,12 @@
 # @kelp-security/cli — changelog
 
+## 0.5.2 — 2026-09-06
+
+- **Honor `.gitignore` when walking the target** (thanks @dasepmoch, #52,
+  closes #50). Root and nested `.gitignore` files are now respected, with
+  `!pattern` negation. On by default. Same result you'd get from `git ls-files`
+  as the input to the scanner.
+
 ## 0.5.1 — 2026-09-02
 
 - Publish hygiene: the tarball for 0.5.0 accidentally shipped every
