@@ -6,6 +6,13 @@ All notable changes to Kelp are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **OpenAI project-scoped key detection** — `sk-proj-...` keys
+  are now flagged as `critical` via a dedicated `openai-project-key`
+  rule. Closes #49. The generic `openai-key` rule excludes the
+  `proj-` infix via a `(?!proj-)` negative lookahead so the same
+  key is not double-reported.
+
 ### Changed
 - **CLI walker honors `.gitignore`** — `kelp scan <path>` now reads
   `.gitignore` files in the target tree (root and nested, via the
