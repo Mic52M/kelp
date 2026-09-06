@@ -6,7 +6,11 @@ All notable changes to Kelp are documented here. The format follows
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+- **CLI walker honors `.gitignore`** — `kelp scan <path>` now reads
+  `.gitignore` files in the target tree (root and nested, via the
+  `ignore` library) and skips ignored paths up front. `.env*` files are
+  still walked unless they are ignored. On by default, no flag needed.
 
 ## [0.3.0] — 2026-09-01
 
