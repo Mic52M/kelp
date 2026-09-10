@@ -185,3 +185,32 @@ test("reports a stable fingerprint across identical scans", () => {
   const b = detectSecrets([file])[0]!;
   assert.equal(a.fingerprint, b.fingerprint);
 });
+
+// The two tests below pin the exact regression from #48 (Anthropic key
+// mis-classified as OpenAI) and the minimum-length negative case. Cherry
+// picked from #54 with the author's permission after #53 landed first
+// covering the same feature. Kept separate from the existing coverage
+// because these express the intent as an explicit contract rather than as
+// a side effect of a broader test.
+test("does not mis-label an Anthropic key as OpenAI", () => {
+  const key = "sk-ant-api03-" + "Ab3_".repeat(22);
+  const findings = detectSecrets([
+    { path: "server/claude.ts", content: `const k = "${key}"` },
+  ]);
+  const anthropic = findings.filter((f) => f.ruleId === "anthropic-key");
+  const openai = findings.filter((f) => f.ruleId === "openai-key");
+  assert.equal(anthropic.length, 1, "exactly one anthropic finding");
+  assert.equal(openai.length, 0, "must not also fire as openai-key");
+});
+
+test("does not flag an sk-ant- prefix under the length floor", () => {
+  const tooShort = "sk-ant-api03-" + "Ab3".repeat(5);
+  const findings = detectSecrets([
+    { path: "server/claude.ts", content: `const k = "${tooShort}"` },
+  ]);
+  assert.equal(
+    findings.filter((f) => f.ruleId === "anthropic-key").length,
+    0,
+    "under-length body must not match",
+  );
+});
