@@ -12,7 +12,7 @@ import { explain } from "./commands/explain.js";
 import { loadConfig, suggestedConfigPath } from "./config.js";
 import { isDepth, type Depth } from "./agent/depth.js";
 
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 
 function usageTop(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps

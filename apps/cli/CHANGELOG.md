@@ -1,5 +1,23 @@
 # @kelp-security/cli — changelog
 
+## 0.6.0 — 2026-09-10
+
+Two new secret rules, both community contributions. Bumping the minor
+because these introduce new finding types that downstream tooling (JSON
+output consumers, PR gates) may want to react to differently.
+
+- **Anthropic API keys** are now detected as critical findings (@be-student,
+  #53, closes #48). Covers current `sk-ant-api03-…` and legacy `sk-ant-…`
+  shapes with an 80-char body floor. Also fixes an existing bug where these
+  values were being mis-classified as `openai-key`.
+- **OpenAI project-scoped keys** get their own dedicated rule at critical
+  severity (@MayurK-cmd, #55, closes #49). Classic `sk-…` still fires as
+  `openai-key` (high), the new `sk-proj-…` shape fires as `openai-project-key`
+  (critical), and the two never fire twice on the same value.
+- **Fix**: `kelp --version` was reporting `0.5.0` on 0.5.1 and 0.5.2 too
+  because the constant in `src/index.ts` was not bumped alongside
+  `package.json`. Now sourced correctly for 0.6.0.
+
 ## 0.5.2 — 2026-09-06
 
 - **Honor `.gitignore` when walking the target** (thanks @dasepmoch, #52,
