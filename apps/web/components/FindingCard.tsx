@@ -7,7 +7,7 @@ import { classMeta, ClassIcon } from "./findings/vuln-class";
 import { EvidencePanel } from "./findings/EvidencePanel";
 import { FindingChat } from "./findings/FindingChat";
 import { MarkdownLite } from "./findings/MarkdownLite";
-import { isPatchable } from "@kelp/core";
+import { isPatchable } from "@kelp/core/patchability";
 import { track } from "./PostHogProvider";
 import { Button, buttonClasses } from "./Button";
 import { SeverityBadge } from "./SeverityBadge";

@@ -105,42 +105,7 @@ export function generateSecretPr(finding: SecretFinding): SecretPr {
   };
 }
 
-/**
- * Result of {@link isPatchable}. The UI uses `reason` to render a tooltip
- * when the "Open fix PR" button is disabled (issue #47).
- */
-export type Patchability =
-  | { ok: true }
-  | { ok: false; reason: string };
-
-/**
- * Single source of truth for whether Kelp can open an automatic fix PR for
- * a finding. Today only high-confidence exposed-secret findings are
- * patchable; other vuln classes need either a DB-side change (RLS, GRANTs)
- * or a human-authored fix that we don't want to automate.
- *
- * The decision lives here, not in the worker, so the UI can call it too and
- * gate the button with the same reasoning the backend enforces.
- */
-export function isPatchable(finding: {
-  vuln_class: string;
-  confidence?: "high" | "medium";
-}): Patchability {
-  if (finding.vuln_class !== "secret") {
-    return {
-      ok: false,
-      reason:
-        "Only exposed-secret findings have an automatic code-side fix. " +
-        "Use the copy prompt for other classes.",
-    };
-  }
-  if (finding.confidence !== "high") {
-    return {
-      ok: false,
-      reason:
-        "Kelp isn't confident enough to auto-fix this one. " +
-        "Use the copy prompt and review manually.",
-    };
-  }
-  return { ok: true };
-}
+// isPatchable + Patchability live in ./patchability.ts so client bundles
+// can import them without pulling the Node-only helpers below. Re-exported
+// here so existing server call sites keep working.
+export { isPatchable, type Patchability } from "./patchability.js";

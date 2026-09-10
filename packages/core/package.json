@@ -6,7 +6,11 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./patchability": {
+      "types": "./dist/remediation/patchability.d.ts",
+      "default": "./dist/remediation/patchability.js"
+    }
   },
   "scripts": {
     "build": "tsc -b"
