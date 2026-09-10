@@ -2,7 +2,7 @@
   "name": "kelp",
   "private": true,
   "version": "0.0.0",
-  "description": "Kelp — self-serve security agent for vibe-coded apps (Supabase/Lovable/Bolt/Replit).",
+  "description": "Kelp is an open-source security scanner for vibe-coded apps. Finds hardcoded secrets, permissive Supabase RLS, unauthenticated edge functions, and more. CLI, GitHub Action, hosted app.",
   "workspaces": [
     "apps/*",
     "packages/*"
