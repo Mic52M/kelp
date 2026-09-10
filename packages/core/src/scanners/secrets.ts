@@ -80,10 +80,17 @@ const RULES: Rule[] = [
     severity: "high",
   },
   {
+    id: "anthropic-key",
+    provider: "Anthropic",
+    title: "Anthropic API key",
+    regex: /(?<![\w-])sk-ant-(?:api\d+-)?[A-Za-z0-9_-]{80,}\b/g,
+    severity: "critical",
+  },
+  {
     id: "openai-key",
     provider: "OpenAI",
     title: "OpenAI API key",
-    regex: /\bsk-(?:proj-)?[0-9A-Za-z_-]{20,}\b/g,
+    regex: /\bsk-(?!ant-)(?:proj-)?[0-9A-Za-z_-]{20,}\b/g,
     severity: "high",
   },
   {

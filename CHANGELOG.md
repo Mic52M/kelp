@@ -6,6 +6,11 @@ All notable changes to Kelp are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Anthropic API key detection** — recognize current `sk-ant-api03-…` and
+  legacy `sk-ant-…` credentials as critical findings with Anthropic
+  attribution, without overlapping the existing OpenAI key rule.
+
 ### Changed
 - **CLI walker honors `.gitignore`** — `kelp scan <path>` now reads
   `.gitignore` files in the target tree (root and nested, via the

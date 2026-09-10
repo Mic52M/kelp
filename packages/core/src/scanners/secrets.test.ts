@@ -22,6 +22,44 @@ test("finds a Stripe live secret key and marks it critical", () => {
   assert.ok(!f!.preview.includes("51H8xQh2"), "value must be masked");
 });
 
+test("attributes Anthropic API keys once at critical severity", () => {
+  const current = "sk-ant-api03-" + "Ab3_".repeat(22);
+  const legacy = "sk-ant-" + "Cd4_".repeat(20);
+  for (const key of [current, legacy]) {
+    const findings = detectSecrets([
+      { path: "server/claude.ts", content: `const key = "${key}"` },
+    ]);
+    assert.equal(findings.length, 1, "provider rules must not overlap");
+    assert.equal(findings[0]!.ruleId, "anthropic-key");
+    assert.equal(findings[0]!.provider, "Anthropic");
+    assert.equal(findings[0]!.severity, "critical");
+    assert.ok(!findings[0]!.preview.includes(key), "value must be masked");
+  }
+});
+
+test("ignores Anthropic key prefixes used in prose", () => {
+  const findings = detectSecrets([
+    {
+      path: "docs/auth.ts",
+      content: "Anthropic keys use sk-ant-api03- followed by a long generated value.",
+    },
+  ]);
+  assert.equal(findings.length, 0);
+});
+
+test("keeps both OpenAI key formats attributed to OpenAI", () => {
+  const classic = "sk-" + "Ab3d".repeat(8);
+  const project = "sk-proj-" + "Ef5g".repeat(12);
+  for (const key of [classic, project]) {
+    const findings = detectSecrets([
+      { path: "server/openai.ts", content: `const key = "${key}"` },
+    ]);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0]!.ruleId, "openai-key");
+    assert.equal(findings[0]!.provider, "OpenAI");
+  }
+});
+
 test("bumps severity when secret is in a client-side file", () => {
   const server = detectSecrets([
     { path: "server/x.ts", content: 'k="sk_test_abcdEFGH1234ijklMNOP"' },
