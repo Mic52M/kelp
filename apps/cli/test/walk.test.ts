@@ -125,6 +125,7 @@ describe("walk .gitignore support", () => {
   });
 
   it("keeps the static skip-list (node_modules)", async () => {
+    await write(".gitignore", "!node_modules/\n");
     await write("node_modules/pkg/index.js");
     await write("src/app.js");
 

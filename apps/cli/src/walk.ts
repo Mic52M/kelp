@@ -77,9 +77,9 @@ async function walkInto(
 
     const full = path.join(dir, e.name);
     const isDir = e.isDirectory();
+    if (isDir && SKIP_DIRS.has(e.name)) continue;
     if (isIgnored(scopes, full, isDir)) continue;
     if (isDir) {
-      if (SKIP_DIRS.has(e.name)) continue;
       await walkInto(full, out, scopes, useGitignore);
     } else if (e.isFile()) {
       out.push(full);
