@@ -31,6 +31,7 @@ type ClientEvent =
   | "finding.marked_false_positive"
   | "finding.marked_resolved"
   | "finding.fix_prompt_copied"
+  | "finding.chat_turn"
   | "fix_pr.opened"
   | "plan.upgrade_started"
   | "plan.upgrade_completed";
