@@ -1,6 +1,10 @@
 // Color + text-styling primitives. TTY-aware and NO_COLOR-respectful — piping
 // to a file or a CI log strips every ANSI escape automatically. Keeps
 // downstream tooling (grep, jq, humans reading log files) sane.
+//
+// colorEnabled() below is the single place that decides whether escapes are
+// emitted; every helper here gates on it and no other module reads NO_COLOR
+// or stdout.isTTY for styling.
 
 const RESET = "\x1b[0m";
 
@@ -30,8 +34,40 @@ export const UNDERLINE = "\x1b[4m";
 // Kelp signal (approx. #b8f2c9 — the same green used everywhere else).
 export const KELP = "\x1b[38;2;184;242;201m";
 
+export interface ColorInputs {
+  /** Explicit `--no-color` on the command line. */
+  noColorFlag?: boolean;
+  /** Typically `process.env`; injected so tests never touch the real one. */
+  env?: { NO_COLOR?: string | undefined };
+  /** Typically `process.stdout.isTTY === true`. */
+  isTty?: boolean;
+}
+
+// Precedence: --no-color > NO_COLOR > TTY. The NO_COLOR spec treats the env
+// var as a user-level default ("should override $NO_COLOR" is the per-instance
+// command-line wording), so the flag is checked first. Either opt-out wins;
+// color only ever turns on for an interactive stdout. NO_COLOR="" counts as
+// unset, per the spec.
+export function colorEnabled(inputs: ColorInputs = {}): boolean {
+  const {
+    noColorFlag = false,
+    env = process.env,
+    isTty = process.stdout.isTTY === true,
+  } = inputs;
+  if (noColorFlag) return false;
+  if (env.NO_COLOR) return false;
+  return isTty;
+}
+
+// Resolved from argv by index.ts before any output is rendered.
+let noColorFlag = false;
+
+export function setNoColorFlag(on: boolean): void {
+  noColorFlag = on;
+}
+
 function ttyOn(): boolean {
-  return process.stdout.isTTY === true && !process.env.NO_COLOR;
+  return colorEnabled({ noColorFlag });
 }
 
 export function paint(s: string, ...codes: string[]): string {

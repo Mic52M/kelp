@@ -40,6 +40,14 @@ All notable changes to Kelp are documented here. The format follows
   `ignore` library) and skips ignored paths up front. `.env*` files are
   still walked unless they are ignored. On by default, no flag needed.
 
+### Fixed
+- **CLI color now honors `NO_COLOR` everywhere and the new `--no-color`
+  flag** (#68). The decision lives in one `colorEnabled()` in
+  `apps/cli/src/ui/style.ts` — `--no-color` > `NO_COLOR` (any non-empty
+  value) > non-TTY stdout — and every ANSI helper gates on it, so
+  escapes no longer leak into CI logs or piped output. `--json` output
+  stays ANSI-free.
+
 ## [0.3.0] — 2026-09-01
 
 Modernizes the CLI surface + ships the first working multi-agent scan.
