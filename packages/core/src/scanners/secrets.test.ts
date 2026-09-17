@@ -22,6 +22,30 @@ test("finds a Stripe live secret key and marks it critical", () => {
   assert.ok(!f!.preview.includes("51H8xQh2"), "value must be masked");
 });
 
+test("finds a Stripe webhook signing secret with a masked preview", () => {
+  const key = "whsec_" + "Ab3d".repeat(8);
+  const findings = detectSecrets([
+    { path: "server/webhooks.ts", content: `const k = "${key}"` },
+  ]);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.ruleId, "stripe-webhook-secret");
+  assert.equal(findings[0]!.provider, "Stripe");
+  assert.equal(findings[0]!.severity, "high");
+  assert.equal(findings[0]!.preview, "whse…Ab3d");
+});
+
+test("does not flag short or prose-only whsec_ mentions", () => {
+  const findings = detectSecrets([
+    { path: "src/config.ts", content: 'const webhookSecret = "whsec_placeholder";' },
+    {
+      path: "docs/stripe-webhooks.md",
+      content:
+        "// Stripe signs webhook payloads with a whsec_... secret from the dashboard.",
+    },
+  ]);
+  assert.equal(findings.length, 0, "short placeholder and docstring mention must not match");
+});
+
 test("attributes Anthropic API keys once at critical severity", () => {
   const current = "sk-ant-api03-" + "Ab3_".repeat(22);
   const legacy = "sk-ant-" + "Cd4_".repeat(20);
