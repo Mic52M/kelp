@@ -59,6 +59,13 @@ const RULES: Rule[] = [
     severity: "high",
   },
   {
+    id: "stripe-webhook-secret",
+    provider: "Stripe",
+    title: "Stripe webhook signing secret",
+    regex: /\bwhsec_[A-Za-z0-9]{32,}\b/g,
+    severity: "high",
+  },
+  {
     id: "aws-access-key-id",
     provider: "AWS",
     title: "AWS access key ID",

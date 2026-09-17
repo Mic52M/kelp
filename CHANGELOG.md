@@ -7,6 +7,11 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Stripe webhook signing secret detection** (#66). Recognizes `whsec_…`
+  webhook signing secrets as `high` findings with Stripe attribution. A
+  leaked `whsec_` lets anyone forge signed webhook payloads and bypass the
+  "is this really from Stripe" check; the client-side severity bump lifts it
+  to `critical` if the value ends up in a shipped bundle.
 - **BackendAdapter interface** (@MayurK-cmd, #57). Every backend detection
   now goes through `BackendAdapter` in `@kelp/core/adapters`. The interface
   defines four mandatory operations: `detectFromRepo`, `parseSchema`,
