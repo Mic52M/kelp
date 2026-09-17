@@ -225,11 +225,17 @@ export async function POST(
           );
         }
 
-        // TODO analytics(#34): finding.chat_turn — noun.verb_past + { reason, tokens } once catalog extends
+        // Analytics (#34, #70): track user and assistant turns in the chat funnel
         try {
-          track(orgId, "finding.viewed", {
+          track(orgId, "finding.chat_turn", {
             findingId: finding.id,
-            chatTurns: conv.turnCount + 2,
+            role: "user",
+            tokens: inputTokens,
+          });
+          track(orgId, "finding.chat_turn", {
+            findingId: finding.id,
+            role: "assistant",
+            tokens: outputTokens,
           });
         } catch { /* analytics failure never blocks the stream */ }
 
