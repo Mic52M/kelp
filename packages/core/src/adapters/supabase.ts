@@ -12,7 +12,7 @@
 //     rewriting them. (Moving the code would force moving the tests too.)
 //   - Future adapters (Firebase in #38) get a clear pattern to copy.
 
-import type { BackendAdapter, BackendMeta, AuthModel } from "./backend-adapter.js";
+import type { BackendAdapter, SupabaseBackendMeta, AuthModel } from "./backend-adapter.js";
 import type { SourceFile } from "../scanners/secrets.js";
 import type { TableIntel } from "../agent/autonomous.js";
 import type { DiscoveredEdgeFunction } from "../agent/edge-functions.js";
@@ -32,7 +32,7 @@ export const SUPABASE_TYPE = "supabase" as const;
 export const supabaseAdapter: BackendAdapter = {
   type: SUPABASE_TYPE,
 
-  detectFromRepo(files: readonly SourceFile[]): BackendMeta | null {
+  detectFromRepo(files: readonly SourceFile[]): SupabaseBackendMeta | null {
     const cfg = detectSupabaseConfig(files);
     if (!cfg) return null;
     return {
@@ -41,8 +41,12 @@ export const supabaseAdapter: BackendAdapter = {
       config: {
         url: cfg.url,
         ref: cfg.ref,
-        // anonKey is public by design; we still surface it so the dashboard
-        // can confirm "yes, we found your project ref".
+        // The worker needs the actual key value for recon (resolveAnonKey
+        // fallback + persist-as-detected). `hasAnonKey` is a UI hint only —
+        // never a substitute for the value. Previously this dropped the
+        // value and the worker read `repoConfig.anonKey` as undefined
+        // (review #45 blocking #1).
+        anonKey: cfg.anonKey,
         hasAnonKey: cfg.anonKey !== null,
       },
     };

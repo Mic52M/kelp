@@ -138,3 +138,15 @@ test("get() returns a registered adapter by type, undefined otherwise", () => {
   assert.equal(r.get("a"), a);
   assert.equal(r.get("nope"), undefined);
 });
+
+test("register() accepts a 2-arity method (files, [ctx]) for forward-compat", () => {
+  const r = new BackendAdapterRegistry();
+  const twoArg = makeValidAdapter("two-arg");
+  // Widen detectFromRepo to (files, ctx) — arity 2 must be accepted.
+  (twoArg as unknown as Record<string, unknown>).detectFromRepo = (
+    _files: readonly SourceFile[],
+    _ctx: unknown,
+  ) => null;
+  assert.doesNotThrow(() => r.register(twoArg));
+  assert.deepEqual(r.list(), ["two-arg"]);
+});
