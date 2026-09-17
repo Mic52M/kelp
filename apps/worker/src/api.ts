@@ -7,7 +7,8 @@ import {
   analyzeBackend,
   assertCanCreateProject,
   assertCanTriggerRescan,
-  detectSupabaseConfig,
+  isSupabaseBackendMeta,
+  supabaseAdapter,
 } from "@kelp/core";
 import Anthropic from "@anthropic-ai/sdk";
 import { createAnthropicDriver } from "./agent/anthropic-driver.js";
@@ -196,8 +197,12 @@ export async function detectAndStoreSupabaseBackend(input: {
     installationId: input.installationId,
   });
   const files = await github.listSourceFiles(input.repoFullName);
-  const cfg = detectSupabaseConfig(files);
-  if (!cfg) return { ref: null, anonKeyDetected: false };
+  // Route through the Supabase adapter (not detectSupabaseConfig directly)
+  // so the connect flow and the scan path read the same seam. The
+  // discriminated union narrows `config` to { url, ref, anonKey, ... }.
+  const meta = supabaseAdapter.detectFromRepo(files);
+  if (!meta || !isSupabaseBackendMeta(meta)) return { ref: null, anonKeyDetected: false };
+  const cfg = meta.config;
 
   if (cfg.ref) {
     await getPool().query(
