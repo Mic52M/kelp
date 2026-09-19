@@ -11,6 +11,7 @@ import { listRules } from "./commands/list-rules.js";
 import { explain } from "./commands/explain.js";
 import { loadConfig, suggestedConfigPath } from "./config.js";
 import { isDepth, type Depth } from "./agent/depth.js";
+import { setNoColorFlag } from "./ui/style.js";
 
 const VERSION = "0.6.0";
 
@@ -56,6 +57,8 @@ OPTIONS
   --severity <sev>           Only include findings at or above <sev>.
                              (critical | high | medium | low)
   --verbose, -V              Print per-check progress to stderr.
+  --no-color                 Disable ANSI colors (also honors NO_COLOR
+                             and non-TTY stdout).
   --help, -h                 Show this help.
 
 EXAMPLES
@@ -87,6 +90,8 @@ function maybeFirstRunHint(): void {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  // Global flag: anywhere on the line, honored before any output renders.
+  if (argv.includes("--no-color")) setNoColorFlag(true);
   const cmd = argv[0];
 
   if (!cmd || cmd === "--help" || cmd === "-h" || cmd === "help") {

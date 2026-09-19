@@ -26,6 +26,7 @@ OPTIONS
   --json                     Emit findings as JSON on stdout
   --severity <sev>           Only show findings at or above <sev>
                              (critical|high|medium|low)
+  --no-color                 Disable ANSI colors (NO_COLOR also works)
   --help, -h                 Show help
   --version, -v              Print version
 ```

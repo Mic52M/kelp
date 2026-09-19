@@ -40,3 +40,6 @@ jobs:
 
       - name: Unit tests (worker)
         run: npm test --workspace=@kelp/worker --if-present
+
+      - name: Unit tests (cli)
+        run: npm test --workspace=@kelp-security/cli --if-present

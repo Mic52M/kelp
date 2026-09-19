@@ -4,11 +4,7 @@
 // scan run. Every rule listed here is exercised by `kelp scan` in the
 // static phase.
 
-const RESET = "\x1b[0m";
-const BOLD = "\x1b[1m";
-const DIM = "\x1b[2m";
-const USE_COLOR = process.stdout.isTTY && !process.env.NO_COLOR;
-const col = (s: string, code: string) => (USE_COLOR ? `${code}${s}${RESET}` : s);
+import { paint, BOLD, DIM } from "../ui/style.js";
 
 interface RuleGroup {
   id: string;
@@ -98,31 +94,31 @@ const LIVE_ONLY: RuleGroup[] = [
 export function listRules(): void {
   const out = process.stdout;
   out.write("\n");
-  out.write(`${col("kelp", BOLD)} — checks available on the CLI\n\n`);
+  out.write(`${paint("kelp", BOLD)} — checks available on the CLI\n\n`);
 
-  out.write(`${col("▶ Static (run today by `kelp scan`)", BOLD)}\n\n`);
+  out.write(`${paint("▶ Static (run today by `kelp scan`)", BOLD)}\n\n`);
   for (const g of STATIC) {
-    out.write(`  ${col(g.id, DIM)}  ${col(g.title, BOLD)}\n`);
+    out.write(`  ${paint(g.id, DIM)}  ${paint(g.title, BOLD)}\n`);
     for (const r of g.rules) out.write(`    · ${r}\n`);
     out.write("\n");
   }
 
-  out.write(`${col("▶ Agent-driven (kelp scan --agent, needs ANTHROPIC_API_KEY)", BOLD)}\n\n`);
+  out.write(`${paint("▶ Agent-driven (kelp scan --agent, needs ANTHROPIC_API_KEY)", BOLD)}\n\n`);
   for (const g of AGENT) {
-    out.write(`  ${col(g.id, DIM)}  ${col(g.title, BOLD)}\n`);
+    out.write(`  ${paint(g.id, DIM)}  ${paint(g.title, BOLD)}\n`);
     for (const r of g.rules) out.write(`    · ${r}\n`);
     out.write("\n");
   }
 
-  out.write(`${col("▶ Live (hosted app only)", BOLD)}\n\n`);
+  out.write(`${paint("▶ Live (hosted app only)", BOLD)}\n\n`);
   for (const g of LIVE_ONLY) {
-    out.write(`  ${col(g.id, DIM)}  ${col(g.title, BOLD)}\n`);
+    out.write(`  ${paint(g.id, DIM)}  ${paint(g.title, BOLD)}\n`);
     for (const r of g.rules) out.write(`    · ${r}\n`);
     out.write("\n");
   }
 
   out.write(
-    col(
+    paint(
       "Full coverage in docs: https://github.com/Mic52M/kelp/blob/master/docs/CLI.md\n",
       DIM,
     ),

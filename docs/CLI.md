@@ -44,6 +44,8 @@ OPTIONS
   --severity <sev>           Only include findings at or above <sev>
                              (critical | high | medium | low)
   --verbose, -V              Print per-check progress to stderr
+  --no-color                 Disable ANSI colors (also honors NO_COLOR and
+                             non-TTY stdout)
   --help, -h                 Show help
   --version, -v              Print version
 ```
@@ -184,8 +186,10 @@ location — the hosted app uses it for dedup, and downstream tools can too.
 
 ## Colour output
 
-Colours turn on automatically when stdout is a TTY. Set `NO_COLOR=1` (or pipe
-to a file) to disable.
+Colours turn on automatically when stdout is a TTY. They turn off when
+stdout is piped, when `NO_COLOR` is set to any non-empty value, or when
+`--no-color` is passed. The flag is per-invocation and takes precedence over
+the environment variable.
 
 ## Comparison — CLI vs GitHub Action vs hosted app
 
