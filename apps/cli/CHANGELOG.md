@@ -1,5 +1,28 @@
 # @kelp-security/cli — changelog
 
+## 0.7.0 — 2026-09-19
+
+Two more community contributions from @maskjelly, plus one new finding
+type, so the minor bumps again.
+
+- **Stripe webhook signing secret detection** (@maskjelly, #75, closes
+  #66). Recognizes `whsec_...` webhook signing secrets as `high`
+  findings with Stripe attribution. A leaked webhook secret lets anyone
+  forge signed payloads and pass the receiving service's "is this really
+  from Stripe" check, so this is worth catching alongside the existing
+  Stripe API key rules. The client-side severity bump lifts it to
+  `critical` if the value ends up in a shipped bundle.
+- **CLI honors `NO_COLOR` everywhere and adds `--no-color`** (@maskjelly,
+  #73, closes #68). Color decision now lives in one `colorEnabled()` in
+  `apps/cli/src/ui/style.ts` with a clear precedence: `--no-color`
+  wins, then `NO_COLOR` (any non-empty value), then non-TTY stdout. Every
+  ANSI helper gates on it, so escapes no longer leak into CI logs or
+  piped output. `--json` output stays ANSI-free.
+- CI change from the same PR: `apps/cli` unit tests now run in the
+  GitHub Actions job alongside `@kelp/core` and `@kelp/worker` tests.
+  Regressions on the walker or the color logic will fail CI going
+  forward.
+
 ## 0.6.0 — 2026-09-10
 
 Two new secret rules, both community contributions. Bumping the minor
