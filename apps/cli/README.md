@@ -83,9 +83,20 @@ masked preview (`sk_live_…`) only.
 RLS, edge-function, and BOLA scanners live in `@kelp/core` too and will land
 in the CLI progressively — see the [roadmap issue](https://github.com/Mic52M/kelp/issues).
 
+## MCP server
+
+Kelp also ships as an MCP server for LLM clients (Claude Code, Claude Desktop, Cursor):
+
+```bash
+kelp mcp
+```
+
+Add it to your client's MCP config so the LLM can call `scan_path`, `scan_snippet`, `list_rules`, `explain_finding`, and `explain_rule` on its own, and surface `/kelp:review-repo` / `/kelp:harden-file` as slash commands. Full guide in [`docs/MCP.md`](../../docs/MCP.md).
+
 ## Docs
 
 - [Full CLI reference](../../docs/CLI.md)
+- [MCP server](../../docs/MCP.md)
 - [Architecture](../../docs/ARCHITECTURE.md)
 - [Contributing](../../CONTRIBUTING.md)
 

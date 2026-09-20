@@ -1,6 +1,6 @@
 {
   "name": "@kelp-security/cli",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Kelp — security scanner for vibe-coded apps. Standalone CLI.",
   "keywords": [
     "security",
@@ -39,8 +39,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "prepack": "rm -rf dist && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --minify --external:@anthropic-ai/sdk",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --minify --external:@anthropic-ai/sdk",
+    "prepack": "rm -rf dist && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --minify --external:@anthropic-ai/sdk --external:@modelcontextprotocol/sdk --external:zod",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --minify --external:@anthropic-ai/sdk --external:@modelcontextprotocol/sdk --external:zod",
     "build:types": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "dev": "node --import tsx src/index.ts",
@@ -48,7 +48,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",
-    "ignore": "^7.0.8"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "ignore": "^7.0.8",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@kelp/core": "*",

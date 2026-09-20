@@ -1,5 +1,39 @@
 # @kelp-security/cli — changelog
 
+## 0.8.0 — 2026-09-20
+
+`kelp mcp` ships. The CLI now doubles as an MCP server for LLM clients
+(Claude Code, Claude Desktop, Cursor, any MCP-compatible client) so an AI
+assistant can call Kelp mid-conversation while generating code, instead of
+scanning after the fact.
+
+### Added
+
+- **`kelp mcp` subcommand.** Starts a Model Context Protocol server on
+  stdio (protocol version 2025-06-18). Five tools, two resources, two
+  slash-command prompts. Everything runs locally, offline. No file content
+  ever leaves the machine.
+- **Tools**: `scan_path`, `scan_snippet`, `list_rules`, `explain_finding`,
+  `explain_rule`. All return both a short text summary for the model and
+  a fully structured JSON payload for programmatic consumers.
+- **Resources**: `kelp://rules` (full catalog) and `kelp://rules/{ruleId}`
+  (per-rule spec). Read-only, JSON.
+- **Prompts (surface as slash commands)**: `/kelp:review-repo` and
+  `/kelp:harden-file`. Give MCP-aware clients native entry points.
+- **`docs/MCP.md`** with install snippets for Claude Code, Claude Desktop,
+  Cursor, and any MCP-compatible client.
+
+### Notes
+
+- The paid `--agent` scan is intentionally NOT exposed via MCP yet.
+  Wrapping a paid, agentic path as an MCP tool without a hard budget is a
+  footgun. Reserved for a v2.
+- New runtime dependency: `@modelcontextprotocol/sdk`. Externalized in the
+  esbuild bundle so npm resolves it at install time.
+- Bundle base size for the CLI grows because the MCP SDK is externalized:
+  `dist/index.js` stays around ~40 KB gzipped; the SDK is installed
+  separately.
+
 ## 0.7.0 — 2026-09-19
 
 Two more community contributions from @maskjelly, plus one new finding

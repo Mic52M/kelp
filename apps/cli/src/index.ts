@@ -13,20 +13,22 @@ import { loadConfig, suggestedConfigPath } from "./config.js";
 import { isDepth, type Depth } from "./agent/depth.js";
 import { setNoColorFlag } from "./ui/style.js";
 
-const VERSION = "0.7.0";
+const VERSION = "0.8.0";
 
 function usageTop(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps
 
 USAGE
   kelp scan <path> [options]     scan a local directory
-  kelp explain                   the manual — read this first
+  kelp mcp                       start the MCP server on stdio (for LLM clients)
+  kelp explain                   the manual, read this first
   kelp list-rules                every check the CLI runs, with rule ids
   kelp config                    show effective config
   kelp --version                 print version
 
 Run \`kelp scan --help\` for scan-specific options.
 Run \`kelp explain\` for the full guide.
+Run \`kelp mcp\` from an MCP client config (Claude Code, Claude Desktop, Cursor).
 
 Docs: https://kelp.build/docs · Source: https://github.com/Mic52M/kelp
 `);
@@ -111,6 +113,14 @@ async function main(): Promise<void> {
   if (cmd === "list-rules") {
     listRules();
     process.exit(0);
+  }
+
+  if (cmd === "mcp") {
+    // Start the MCP server on stdio. The whole process is dedicated to
+    // JSON-RPC from here: no other CLI code path may write to stdout.
+    const { startMcpServer } = await import("./mcp/server.js");
+    await startMcpServer(VERSION);
+    return;
   }
 
   if (cmd === "config") {

@@ -7,6 +7,15 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **`kelp mcp` — MCP server for LLM clients** (v0.8.0 of the CLI). Kelp
+  now speaks Model Context Protocol on stdio, so Claude Code, Claude
+  Desktop, Cursor, and any MCP-compatible client can call Kelp
+  mid-conversation while an AI is generating code. Five tools
+  (`scan_path`, `scan_snippet`, `list_rules`, `explain_finding`,
+  `explain_rule`), two resources (`kelp://rules`, `kelp://rules/{id}`),
+  two prompts (`/kelp:review-repo`, `/kelp:harden-file`). All local,
+  offline, no data ever leaves the machine. See
+  [`docs/MCP.md`](docs/MCP.md) for install snippets.
 - **Stripe webhook signing secret detection** (#66). Recognizes `whsec_…`
   webhook signing secrets as `high` findings with Stripe attribution. A
   leaked `whsec_` lets anyone forge signed webhook payloads and bypass the
