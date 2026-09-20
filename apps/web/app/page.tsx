@@ -51,6 +51,7 @@ export default function Landing() {
         </Link>
         <nav className="hidden items-center gap-8 text-[13.5px] text-[color:var(--color-paper-300)] md:flex">
           <Link href="/docs" className="transition-colors hover:text-[color:var(--color-paper-50)]">Docs</Link>
+          <Link href="#mcp" className="transition-colors hover:text-[color:var(--color-paper-50)]">MCP</Link>
           <a href={REPO_URL} target="_blank" rel="noreferrer noopener" className="transition-colors hover:text-[color:var(--color-paper-50)]">GitHub ↗</a>
         </nav>
         <div className="flex items-center gap-5">
@@ -250,12 +251,109 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── MCP ─────────────────────────────────────────────────────────── */}
+      <section id="mcp" className="border-t border-[color:var(--color-hair)]">
+        <div className="mx-auto max-w-[1120px] px-6 py-28">
+          <div className="mb-14 max-w-2xl">
+            <div className="eyebrow flex items-center gap-3">
+              <span className="text-[color:var(--color-signal-dim)]">§ 03</span>
+              <span className="h-px w-6 bg-[color:var(--color-hair-strong)]" aria-hidden />
+              <span>New · MCP server</span>
+            </div>
+            <h2 className="font-display mt-6 text-[36px] leading-[1.05] text-[color:var(--color-paper-50)] sm:text-[44px]">
+              Your AI calls Kelp.
+              <br />
+              <span className="text-[color:var(--color-paper-300)]">Mid-conversation.</span>
+            </h2>
+            <p className="mt-6 max-w-xl text-[15px] leading-[1.6] text-[color:var(--color-paper-300)]">
+              Kelp speaks the Model Context Protocol. Wire it into Claude Code,
+              Claude Desktop, Cursor, or any MCP-compatible client, and the
+              assistant scans, explains, and fixes findings while it is still
+              writing the code. Same static engine as the CLI. Runs locally,
+              offline. No file content ever leaves the machine.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {/* Copy-paste install snippet */}
+            <div className="lg:col-span-7">
+              <div className="border border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/60">
+                <div className="flex items-center justify-between border-b border-[color:var(--color-hair)] px-4 py-2 font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-signal-dim)]">
+                  <span>~/.claude.json · Claude Code, Claude Desktop, Cursor</span>
+                  <span>json</span>
+                </div>
+                <pre className="overflow-x-auto px-4 py-4 font-mono text-[12.5px] leading-[1.6] text-[color:var(--color-paper-100)]">{`{
+  "mcpServers": {
+    "kelp": {
+      "command": "npx",
+      "args": ["-y", "@kelp-security/cli", "mcp"]
+    }
+  }
+}`}</pre>
+              </div>
+              <div className="mt-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)]">
+                Restart the client. Ask the assistant to scan the repo, or use{" "}
+                <code className="text-[color:var(--color-paper-100)]">/kelp:review-repo</code>.
+              </div>
+            </div>
+
+            {/* Tool catalog */}
+            <div className="lg:col-span-5">
+              <div className="border border-[color:var(--color-hair)] p-6">
+                <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-signal-dim)]">
+                  What the model can call
+                </div>
+                <ul className="mt-4 space-y-3 text-[13px] leading-[1.55] text-[color:var(--color-paper-200)]">
+                  <li>
+                    <code className="font-mono text-[color:var(--color-paper-50)]">scan_path</code>
+                    <span className="text-[color:var(--color-paper-400)]"> · full repo scan</span>
+                  </li>
+                  <li>
+                    <code className="font-mono text-[color:var(--color-paper-50)]">scan_snippet</code>
+                    <span className="text-[color:var(--color-paper-400)]"> · check a diff before commit</span>
+                  </li>
+                  <li>
+                    <code className="font-mono text-[color:var(--color-paper-50)]">list_rules</code>
+                    <span className="text-[color:var(--color-paper-400)]"> · introspect coverage</span>
+                  </li>
+                  <li>
+                    <code className="font-mono text-[color:var(--color-paper-50)]">explain_finding</code>
+                    <span className="text-[color:var(--color-paper-400)]"> · turn a finding into a fix</span>
+                  </li>
+                  <li>
+                    <code className="font-mono text-[color:var(--color-paper-50)]">explain_rule</code>
+                    <span className="text-[color:var(--color-paper-400)]"> · why + remediation</span>
+                  </li>
+                </ul>
+                <div className="mt-6 border-t border-[color:var(--color-hair)] pt-4 font-mono text-[10.5px] uppercase tracking-[0.16em] text-[color:var(--color-signal-dim)]">
+                  Slash commands
+                </div>
+                <ul className="mt-3 space-y-2 text-[13px] leading-[1.55] text-[color:var(--color-paper-200)]">
+                  <li>
+                    <code className="font-mono text-[color:var(--color-paper-50)]">/kelp:review-repo</code>
+                  </li>
+                  <li>
+                    <code className="font-mono text-[color:var(--color-paper-50)]">/kelp:harden-file</code>
+                  </li>
+                </ul>
+              </div>
+              <Link
+                href="https://github.com/Mic52M/kelp/blob/master/docs/MCP.md"
+                className="mt-5 inline-block font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--color-paper-400)] hover:text-[color:var(--color-paper-100)]"
+              >
+                MCP guide →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── FAQ ─────────────────────────────────────────────────────────── */}
       <section className="border-y border-[color:var(--color-hair)] bg-[color:var(--color-ink-900)]/40">
         <div className="mx-auto max-w-[1120px] px-6 py-24">
           <div className="mb-14 max-w-xl">
             <div className="eyebrow flex items-center gap-3">
-              <span className="text-[color:var(--color-signal-dim)]">§ 03</span>
+              <span className="text-[color:var(--color-signal-dim)]">§ 04</span>
               <span className="h-px w-6 bg-[color:var(--color-hair-strong)]" aria-hidden />
               <span>Questions</span>
             </div>
