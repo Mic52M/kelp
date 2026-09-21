@@ -12,6 +12,7 @@
 // enough context in one shot to explain the finding and produce a fix.
 
 export type RuleClass = "secret" | "auth" | "rls" | "edge-fn" | "misc";
+
 export type RuleAvailability = "static" | "agent" | "live";
 export type RuleSeverity = "critical" | "high" | "medium" | "low";
 
@@ -168,6 +169,71 @@ export const RULES_CATALOG: RuleSpec[] = [
     availability: "static",
     why: "The value looks like a credential by shape and entropy but does not match a known provider pattern. Likely still a secret, treat as suspicious until proven otherwise.",
     remediation: "Inspect the value. If it is a real credential, rotate at the provider and move to an env var. If it is a legitimate hash or nonce, add it to your ignore list.",
+  },
+
+  // Static RLS analyzer (rls-sql.ts) — reads supabase/migrations/*.sql.
+  {
+    id: "rls_disabled",
+    title: "Row Level Security disabled on API-exposed table",
+    class: "rls",
+    severity: "critical",
+    availability: "static",
+    why: "The table lives in the `public` schema (reachable through PostgREST) and does not have RLS enabled. Any caller with the anon key can read and write every row.",
+    remediation: "Run `alter table <schema>.<table> enable row level security;` and add owner-scoped policies (auth.uid() = user_id) for each command the app needs.",
+  },
+  {
+    id: "permissive_policy",
+    title: "RLS policy always evaluates to true",
+    class: "rls",
+    severity: "critical",
+    availability: "static",
+    why: "The table has an ownership column and a policy that uses `USING (true)` or `WITH CHECK (true)` for a client role. RLS is enabled but the policy grants access to every row.",
+    remediation: "Replace the permissive expression with `auth.uid() = <owner_column>`, one policy per command.",
+  },
+  {
+    id: "owner_not_scoped",
+    title: "Ownership column present but no policy references auth.uid()",
+    class: "rls",
+    severity: "high",
+    availability: "static",
+    why: "The table has an obvious owner column (user_id, owner_id, tenant_id, etc.) but none of the client-facing policies check `auth.uid() = <owner_column>`. Rows are probably not tenant-scoped.",
+    remediation: "Add per-command policies (SELECT/INSERT/UPDATE/DELETE) that use `auth.uid() = <owner_column>`.",
+  },
+  {
+    id: "rls_no_policies",
+    title: "RLS enabled but no client-facing policies",
+    class: "rls",
+    severity: "low",
+    availability: "static",
+    why: "RLS is on but the table has zero policies for anon or authenticated. Postgres defaults to deny, so the API refuses the table entirely.",
+    remediation: "Either add the intended policy, or drop the table from the API-exposed schema. Silent full-deny usually means the migration was left half-done.",
+  },
+  {
+    id: "fk_leak_to_unprotected",
+    title: "Foreign key from protected table leaks a table with RLS off",
+    class: "rls",
+    severity: "high",
+    availability: "static",
+    why: "An RLS-protected parent table has a foreign key to a target table that has RLS disabled. A PostgREST caller can embed the target through the FK (e.g. ?select=parent(*,child(*))) and read every row of the target even though the parent is protected.",
+    remediation: "Enable RLS on the target table with an owner-scoped policy that mirrors the parent's, or restrict the join role on the target.",
+  },
+  {
+    id: "command_scope_gap",
+    title: "RLS covers SELECT but not INSERT/UPDATE/DELETE while grants allow writes",
+    class: "rls",
+    severity: "high",
+    availability: "static",
+    why: "A table has RLS enabled, a SELECT policy that scopes reads to the owner, but no policy for INSERT/UPDATE/DELETE while a GRANT still lets a client role write. Reads are safe, writes are wide open.",
+    remediation: "Add per-command policies with the same owner check as SELECT (auth.uid() = <owner_column>), or revoke the extra grants.",
+  },
+  {
+    id: "view_bypasses_rls",
+    title: "View runs with the view owner's permissions, silently bypassing RLS",
+    class: "rls",
+    severity: "high",
+    availability: "static",
+    why: "A `CREATE VIEW` over an RLS-protected base table without `WITH (security_invoker = true)` runs with the view owner's policies (usually postgres), which bypasses RLS on the base table entirely.",
+    remediation: "Recreate the view with `WITH (security_invoker = true)`, or move the RLS-protected joins into a SECURITY INVOKER function.",
   },
 
   // Edge function config (verify-jwt.ts).

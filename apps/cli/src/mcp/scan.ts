@@ -15,9 +15,13 @@ import {
   detectSecrets,
   shouldScanPath,
   discoverEdgeFunctions,
+  parseSqlMigrations,
+  analyzeDeep,
   type SecretFinding,
   type DiscoveredEdgeFunction,
   type SourceFile,
+  type RlsFinding,
+  type RlsDeepFinding,
 } from "@kelp/core";
 import { walk } from "../walk.js";
 import { detectVerifyJwt, type VerifyJwtFinding } from "../checks/verify-jwt.js";
@@ -45,6 +49,7 @@ export interface ScanSummary {
     secrets: boolean;
     supabaseConfigVerifyJwt: boolean;
     edgeFnRecon: boolean;
+    rlsSchema: boolean;
   };
   discoveredEdgeFunctions: DiscoveredEdgeFunction[];
   findings: McpFinding[];
@@ -107,6 +112,16 @@ function detectAll(
   const hasEdgeFns = files.some((f) => /supabase\/functions\//i.test(f.path));
   const edgeFns: DiscoveredEdgeFunction[] = hasEdgeFns ? discoverEdgeFunctions(files) : [];
 
+  // Static RLS analysis over the repo's SQL migrations. The parser returns
+  // an empty snapshot on repos without migrations, so this is safe to run
+  // unconditionally.
+  const hasSchemaSql = files.some(
+    (f) =>
+      /\.sql$/i.test(f.path) &&
+      (/(?:^|\/)supabase\//i.test(f.path) || /(?:^|\/)migrations\//i.test(f.path)),
+  );
+  const rlsFindings = hasSchemaSql ? analyzeDeep(parseSqlMigrations(files)) : [];
+
   const findings: McpFinding[] = [
     ...secrets.map<McpFinding>((f) => ({
       ruleId: f.ruleId,
@@ -128,6 +143,25 @@ function detectAll(
       line: f.line,
       class: "edge-fn",
     })),
+    ...rlsFindings.map<McpFinding>((f) =>
+      isDeepRls(f)
+        ? {
+            ruleId: f.issue,
+            title: f.title,
+            severity: f.severity,
+            path: `${f.schema}.${f.table}`,
+            line: 1,
+            class: "rls",
+          }
+        : {
+            ruleId: f.issue,
+            title: f.title,
+            severity: f.severity,
+            path: `${f.schema}.${f.table}`,
+            line: 1,
+            class: "rls",
+          },
+    ),
   ];
 
   // Findings are already deterministic. Sort by severity so the LLM sees
@@ -147,9 +181,14 @@ function detectAll(
       secrets: true,
       supabaseConfigVerifyJwt: hasSupabaseConfig,
       edgeFnRecon: hasEdgeFns,
+      rlsSchema: hasSchemaSql,
     },
     discoveredEdgeFunctions: edgeFns,
     findings,
     durationMs: Date.now() - meta.startedAt,
   };
+}
+
+function isDeepRls(f: RlsFinding | RlsDeepFinding): f is RlsDeepFinding {
+  return (f as RlsDeepFinding).details !== undefined;
 }

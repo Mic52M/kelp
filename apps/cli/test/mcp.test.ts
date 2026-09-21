@@ -238,14 +238,18 @@ test("resources/read on kelp://rules returns the full catalog JSON", async () =>
   const { client } = await connect();
   const res = await client.readResource({ uri: "kelp://rules" });
   assert.equal(res.contents.length, 1);
-  const parsed = JSON.parse(res.contents[0]!.text as string) as { rules: unknown[] };
+  const first = res.contents[0]!;
+  assert.ok("text" in first, "resource content must be text, not blob");
+  const parsed = JSON.parse(first.text) as { rules: unknown[] };
   assert.ok(parsed.rules.length >= 10);
 });
 
 test("resources/read on kelp://rules/{id} returns a single rule", async () => {
   const { client } = await connect();
   const res = await client.readResource({ uri: "kelp://rules/stripe-secret-live" });
-  const parsed = JSON.parse(res.contents[0]!.text as string) as { id: string };
+  const first = res.contents[0]!;
+  assert.ok("text" in first, "resource content must be text, not blob");
+  const parsed = JSON.parse(first.text) as { id: string };
   assert.equal(parsed.id, "stripe-secret-live");
 });
 

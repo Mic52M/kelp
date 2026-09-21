@@ -7,6 +7,18 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Static RLS engine over repo SQL migrations** (v0.9.0 of the CLI).
+  `kelp scan` and `kelp mcp` now read `supabase/migrations/*.sql`, build
+  the schema graph (tables, columns, policies, foreign keys, grants,
+  views), and run seven rules: the four base RLS checks
+  (`rls_disabled`, `permissive_policy`, `owner_not_scoped`,
+  `rls_no_policies`) plus three graph-level checks that catch classes
+  no other scanner reports: `fk_leak_to_unprotected` (a protected table
+  with a foreign key to an unprotected one, exploitable via PostgREST
+  embed), `command_scope_gap` (SELECT policy + writable grants with no
+  policy for the writes), and `view_bypasses_rls` (view over RLS base
+  without `security_invoker = true`). Fully offline. 13 VULN/CONTROL
+  test pairs.
 - **`kelp mcp` — MCP server for LLM clients** (v0.8.0 of the CLI). Kelp
   now speaks Model Context Protocol on stdio, so Claude Code, Claude
   Desktop, Cursor, and any MCP-compatible client can call Kelp

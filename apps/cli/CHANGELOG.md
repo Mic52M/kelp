@@ -1,5 +1,47 @@
 # @kelp-security/cli — changelog
 
+## 0.9.0 — 2026-09-21
+
+Static RLS analyzer that reads the SQL migrations in a Supabase repo and
+finds the misconfigurations vibe-coders reliably introduce. This is the
+first version where `kelp scan` (and `kelp mcp`) has real coverage on
+Row Level Security without needing a live database connection.
+
+### Added
+
+- **Static RLS engine over `supabase/migrations/*.sql`**. Parses
+  `CREATE TABLE`, `CREATE POLICY`, `ALTER TABLE ... ENABLE ROW LEVEL
+  SECURITY`, `GRANT`, `CREATE VIEW`, and inline + `ALTER` foreign keys
+  into a schema graph, then runs seven rules over it.
+- **Four base RLS rules** (already existed for the live path in
+  `@kelp/core`, now fire on repo scans too):
+  - `rls_disabled` (critical): table in the `public` schema with RLS off.
+  - `permissive_policy` (critical): `USING (true)` on a table with an
+    ownership column.
+  - `owner_not_scoped` (high): ownership column present but no policy
+    references `auth.uid()`.
+  - `rls_no_policies` (low): RLS enabled but no client policies.
+- **Three new deep rules** that require the schema graph:
+  - `fk_leak_to_unprotected` (high): protected parent has a foreign key
+    to a target with RLS off. PostgREST embeds leak the target through
+    the FK.
+  - `command_scope_gap` (high): SELECT policy plus write grants for
+    anon/authenticated with no INSERT/UPDATE/DELETE policy. Reads safe,
+    writes wide open.
+  - `view_bypasses_rls` (high): `CREATE VIEW` over an RLS-protected base
+    without `WITH (security_invoker = true)`. Silent RLS bypass.
+- The MCP `scan_path` and `scan_snippet` tools now surface these
+  findings under the `rls` class, and the MCP `list_rules` /
+  `explain_rule` / `explain_finding` tools return the new rule specs.
+
+### Notes
+
+- Fully offline. Never needs a Supabase Management API token or a live
+  database. Parser is regex-based and tuned to the shapes real Supabase
+  migrations take (`supabase db diff`, dashboard exports, dbmate/prisma
+  outputs).
+- 13 VULN/CONTROL test pairs cover the parser and every rule.
+
 ## 0.8.0 — 2026-09-20
 
 `kelp mcp` ships. The CLI now doubles as an MCP server for LLM clients

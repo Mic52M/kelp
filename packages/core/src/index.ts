@@ -5,6 +5,7 @@ export * from "./crypto.js";
 export * from "./fingerprint.js";
 export * from "./scanners/secrets.js";
 export * from "./scanners/rls.js";
+export * from "./scanners/rls-sql.js";
 export * from "./remediation/secret-pr.js";
 export * from "./remediation/secret-fix.js";
 export * from "./remediation/bola-report.js";
