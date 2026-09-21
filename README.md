@@ -11,7 +11,7 @@ RLS, unauthenticated edge functions — and gates them out of your pull requests
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-signal.svg?labelColor=0a0a0c&color=b8f2c9)](CONTRIBUTING.md)
 [![Deploy](https://img.shields.io/badge/kelp.build-live-signal.svg?labelColor=0a0a0c&color=b8f2c9)](https://kelp.build)
 
-[Live app](https://kelp.build) · [Docs](docs/) · [CLI](docs/CLI.md) · [GitHub Action](https://github.com/kelp-security/kelp-action) · [Architecture](docs/ARCHITECTURE.md)
+[Live app](https://kelp.build) · [Docs](docs/) · [CLI](docs/CLI.md) · [MCP server](docs/MCP.md) · [GitHub Action](https://github.com/kelp-security/kelp-action) · [Architecture](docs/ARCHITECTURE.md)
 
 </div>
 
@@ -24,17 +24,18 @@ edge functions, RLS policies, source tree — the way an attacker would. Every
 finding is **evidence-gated**: a reviewer re-runs the reproduction before it
 lands in your report, so what you see is what an attacker would actually get.
 
-Three surfaces, one detection engine:
+Four surfaces, one detection engine:
 
 | Surface | For | How you use it |
 |---|---|---|
-| **CLI** — [`kelp`](docs/CLI.md) | Local scans, CI shells, scripts | `npx @kelp-security/cli scan ./my-app` |
-| **GitHub Action** — [`kelp/check`](https://github.com/kelp-security/kelp-action) | Pull-request gating | `uses: kelp-security/kelp-action@v1` |
-| **Hosted app** — [kelp.build](https://kelp.build) | Continuous scanning, dashboard, PR fixes | Connect a repo, sign in with GitHub |
+| **CLI** [`kelp`](docs/CLI.md) | Local scans, CI shells, scripts | `npx @kelp-security/cli scan ./my-app` |
+| **MCP server** [`kelp mcp`](docs/MCP.md) | Claude Code, Claude Desktop, Cursor, any MCP client | `npx @kelp-security/cli mcp` |
+| **GitHub Action** [`kelp/check`](https://github.com/kelp-security/kelp-action) | Pull-request gating | `uses: kelp-security/kelp-action@v1` |
+| **Hosted app** [kelp.build](https://kelp.build) | Continuous scanning, dashboard, PR fixes | Connect a repo, sign in with GitHub |
 
 Zero configuration in the common case. The Action reads the workflow's
 `GITHUB_TOKEN`, the hosted app installs a GitHub App, the CLI walks the
-filesystem.
+filesystem, the MCP server speaks stdio JSON-RPC to the LLM client.
 
 ## Quickstart — CLI
 
@@ -54,6 +55,37 @@ MEDIUM    supabase/config.toml  verify_jwt=false on get-order
 
 Add `--json` for machine-readable output, `--severity high` to filter, or see
 [docs/CLI.md](docs/CLI.md) for the full reference.
+
+## Quickstart, MCP server
+
+Kelp implements the [Model Context Protocol](https://modelcontextprotocol.io) so
+an LLM client (Claude Code, Claude Desktop, Cursor, or any MCP-compatible client)
+can call Kelp mid-conversation, while it is writing code, instead of scanning
+after the fact. Same static engine as the CLI, exposed as MCP tools, resources,
+and slash commands over stdio. Runs locally, offline. No file content ever leaves
+the machine.
+
+Add to your client's MCP config (`~/.claude.json`, Claude Desktop config, or the
+Cursor MCP settings):
+
+```json
+{
+  "mcpServers": {
+    "kelp": {
+      "command": "npx",
+      "args": ["-y", "@kelp-security/cli", "mcp"]
+    }
+  }
+}
+```
+
+Restart the client, then ask the assistant to scan the repo, or use the
+`/kelp:review-repo` slash command.
+
+**MCP tools:** `scan_path`, `scan_snippet`, `list_rules`, `explain_finding`,
+`explain_rule`. **Resources:** `kelp://rules`, `kelp://rules/{ruleId}`.
+**Prompts (slash commands):** `/kelp:review-repo`, `/kelp:harden-file`.
+Full guide, with per-client install snippets, in [docs/MCP.md](docs/MCP.md).
 
 ## Quickstart — GitHub Action
 
