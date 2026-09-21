@@ -10,6 +10,7 @@ RLS, unauthenticated edge functions — and gates them out of your pull requests
 [![CI](https://github.com/Mic52M/kelp/actions/workflows/ci.yml/badge.svg)](https://github.com/Mic52M/kelp/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-signal.svg?labelColor=0a0a0c&color=b8f2c9)](CONTRIBUTING.md)
 [![Deploy](https://img.shields.io/badge/kelp.build-live-signal.svg?labelColor=0a0a0c&color=b8f2c9)](https://kelp.build)
+[![Glama MCP server](https://glama.ai/mcp/servers/Mic52M/kelp/badges/score.svg)](https://glama.ai/mcp/servers/Mic52M/kelp)
 
 [Live app](https://kelp.build) · [Docs](docs/) · [CLI](docs/CLI.md) · [MCP server](docs/MCP.md) · [GitHub Action](https://github.com/kelp-security/kelp-action) · [Architecture](docs/ARCHITECTURE.md)
 
