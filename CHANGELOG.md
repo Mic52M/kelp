@@ -7,6 +7,13 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Supabase Storage ACL analyzer** (v0.10.0 of the CLI). Reads
+  `INSERT INTO storage.buckets` rows and `CREATE POLICY ON storage.objects`
+  blocks from `supabase/migrations/*.sql`, runs three rules:
+  `storage_public_bucket` (high), `storage_policy_missing_user_scope`
+  (high), `storage_policy_permissive` (critical). Third pillar of the
+  Supabase static scan alongside RLS and edge functions. Same parse pass
+  as 0.9.0 so no extra cost.
 - **Static RLS engine over repo SQL migrations** (v0.9.0 of the CLI).
   `kelp scan` and `kelp mcp` now read `supabase/migrations/*.sql`, build
   the schema graph (tables, columns, policies, foreign keys, grants,

@@ -17,6 +17,7 @@ import {
   discoverEdgeFunctions,
   parseSqlMigrations,
   analyzeDeep,
+  analyzeStorageAcl,
   type SecretFinding,
   type DiscoveredEdgeFunction,
   type SourceFile,
@@ -50,6 +51,7 @@ export interface ScanSummary {
     supabaseConfigVerifyJwt: boolean;
     edgeFnRecon: boolean;
     rlsSchema: boolean;
+    storageAcl: boolean;
   };
   discoveredEdgeFunctions: DiscoveredEdgeFunction[];
   findings: McpFinding[];
@@ -120,7 +122,10 @@ function detectAll(
       /\.sql$/i.test(f.path) &&
       (/(?:^|\/)supabase\//i.test(f.path) || /(?:^|\/)migrations\//i.test(f.path)),
   );
-  const rlsFindings = hasSchemaSql ? analyzeDeep(parseSqlMigrations(files)) : [];
+  // Parse migrations once and share the snapshot between analyzers.
+  const snapshot = hasSchemaSql ? parseSqlMigrations(files) : null;
+  const rlsFindings = snapshot ? analyzeDeep(snapshot) : [];
+  const storageFindings = snapshot ? analyzeStorageAcl(snapshot) : [];
 
   const findings: McpFinding[] = [
     ...secrets.map<McpFinding>((f) => ({
@@ -162,6 +167,14 @@ function detectAll(
             class: "rls",
           },
     ),
+    ...storageFindings.map<McpFinding>((f) => ({
+      ruleId: f.issue,
+      title: f.title,
+      severity: f.severity,
+      path: f.bucketId ? `storage.buckets/${f.bucketId}` : `storage.objects`,
+      line: 1,
+      class: "rls",
+    })),
   ];
 
   // Findings are already deterministic. Sort by severity so the LLM sees
@@ -182,6 +195,7 @@ function detectAll(
       supabaseConfigVerifyJwt: hasSupabaseConfig,
       edgeFnRecon: hasEdgeFns,
       rlsSchema: hasSchemaSql,
+      storageAcl: hasSchemaSql,
     },
     discoveredEdgeFunctions: edgeFns,
     findings,

@@ -1,5 +1,37 @@
 # @kelp-security/cli — changelog
 
+## 0.10.0 — 2026-09-21
+
+Static Supabase Storage ACL analyzer. Third pillar of the Supabase
+static scan (after RLS and edge functions). Runs on the same
+`supabase/migrations/*.sql` parse that landed in 0.9.0, so no extra
+cost on scans.
+
+### Added
+
+- **`storage_public_bucket`** (high). Fires on any bucket created with
+  `public = true`. Sometimes intentional (marketing assets), often an
+  accidental leak of user documents / avatars / attachments.
+- **`storage_policy_missing_user_scope`** (high). Fires on policies over
+  `storage.objects` that filter by `bucket_id = 'X'` but never reference
+  `auth.uid()`, `owner`, or `auth.jwt()`. All authenticated users can
+  read/write every file in that bucket, one of the most common Supabase
+  tutorial-copy mistakes.
+- **`storage_policy_permissive`** (critical). Fires on
+  `USING (true)` / `WITH CHECK (true)` policies on `storage.objects`
+  for a client-facing role (anon, authenticated, public). Any caller
+  reaches every file, ignoring bucket and owner.
+- MCP `scan_path` / `scan_snippet` surface these findings under the
+  `rls` class, and `list_rules` / `explain_rule` return the specs.
+
+### Improvements
+
+- The migration parser now auto-creates a phantom TableInfo for policies
+  that target Supabase built-in tables never `CREATE TABLE`d in user
+  migrations (storage.objects, auth.users, storage.buckets). Fixes
+  silent drops of legitimate `CREATE POLICY ON storage.objects` blocks.
+- 12 new VULN/CONTROL test pairs; total core test count now 93.
+
 ## 0.9.0 — 2026-09-21
 
 Static RLS analyzer that reads the SQL migrations in a Supabase repo and

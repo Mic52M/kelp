@@ -63,10 +63,22 @@ export interface GrantInfo {
   commands: PolicyCommand[];
 }
 
+/** A row inserted into `storage.buckets` — one Supabase Storage bucket.
+ *  Only carries the fields the storage-acl analyzer needs. */
+export interface StorageBucketInfo {
+  /** Bucket id as declared in the INSERT (the value clients pass as `bucket_id`). */
+  id: string;
+  /** Optional friendly name (defaults to id in Supabase's schema). */
+  name: string;
+  /** `public = true` makes every object reachable via CDN without auth. */
+  isPublic: boolean;
+}
+
 /** SchemaSnapshot extended with graph-level information for deep checks. */
 export interface DeepSchemaSnapshot extends SchemaSnapshot {
   foreignKeys: ForeignKeyInfo[];
   grants: GrantInfo[];
+  buckets: StorageBucketInfo[];
 }
 
 // ── Deep-check finding shape ───────────────────────────────────────────
@@ -103,6 +115,7 @@ export function parseSqlMigrations(files: readonly SourceFile[]): DeepSchemaSnap
   const tables = new Map<string, TableInfo>();
   const foreignKeys: ForeignKeyInfo[] = [];
   const grants: GrantInfo[] = [];
+  const buckets: StorageBucketInfo[] = [];
 
   // Migrations are read in filename-sorted order so ALTER TABLE additions in
   // later migrations correctly amend earlier CREATE TABLEs.
@@ -164,8 +177,26 @@ export function parseSqlMigrations(files: readonly SourceFile[]): DeepSchemaSnap
       const policy = matchCreatePolicy(trimmed);
       if (policy) {
         const key = `${policy.schema}.${policy.table}`;
-        const t = tables.get(key);
-        if (t) t.policies.push(policy.policy);
+        let t = tables.get(key);
+        if (!t) {
+          // Auto-create a phantom TableInfo. This lets us track policies
+          // on Supabase built-in tables (storage.objects, storage.buckets,
+          // auth.users) that are never `CREATE TABLE`d in user migrations
+          // but are the surface many real policies live on. RLS is treated
+          // as enabled because Supabase enables it on these tables by
+          // default; the storage-acl analyzer keys off the policies list
+          // rather than rlsEnabled.
+          t = {
+            schema: policy.schema,
+            name: policy.table,
+            columns: [],
+            rlsEnabled: true,
+            policies: [],
+            isView: false,
+          };
+          tables.set(key, t);
+        }
+        t.policies.push(policy.policy);
         continue;
       }
 
@@ -180,6 +211,12 @@ export function parseSqlMigrations(files: readonly SourceFile[]): DeepSchemaSnap
         for (const fk of alterFk) foreignKeys.push(fk);
         continue;
       }
+
+      const bucketRows = matchInsertBuckets(trimmed);
+      if (bucketRows) {
+        for (const b of bucketRows) buckets.push(b);
+        continue;
+      }
       // Unrecognized: skip silently. Real repos have hundreds of
       // unrelated statements (functions, seed inserts, extensions).
     }
@@ -189,6 +226,7 @@ export function parseSqlMigrations(files: readonly SourceFile[]): DeepSchemaSnap
     tables: [...tables.values()],
     foreignKeys,
     grants,
+    buckets,
   };
 }
 
@@ -632,4 +670,122 @@ function matchAlterAddFk(stmt: string): ForeignKeyInfo[] | null {
 function expandPolicyCommand(c: PolicyCommand): PolicyCommand[] {
   if (c === "ALL") return ["SELECT", "INSERT", "UPDATE", "DELETE"];
   return [c];
+}
+
+/** Parse `INSERT INTO storage.buckets (columns...) VALUES (...), (...), ...`.
+ *  Extracts every VALUES row into a StorageBucketInfo. Only column combos
+ *  Supabase actually uses are supported: (id), (id, name), (id, name, public),
+ *  or any ordering thereof. Returns null when the statement isn't a
+ *  storage.buckets insert. */
+function matchInsertBuckets(stmt: string): StorageBucketInfo[] | null {
+  const head = stmt.match(
+    /^\s*insert\s+into\s+([^\s(]+)\s*\(([^)]+)\)\s*values\s*([\s\S]+)$/i,
+  );
+  if (!head) return null;
+  const target = parseQualifiedName(head[1]!);
+  if (target.schema !== "storage" || target.name !== "buckets") return null;
+
+  const columns = head[2]!
+    .split(",")
+    .map((c) => c.trim().replace(/"/g, "").toLowerCase());
+
+  const valuesBlob = head[3]!;
+  const rows: string[][] = [];
+  // Split top-level VALUES rows. Each row is `(...)`. Handles quoted strings.
+  let i = 0;
+  while (i < valuesBlob.length) {
+    while (i < valuesBlob.length && valuesBlob[i] !== "(") i++;
+    if (i >= valuesBlob.length) break;
+    // Find matching close paren, respecting single-quoted strings.
+    let depth = 0;
+    let j = i;
+    let inSingle = false;
+    while (j < valuesBlob.length) {
+      const c = valuesBlob[j]!;
+      if (inSingle) {
+        if (c === "'" && valuesBlob[j + 1] === "'") {
+          j += 2;
+          continue;
+        }
+        if (c === "'") inSingle = false;
+      } else if (c === "'") {
+        inSingle = true;
+      } else if (c === "(") depth++;
+      else if (c === ")") {
+        depth--;
+        if (depth === 0) break;
+      }
+      j++;
+    }
+    if (j >= valuesBlob.length) break;
+    const inner = valuesBlob.slice(i + 1, j);
+    rows.push(splitCsvRow(inner));
+    i = j + 1;
+  }
+
+  const out: StorageBucketInfo[] = [];
+  for (const values of rows) {
+    let id = "";
+    let name = "";
+    let isPublic = false;
+    let sawPublicColumn = false;
+    for (let k = 0; k < columns.length && k < values.length; k++) {
+      const col = columns[k]!;
+      const raw = values[k]!.trim();
+      const literal = parseSqlLiteral(raw);
+      if (col === "id") id = literal ?? "";
+      else if (col === "name") name = literal ?? "";
+      else if (col === "public") {
+        sawPublicColumn = true;
+        // Postgres accepts 't'/'f'/'true'/'false'/1/0 (as strings after
+        // parseSqlLiteral strips quotes).
+        const norm = (literal ?? raw).trim().toLowerCase();
+        isPublic = norm === "true" || norm === "t" || norm === "1";
+      }
+    }
+    if (!name) name = id;
+    // If no `public` column was declared, Supabase defaults `public = false`.
+    if (!sawPublicColumn) isPublic = false;
+    if (id.length === 0) continue;
+    out.push({ id, name, isPublic });
+  }
+  return out;
+}
+
+/** Split a VALUES row body respecting single-quoted strings (which may
+ *  contain commas). Trims each field but keeps its literal form. */
+function splitCsvRow(inner: string): string[] {
+  const out: string[] = [];
+  let buf = "";
+  let inSingle = false;
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i]!;
+    if (inSingle) {
+      if (c === "'" && inner[i + 1] === "'") {
+        buf += "''";
+        i++;
+        continue;
+      }
+      if (c === "'") inSingle = false;
+      buf += c;
+    } else if (c === "'") {
+      inSingle = true;
+      buf += c;
+    } else if (c === ",") {
+      out.push(buf);
+      buf = "";
+    } else {
+      buf += c;
+    }
+  }
+  if (buf.length > 0) out.push(buf);
+  return out;
+}
+
+/** Return the value of a single-quoted SQL literal, or null if the token
+ *  isn't a quoted string. */
+function parseSqlLiteral(raw: string): string | null {
+  const t = raw.trim();
+  if (t.length < 2 || t[0] !== "'" || t[t.length - 1] !== "'") return null;
+  return t.slice(1, -1).replace(/''/g, "'");
 }
