@@ -41,6 +41,7 @@ interface ScanOptions {
   observations?: boolean;
   dryRun?: boolean;
   reportPath?: string | null;
+  squad?: boolean;
 }
 
 const SEV_ORDER: Record<Severity, number> = {
@@ -267,6 +268,7 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       focus: opts.focus,
       observations: opts.observations,
       dryRun: opts.dryRun,
+      squad: opts.squad,
     });
     agentInfo = {
       costUsdCents: r.costUsdCents,

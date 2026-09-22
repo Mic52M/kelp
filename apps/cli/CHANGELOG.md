@@ -1,5 +1,47 @@
 # @kelp-security/cli — changelog
 
+## 0.11.0 — 2026-09-22
+
+Multi-specialist agent squad. When you pass `--squad`, `kelp scan --agent`
+splits into three focused specialists that run in parallel, each with its
+own budget slice and system prompt, and a reviewer pass verifies the
+merged findings before returning. This is behind a flag on purpose:
+single-loop is still the default while people try the squad in the wild.
+
+### Added
+
+- **`--squad`** (opt-in, beta). Runs three focused specialists in parallel:
+  - `secrets` (25% of the budget): hardcoded API keys, tokens, JWTs,
+    private keys, provider credentials.
+  - `auth-routes` (40% of the budget): Next.js `app/**/route.ts`,
+    `app/**/actions.ts`, and legacy `pages/api/**/*` handlers that
+    read or write without an auth check.
+  - `rls-edge` (35% of the budget): Supabase edge functions and
+    security-definer functions in classes the static analyzer can't
+    catch (client-trusted user ids, service-role literals inside edge
+    fns, open-proxy patterns, security-definer grants to anon).
+- **Reviewer pass** (10% reserve of the total budget, no LLM cost).
+  Reads each finding's cited file locally and drops any finding whose
+  `source_contains` substring isn't present. Belt-and-braces on top of
+  the per-specialist evidence gate.
+- **`AgentDriver` + `DriverFactory` interfaces** in `agent/loop.ts` so
+  the loop can be run with an injected driver. Enables full unit tests
+  of the squad without a real Anthropic key.
+- 5 new unit tests for the squad orchestrator, all offline via a mock
+  driver. Total CLI test count: 34.
+
+### Notes
+
+- Cost math: `--squad` respects the same `--depth` budget as single
+  loop. On `--depth standard` ($1 cap), each specialist gets ~$0.30 and
+  the reviewer reserve is $0.10.
+- Wall-clock: specialists run in `Promise.all`, so a squad run is close
+  to the runtime of the slowest specialist rather than the sum.
+- When a specialist crashes, the others keep going. The failure surfaces
+  on that specialist's outcome as `specialist-error: ...`.
+- Squad is off by default. When we have real-world data showing it beats
+  single loop consistently, it'll be promoted to default.
+
 ## 0.10.0 — 2026-09-21
 
 Static Supabase Storage ACL analyzer. Third pillar of the Supabase

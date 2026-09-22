@@ -10,9 +10,30 @@
 import type { SourceFile } from "@kelp/core";
 import { TOOLS, executeTool, type ExecuteContext } from "./tools.js";
 import { buildSystemPrompt, userBrief } from "./prompt.js";
-import { createDriver } from "./driver.js";
+import { createDriver, type DriverStep, type DriverToolResult, type DriverUsage } from "./driver.js";
 import { computeCostCents } from "./pricing.js";
 import type { AgentEvent, AgentFinding, Cost } from "./types.js";
+
+/** Provider-agnostic driver contract. Anthropic is the only implementation
+ *  today (`createDriver`), but the squad tests inject a mock through this
+ *  same shape, and the interface leaves the door open to other providers
+ *  without touching the loop. */
+export interface AgentDriver {
+  start(prompt: string): Promise<DriverStep>;
+  provideResults(results: DriverToolResult[]): Promise<DriverStep>;
+  getUsage(): DriverUsage;
+}
+
+/** Factory the loop uses to build its driver. Injectable so tests can
+ *  swap in a mock without patching module imports. */
+export type DriverFactory = (cfg: {
+  apiKey: string;
+  model: string;
+  system: string;
+  tools: typeof TOOLS;
+}) => AgentDriver;
+
+const defaultDriverFactory: DriverFactory = (cfg) => createDriver(cfg);
 
 export interface RunAgentInput {
   apiKey: string;
@@ -25,6 +46,13 @@ export interface RunAgentInput {
   onEvent: (e: AgentEvent) => void;
   /** Overrides the default system prompt — used by the depth/focus options. */
   systemPrompt?: string;
+  /** Injects a driver factory (real Anthropic client by default). The squad
+   *  tests use this to run the loop against a canned tool-call sequence
+   *  without touching the network or spending money. */
+  driverFactory?: DriverFactory;
+  /** Overrides the initial user-facing brief. Useful when a specialist
+   *  wants to say something more focused than "audit this repo". */
+  userPrompt?: string;
 }
 
 export interface RunAgentResult {
@@ -39,7 +67,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const maxIter = input.maxIterations ?? 24;
   const maxCost = input.maxCostCents ?? 100;
 
-  const driver = createDriver({
+  const factory = input.driverFactory ?? defaultDriverFactory;
+  const driver = factory({
     apiKey: input.apiKey,
     model: input.model,
     system: input.systemPrompt ?? buildSystemPrompt(),
@@ -66,7 +95,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     };
   };
 
-  let step = await driver.start(userBrief(input.target, input.files.length));
+  let step = await driver.start(input.userPrompt ?? userBrief(input.target, input.files.length));
   let iterations = 1;
 
   while (true) {

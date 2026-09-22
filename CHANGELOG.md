@@ -7,6 +7,12 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Multi-specialist agent squad** (v0.11.0 of the CLI, behind `--squad`).
+  `kelp scan --agent --squad` splits into three focused specialists that
+  run in parallel (`secrets`, `auth-routes`, `rls-edge`), each with its
+  own share of the budget, plus a local reviewer that re-verifies every
+  merged finding's `source_contains` against the file. Beta while we
+  gather comparison data against the single-loop path.
 - **Supabase Storage ACL analyzer** (v0.10.0 of the CLI). Reads
   `INSERT INTO storage.buckets` rows and `CREATE POLICY ON storage.objects`
   blocks from `supabase/migrations/*.sql`, runs three rules:

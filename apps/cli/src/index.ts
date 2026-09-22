@@ -13,7 +13,7 @@ import { loadConfig, suggestedConfigPath } from "./config.js";
 import { isDepth, type Depth } from "./agent/depth.js";
 import { setNoColorFlag } from "./ui/style.js";
 
-const VERSION = "0.10.0";
+const VERSION = "0.11.0";
 
 function usageTop(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps
@@ -46,6 +46,9 @@ OPTIONS
                              Narrows the agent to those classes only.
   --observations             Surface the agent's soft hints as a separate
                              section (not mixed with verified findings).
+  --squad                    Run --agent as a squad of focused specialists
+                             (secrets, auth-routes, rls-edge) in parallel
+                             with a reviewer pass. Beta in v0.11.0.
   --dry-run                  Show what would be scanned + estimated cost
                              without calling Anthropic.
   --report <file>            Write a full report to <file>. Extension picks
@@ -152,6 +155,7 @@ async function main(): Promise<void> {
     const dryRun = rest.includes("--dry-run");
     const staticOnly = rest.includes("--static-only");
     const noStatic = rest.includes("--no-static");
+    const squad = rest.includes("--squad");
 
     const sevIdx = rest.indexOf("--severity");
     const minSeverity = sevIdx >= 0 ? (rest[sevIdx + 1] ?? null) : null;
@@ -209,6 +213,7 @@ async function main(): Promise<void> {
       observations,
       dryRun,
       reportPath,
+      squad,
     });
     return;
   }
