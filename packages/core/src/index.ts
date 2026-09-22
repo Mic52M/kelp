@@ -7,6 +7,7 @@ export * from "./scanners/secrets.js";
 export * from "./scanners/rls.js";
 export * from "./scanners/rls-sql.js";
 export * from "./scanners/storage-acl.js";
+export * from "./scanners/nextjs-routes.js";
 export * from "./remediation/secret-pr.js";
 export * from "./remediation/secret-fix.js";
 export * from "./remediation/bola-report.js";

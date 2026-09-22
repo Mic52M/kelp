@@ -59,6 +59,10 @@ const REMEDIATION_EXACT: Record<string, string> = {
     "This storage policy filters by bucket but never references auth.uid(), owner, or auth.jwt(), so any authenticated user can read or write every other user's files in that bucket. Add an ownership check to the policy, for example (storage.foldername(name))[1] = auth.uid()::text, so each user only reaches their own objects.",
   storage_policy_permissive:
     "This storage policy is USING (true) or WITH CHECK (true) for a client-facing role, so any anon or authenticated caller reaches every object regardless of bucket or owner. Replace the blanket condition with an ownership or bucket scope tied to auth.uid(). If a bucket really is meant to be open, make that explicit rather than leaving a true policy in place.",
+  route_handler_no_auth:
+    "This route handler has no recognized auth check, so anyone on the internet can call it. Resolve the caller at the top of the handler (getUser, getSession, or your own requireUser helper) and return 401 when there is no session, before you read or write anything. If the route is meant to be public, keep it free of user data, or verify a webhook signature instead. This is a heuristic finding, so confirm it in context before treating it as a leak.",
+  server_action_no_auth:
+    "A \"use server\" action is a public POST endpoint: the framework exposes it to any caller, not just the form you wrote it for. Check the session inside the action and authorize the operation before trusting formData or any argument. Never derive the acting user from client-supplied input. This is a heuristic finding, so confirm the action really lacks a guard before acting on it.",
 };
 
 function remediationFor(ruleId: string): string {

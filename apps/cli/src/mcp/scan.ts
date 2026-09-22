@@ -18,6 +18,7 @@ import {
   parseSqlMigrations,
   analyzeDeep,
   analyzeStorageAcl,
+  analyzeNextjsRoutes,
   type SecretFinding,
   type DiscoveredEdgeFunction,
   type SourceFile,
@@ -52,6 +53,7 @@ export interface ScanSummary {
     edgeFnRecon: boolean;
     rlsSchema: boolean;
     storageAcl: boolean;
+    nextjsRoutes: boolean;
   };
   discoveredEdgeFunctions: DiscoveredEdgeFunction[];
   findings: McpFinding[];
@@ -127,6 +129,16 @@ function detectAll(
   const rlsFindings = snapshot ? analyzeDeep(snapshot) : [];
   const storageFindings = snapshot ? analyzeStorageAcl(snapshot) : [];
 
+  // Static Next.js route + server-action auth heuristic. Self-filters to
+  // route/pages-api/"use server" files, so it's cheap to run unconditionally.
+  const routeFindings = analyzeNextjsRoutes(files);
+  const hasRoutes = files.some(
+    (f) =>
+      /(?:^|\/)app\/(?:.*\/)?route\.[tj]sx?$/i.test(f.path) ||
+      /(?:^|\/)pages\/api\/.+\.[tj]sx?$/i.test(f.path) ||
+      (/\.[tj]sx?$/i.test(f.path) && /["']use server["']/.test(f.content)),
+  );
+
   const findings: McpFinding[] = [
     ...secrets.map<McpFinding>((f) => ({
       ruleId: f.ruleId,
@@ -175,6 +187,15 @@ function detectAll(
       line: 1,
       class: "rls",
     })),
+    ...routeFindings.map<McpFinding>((f) => ({
+      ruleId: f.issue,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line,
+      confidence: f.confidence,
+      class: "auth",
+    })),
   ];
 
   // Findings are already deterministic. Sort by severity so the LLM sees
@@ -196,6 +217,7 @@ function detectAll(
       edgeFnRecon: hasEdgeFns,
       rlsSchema: hasSchemaSql,
       storageAcl: hasSchemaSql,
+      nextjsRoutes: hasRoutes,
     },
     discoveredEdgeFunctions: edgeFns,
     findings,

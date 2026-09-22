@@ -15,9 +15,11 @@ import {
   parseSqlMigrations,
   analyzeDeep,
   analyzeStorageAcl,
+  analyzeNextjsRoutes,
   type SecretFinding,
   type DiscoveredEdgeFunction,
   type StorageAclFinding,
+  type NextjsRouteFinding,
   type Severity,
   type SourceFile,
 } from "@kelp/core";
@@ -70,7 +72,7 @@ export interface Finding {
   provider?: string;
   confidence?: "high" | "medium";
   clientSide?: boolean;
-  source: "secrets" | "supabase-config" | "rls-sql" | "storage-acl" | "agent";
+  source: "secrets" | "supabase-config" | "rls-sql" | "storage-acl" | "nextjs-routes" | "agent";
 }
 
 function isSeverity(v: string): v is Severity {
@@ -195,6 +197,24 @@ export async function runScan(opts: ScanOptions): Promise<void> {
     ? analyzeStorageAcl(schemaSnapshot)
     : [];
 
+  // Static analysis of Next.js route handlers + server actions. The scanner
+  // self-filters to app/**/route.* , pages/api/** , and "use server" files,
+  // so it's safe to run over the whole set; the applicable flag just tells
+  // the report whether the target even has routes to look at.
+  const hasRoutes =
+    runStatic &&
+    files.some(
+      (f) =>
+        /(?:^|\/)app\/(?:.*\/)?route\.[tj]sx?$/i.test(f.path) ||
+        /(?:^|\/)pages\/api\/.+\.[tj]sx?$/i.test(f.path) ||
+        (/\.[tj]sx?$/i.test(f.path) && /["']use server["']/.test(f.content)),
+    );
+  progress(
+    `running ROUTE-AUTH (static, Next.js route + server-action auth checks) — ${hasRoutes ? "applicable" : "n/a"}`,
+    opts.verbose,
+  );
+  const routeFindings: NextjsRouteFinding[] = runStatic ? analyzeNextjsRoutes(files) : [];
+
   // ── merge + filter + sort ───────────────────────────────────────────
   let findings: Finding[] = [
     ...secretFindings.map<Finding>((f) => ({
@@ -242,6 +262,16 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       line: 1,
       source: "storage-acl",
     })),
+    ...routeFindings.map<Finding>((f) => ({
+      fingerprint: f.fingerprint,
+      ruleId: f.issue,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line,
+      confidence: f.confidence,
+      source: "nextjs-routes",
+    })),
   ];
 
   if (opts.minSeverity) {
@@ -270,6 +300,8 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       hasSchemaSql,
       rlsDeepCount: rlsDeepFindings.length,
       storageCount: storageFindings.length,
+      hasRoutes,
+      routeCount: routeFindings.length,
       durationMs,
       findings,
     });
@@ -287,6 +319,7 @@ export async function runScan(opts: ScanOptions): Promise<void> {
         supabaseConfigApplicable: hasSupabaseConfig,
         edgeFnReconApplicable: hasEdgeFns,
         schemaSqlApplicable: hasSchemaSql,
+        routesApplicable: hasRoutes,
       },
       findings,
       edgeFns,
@@ -365,6 +398,8 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       hasSchemaSql,
       rlsDeepCount: rlsDeepFindings.length,
       storageCount: storageFindings.length,
+      hasRoutes,
+      routeCount: routeFindings.length,
       durationMs: durationMs + (agentInfo?.durationMs ?? 0),
       findings: merged,
       agent: agentInfo,
@@ -429,6 +464,8 @@ function emitJson(input: {
   hasSchemaSql: boolean;
   rlsDeepCount: number;
   storageCount: number;
+  hasRoutes: boolean;
+  routeCount: number;
   durationMs: number;
   findings: Finding[];
   agent?: { costUsdCents: number; iterations: number; durationMs: number; aborted: string | null } | null;
@@ -453,6 +490,7 @@ function emitJson(input: {
       },
       rlsSchema: { applicable: input.hasSchemaSql, findings: input.rlsDeepCount },
       storageAcl: { applicable: input.hasSchemaSql, findings: input.storageCount },
+      nextjsRoutes: { applicable: input.hasRoutes, findings: input.routeCount },
       agent: input.agent
         ? {
             ran: true,

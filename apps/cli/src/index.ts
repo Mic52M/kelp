@@ -13,7 +13,7 @@ import { loadConfig, suggestedConfigPath } from "./config.js";
 import { isDepth, type Depth } from "./agent/depth.js";
 import { setNoColorFlag } from "./ui/style.js";
 
-const VERSION = "0.12.0";
+const VERSION = "0.13.0";
 
 function usageTop(): void {
   process.stdout.write(`kelp — security scanner for vibe-coded apps

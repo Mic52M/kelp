@@ -7,6 +7,15 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Unauthenticated Next.js route + server-action detection** (v0.13.0 of
+  the CLI, issue #65). A static lexical analyzer over `app/**/route.ts`,
+  legacy `pages/api/**`, and `"use server"` files flags exported handlers
+  and actions that read or write with no recognized auth call. Two rules,
+  `route_handler_no_auth` and `server_action_no_auth`, both medium
+  confidence. Heuristic on purpose: mutations are flagged unconditionally,
+  reads only when the file touches a backend, and signature-verified
+  webhooks are treated as authenticated. Surfaced on `kelp scan` (new
+  `ROUTE-AUTH` check), `--json`, `--report`, and the MCP `auth` class.
 - **Static schema checks now run on `kelp scan`** (v0.12.0 of the CLI).
   The RLS and Storage ACL analyzers from 0.9.0 and 0.10.0 were only wired
   into the MCP surface, so the headline `kelp scan <path>` command silently

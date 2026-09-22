@@ -63,6 +63,15 @@ const STATIC: RuleGroup[] = [
       "storage_policy_permissive — USING (true) / WITH CHECK (true) for a client-facing role",
     ],
   },
+  {
+    id: "ROUTE-AUTH",
+    title: "Next.js route + server-action auth checks (heuristic, medium confidence)",
+    rules: [
+      "route_handler_no_auth — app/**/route.ts or pages/api/** handler with no auth call",
+      "server_action_no_auth — \"use server\" action reading formData with no auth call",
+      "Reads (GET) flagged only when the file touches a backend; webhooks with a verified signature are skipped",
+    ],
+  },
 ];
 
 const AGENT: RuleGroup[] = [

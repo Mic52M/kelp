@@ -90,6 +90,51 @@ test("kelp scan surfaces static RLS + storage findings from migrations", async (
   }
 });
 
+test("kelp scan surfaces unauthenticated Next.js route + action findings", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kelp-scan-routes-"));
+  try {
+    const routeDir = path.join(dir, "app", "api", "orders");
+    await fs.mkdir(routeDir, { recursive: true });
+    await fs.writeFile(
+      path.join(routeDir, "route.ts"),
+      `import { createClient } from "@/lib/supabase";
+       export async function POST(req: Request) {
+         const supabase = createClient();
+         await supabase.from("orders").insert(await req.json());
+         return Response.json({ ok: true });
+       }`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(dir, "app", "actions.ts"),
+      `"use server";
+       import { db } from "@/db";
+       export async function deleteAccount(formData: FormData) {
+         await db.delete("users", formData.get("id"));
+       }`,
+      "utf8",
+    );
+
+    const { code, json } = await runScanJson(dir);
+    assert.equal(code, 1);
+    assert.equal(json.checks.nextjsRoutes.applicable, true);
+    assert.ok(json.checks.nextjsRoutes.findings >= 2);
+
+    const bySource = json.findings.filter((f: any) => f.source === "nextjs-routes");
+    assert.ok(bySource.length >= 2, "route findings must reach the CLI output");
+    const rules = new Set(bySource.map((f: any) => f.ruleId));
+    assert.ok(rules.has("route_handler_no_auth"));
+    assert.ok(rules.has("server_action_no_auth"));
+    // Real file:line locations, not a synthetic schema pointer.
+    for (const f of bySource) {
+      assert.ok(f.line >= 1);
+      assert.ok(/\.(ts|tsx|js|jsx)$/.test(f.path));
+    }
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("kelp scan reports schema checks as n/a when there are no migrations", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kelp-scan-nomig-"));
   try {

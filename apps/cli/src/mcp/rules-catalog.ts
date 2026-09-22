@@ -273,6 +273,26 @@ export const RULES_CATALOG: RuleSpec[] = [
     why: "verify_jwt = false in supabase/config.toml disables the built-in JWT verification for that function, meaning it accepts any unauthenticated caller. Usually a mistake, sometimes a public-by-design function that then must gate on a shared secret in the handler.",
     remediation: "Set verify_jwt = true (or remove the override). If the function is intentionally public, gate it on a shared secret in the request headers and validate it at the top of the handler.",
   },
+
+  // Next.js route + server-action auth (nextjs-routes.ts). Heuristic.
+  {
+    id: "route_handler_no_auth",
+    title: "Next.js route handler has no auth check",
+    class: "auth",
+    severity: "medium",
+    availability: "static",
+    why: "An exported route handler (app/**/route.ts or a legacy pages/api/** default export) has no recognized authentication call anywhere in the file: no getUser/getSession, no requireUser helper, no verified webhook signature. Mutations (POST/PUT/PATCH/DELETE) reachable without a session let any caller write on behalf of anyone; an unauthenticated GET that touches a backend leaks other users' data. This is a heuristic: auth enforced only in middleware or an imported wrapper will read as a false positive, so treat it as a lead to confirm, not proof.",
+    remediation: "Resolve the caller at the top of the handler (getUser, getSession, or your own requireUser) and return 401 when there is no session, before reading or writing. If the route is intentionally public, keep it free of user data or verify a webhook signature.",
+  },
+  {
+    id: "server_action_no_auth",
+    title: "Next.js server action has no auth check",
+    class: "auth",
+    severity: "medium",
+    availability: "static",
+    why: "A \"use server\" action reads formData (or touches a backend) with no recognized authentication call. Server actions are public POST endpoints the framework exposes to any caller, not just the form they were written for, so an unauthenticated action lets anyone invoke the write with a crafted request. Heuristic, same caveat as route handlers.",
+    remediation: "Check the session inside the action and authorize the operation before trusting formData or any argument. Never derive the acting user from client-supplied input.",
+  },
 ];
 
 /** Lookup by id, returns undefined for unknown rules. */

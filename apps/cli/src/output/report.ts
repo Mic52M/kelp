@@ -27,6 +27,7 @@ interface RenderInput {
     supabaseConfigApplicable: boolean;
     edgeFnReconApplicable: boolean;
     schemaSqlApplicable: boolean;
+    routesApplicable: boolean;
   };
   findings: Finding[];
   edgeFns: DiscoveredEdgeFunction[];
@@ -98,6 +99,16 @@ export function renderReport(input: RenderInput): void {
     checks.schemaSqlApplicable,
     rlsStorageCount,
     checks.schemaSqlApplicable ? null : "no SQL migrations in target",
+  );
+  const routeCount = checks.routesApplicable
+    ? findings.filter((f) => f.source === "nextjs-routes").length
+    : null;
+  writeCheckRow(
+    "ROUTE-AUTH",
+    "Next.js route + server-action auth checks (heuristic)",
+    checks.routesApplicable,
+    routeCount,
+    checks.routesApplicable ? null : "no app/ routes or pages/api in target",
   );
   out.write(`\n`);
 

@@ -1,5 +1,51 @@
 # @kelp-security/cli — changelog
 
+## 0.13.0 — 2026-09-22
+
+Static detection for unauthenticated Next.js route handlers and server
+actions (issue #65). The SQL analyzer reads Supabase RLS, but the leak
+often lives one layer up: an `app/api/orders/route.ts` that writes the DB
+with no `auth.getUser()`, a `pages/api/*` handler that trusts the client,
+a `"use server"` action that reads `formData` and mutates without checking
+who is calling. This catches those from source alone, no live target.
+
+This is a heuristic and every finding is `confidence: medium`. There is no
+type information and auth can be enforced a dozen ways (middleware, a
+wrapper, a helper in another file), so the analyzer errs toward silence:
+if a file has any recognized auth signal, none of its handlers are flagged.
+
+### Added
+
+- **`route_handler_no_auth`** (medium for mutations, low for reads).
+  Fires on an exported `GET`/`POST`/`PUT`/`PATCH`/`DELETE` handler in
+  `app/**/route.ts` (or a legacy `pages/api/**` default export) when the
+  file has no auth call anywhere. Mutations are flagged unconditionally;
+  a `GET` is flagged only when the file also touches a backend, so public
+  health and echo routes stay quiet.
+- **`server_action_no_auth`** (medium). Fires on a `"use server"` exported
+  action that reads `formData` (or touches a backend) with no auth call.
+  Server actions are public POST endpoints, so this is the same exposure
+  as an open route.
+- Webhooks verified by signature (Stripe `constructEvent`, svix, an HMAC
+  over `x-hub-signature`, `timingSafeEqual`) count as authenticated and
+  are not flagged.
+- `kelp scan` surfaces these in the normal report (new `ROUTE-AUTH` row in
+  CHECKS), `--json` (`checks.nextjsRoutes`), and written reports, with
+  targeted remediation copy per rule.
+- MCP `scan_path` / `scan_snippet` return them under the `auth` class, and
+  `list_rules` / `explain_rule` carry the specs.
+- 14 new core tests (VULN/CONTROL per branch plus noise-suppression cases)
+  and 1 CLI integration test that spawns the CLI over a route fixture.
+  Core scanner tests: 78. CLI tests: 37.
+
+### Notes
+
+- No new dependency. The analyzer is a lexical pass, not a full AST parse,
+  to keep the bundle small and match the heuristic confidence level. The
+  trade-off is documented at the top of `nextjs-routes.ts`: auth enforced
+  only in middleware or an imported wrapper reads as a false negative, by
+  design, because a false positive on every route is worse.
+
 ## 0.12.0 — 2026-09-22
 
 The static RLS and Storage ACL analyzers now run on the headline
