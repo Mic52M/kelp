@@ -7,6 +7,14 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Static schema checks now run on `kelp scan`** (v0.12.0 of the CLI).
+  The RLS and Storage ACL analyzers from 0.9.0 and 0.10.0 were only wired
+  into the MCP surface, so the headline `kelp scan <path>` command silently
+  dropped all six checks. They now surface in the normal report, `--json`,
+  and `--report` output, with a `RLS-DEEP` row in CHECKS and per-rule
+  remediation copy in the written report. Same migration parse, no extra
+  cost. Guarded by two integration tests that spawn the CLI so the wiring
+  can't regress to MCP-only again.
 - **Multi-specialist agent squad** (v0.11.0 of the CLI, behind `--squad`).
   `kelp scan --agent --squad` splits into three focused specialists that
   run in parallel (`secrets`, `auth-routes`, `rls-edge`), each with its

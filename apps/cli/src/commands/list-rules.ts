@@ -45,6 +45,24 @@ const STATIC: RuleGroup[] = [
       "Extract body / query params (best-effort)",
     ],
   },
+  {
+    id: "RLS-DEEP",
+    title: "Static RLS analysis over supabase/migrations/*.sql",
+    rules: [
+      "fk_leak_to_unprotected — RLS table whose foreign key points at a table with no RLS",
+      "command_scope_gap — policy covers some commands but leaves INSERT/UPDATE/DELETE open",
+      "view_bypasses_rls — view over a protected table created without security_invoker = true",
+    ],
+  },
+  {
+    id: "STORAGE",
+    title: "Static Supabase Storage ACL over migrations",
+    rules: [
+      "storage_public_bucket — bucket created with public = true",
+      "storage_policy_missing_user_scope — objects policy with no auth.uid()/owner check",
+      "storage_policy_permissive — USING (true) / WITH CHECK (true) for a client-facing role",
+    ],
+  },
 ];
 
 const AGENT: RuleGroup[] = [
@@ -65,9 +83,10 @@ const AGENT: RuleGroup[] = [
 
 const LIVE_ONLY: RuleGroup[] = [
   {
-    id: "RLS-002",
-    title: "Row-Level Security (hosted app only — needs a live Supabase project)",
+    id: "RLS-002 (live)",
+    title: "Row-Level Security live probe (hosted app only — needs a live Supabase project)",
     rules: [
+      "Confirms at runtime what the static RLS-DEEP checks flag from migrations",
       "Missing RLS on user-facing tables",
       "Permissive policies (open to anon)",
       "Ownership-column heuristics (user_id / owner_id / created_by)",

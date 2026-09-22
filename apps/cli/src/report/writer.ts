@@ -47,6 +47,18 @@ const REMEDIATION_EXACT: Record<string, string> = {
     "Rotate the JWT-issuing secret. Any token minted with the exposed key is untrusted. Move signing keys out of source and behind a server-only env var.",
   "high-entropy-string":
     "This looks like a secret by entropy — inspect it. If it is a credential, rotate at the provider and move to an env var. If it is a legitimate hash or nonce, add it to your ignore list.",
+  fk_leak_to_unprotected:
+    "This table has RLS but a foreign key points at a table that does not. A caller who cannot read the protected rows directly can still reach the referenced data through the join. Enable RLS on the referenced table and add a policy that scopes rows to the owner, so the FK stops being a side door.",
+  command_scope_gap:
+    "There is a policy for some commands but not all of them. A SELECT-only policy leaves INSERT, UPDATE, or DELETE wide open (or fully denied) depending on the defaults. Add an explicit policy for every command the table needs, each scoped to auth.uid(), instead of relying on one that only covers reads.",
+  view_bypasses_rls:
+    "This view reads a table protected by RLS but was created without security_invoker = true, so it runs with the view owner's rights and returns every row regardless of who calls it. Recreate the view with security_invoker = true so RLS on the base table applies to the caller.",
+  storage_public_bucket:
+    "This bucket is public, so every object in it is served over the CDN with no auth and guessable paths are enough to read a file. If it holds user documents, avatars, or attachments, make the bucket private and serve files through signed URLs. Keep public only for assets you would put on a landing page.",
+  storage_policy_missing_user_scope:
+    "This storage policy filters by bucket but never references auth.uid(), owner, or auth.jwt(), so any authenticated user can read or write every other user's files in that bucket. Add an ownership check to the policy, for example (storage.foldername(name))[1] = auth.uid()::text, so each user only reaches their own objects.",
+  storage_policy_permissive:
+    "This storage policy is USING (true) or WITH CHECK (true) for a client-facing role, so any anon or authenticated caller reaches every object regardless of bucket or owner. Replace the blanket condition with an ownership or bucket scope tied to auth.uid(). If a bucket really is meant to be open, make that explicit rather than leaving a true policy in place.",
 };
 
 function remediationFor(ruleId: string): string {

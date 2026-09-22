@@ -12,8 +12,12 @@ import {
   detectSecrets,
   shouldScanPath,
   discoverEdgeFunctions,
+  parseSqlMigrations,
+  analyzeDeep,
+  analyzeStorageAcl,
   type SecretFinding,
   type DiscoveredEdgeFunction,
+  type StorageAclFinding,
   type Severity,
   type SourceFile,
 } from "@kelp/core";
@@ -66,7 +70,7 @@ export interface Finding {
   provider?: string;
   confidence?: "high" | "medium";
   clientSide?: boolean;
-  source: "secrets" | "supabase-config" | "agent";
+  source: "secrets" | "supabase-config" | "rls-sql" | "storage-acl" | "agent";
 }
 
 function isSeverity(v: string): v is Severity {
@@ -164,6 +168,33 @@ export async function runScan(opts: ScanOptions): Promise<void> {
     ? discoverEdgeFunctions(files)
     : [];
 
+  // Static RLS + Storage ACL analysis over the repo's SQL migrations. Both
+  // share one parse of supabase/migrations/*.sql, so it's a single cost.
+  // The parser returns an empty snapshot on repos without migrations, so we
+  // gate on a cheap path check first to keep the CHECKS output honest
+  // (applicable vs n/a) rather than always claiming to have run.
+  const hasSchemaSql =
+    runStatic &&
+    files.some(
+      (f) =>
+        /\.sql$/i.test(f.path) &&
+        (/(?:^|\/)supabase\//i.test(f.path) || /(?:^|\/)migrations\//i.test(f.path)),
+    );
+  progress(
+    `running RLS-DEEP + STORAGE (static, over supabase/migrations/*.sql) — ${hasSchemaSql ? "applicable" : "n/a"}`,
+    opts.verbose,
+  );
+  const schemaSnapshot = hasSchemaSql ? parseSqlMigrations(files) : null;
+  // analyzeDeep returns the base RLS findings and the three deep graph checks
+  // as one union; both carry issue/schema/table/severity, which is all the
+  // mapping below needs.
+  const rlsDeepFindings: ReturnType<typeof analyzeDeep> = schemaSnapshot
+    ? analyzeDeep(schemaSnapshot)
+    : [];
+  const storageFindings: StorageAclFinding[] = schemaSnapshot
+    ? analyzeStorageAcl(schemaSnapshot)
+    : [];
+
   // ── merge + filter + sort ───────────────────────────────────────────
   let findings: Finding[] = [
     ...secretFindings.map<Finding>((f) => ({
@@ -187,6 +218,29 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       path: f.path,
       line: f.line,
       source: "supabase-config",
+    })),
+    // Schema-level findings have no file:line — they live in the graph the
+    // migrations describe. We surface the schema object as the location
+    // (schema.table for RLS, the bucket/objects target for storage) so the
+    // report still points somewhere actionable.
+    ...rlsDeepFindings.map<Finding>((f) => ({
+      fingerprint: f.fingerprint,
+      ruleId: f.issue,
+      title: f.title,
+      severity: f.severity,
+      path: `${f.schema}.${f.table}`,
+      line: 1,
+      confidence: "medium" as const,
+      source: "rls-sql",
+    })),
+    ...storageFindings.map<Finding>((f) => ({
+      fingerprint: f.fingerprint,
+      ruleId: f.issue,
+      title: f.title,
+      severity: f.severity,
+      path: f.bucketId ? `storage.buckets/${f.bucketId}` : "storage.objects",
+      line: 1,
+      source: "storage-acl",
     })),
   ];
 
@@ -213,6 +267,9 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       verifyJwtCount: verifyJwtFindings.length,
       hasEdgeFns,
       edgeFns,
+      hasSchemaSql,
+      rlsDeepCount: rlsDeepFindings.length,
+      storageCount: storageFindings.length,
       durationMs,
       findings,
     });
@@ -229,6 +286,7 @@ export async function runScan(opts: ScanOptions): Promise<void> {
         secretsApplicable: true,
         supabaseConfigApplicable: hasSupabaseConfig,
         edgeFnReconApplicable: hasEdgeFns,
+        schemaSqlApplicable: hasSchemaSql,
       },
       findings,
       edgeFns,
@@ -304,6 +362,9 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       verifyJwtCount: verifyJwtFindings.length,
       hasEdgeFns,
       edgeFns,
+      hasSchemaSql,
+      rlsDeepCount: rlsDeepFindings.length,
+      storageCount: storageFindings.length,
       durationMs: durationMs + (agentInfo?.durationMs ?? 0),
       findings: merged,
       agent: agentInfo,
@@ -365,6 +426,9 @@ function emitJson(input: {
   verifyJwtCount: number;
   hasEdgeFns: boolean;
   edgeFns: DiscoveredEdgeFunction[];
+  hasSchemaSql: boolean;
+  rlsDeepCount: number;
+  storageCount: number;
   durationMs: number;
   findings: Finding[];
   agent?: { costUsdCents: number; iterations: number; durationMs: number; aborted: string | null } | null;
@@ -387,6 +451,8 @@ function emitJson(input: {
         discovered: input.edgeFns.length,
         mutating: input.edgeFns.filter((e) => e.mutating).length,
       },
+      rlsSchema: { applicable: input.hasSchemaSql, findings: input.rlsDeepCount },
+      storageAcl: { applicable: input.hasSchemaSql, findings: input.storageCount },
       agent: input.agent
         ? {
             ran: true,

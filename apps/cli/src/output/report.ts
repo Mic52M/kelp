@@ -26,6 +26,7 @@ interface RenderInput {
     secretsApplicable: boolean;
     supabaseConfigApplicable: boolean;
     edgeFnReconApplicable: boolean;
+    schemaSqlApplicable: boolean;
   };
   findings: Finding[];
   edgeFns: DiscoveredEdgeFunction[];
@@ -87,6 +88,16 @@ export function renderReport(input: RenderInput): void {
     checks.edgeFnReconApplicable
       ? `${edgeFns.length} functions · ${edgeMutating} mutating`
       : "no supabase/functions/ in target",
+  );
+  const rlsStorageCount = checks.schemaSqlApplicable
+    ? findings.filter((f) => f.source === "rls-sql" || f.source === "storage-acl").length
+    : null;
+  writeCheckRow(
+    "RLS-DEEP",
+    "RLS + storage ACL over supabase/migrations/*.sql",
+    checks.schemaSqlApplicable,
+    rlsStorageCount,
+    checks.schemaSqlApplicable ? null : "no SQL migrations in target",
   );
   out.write(`\n`);
 

@@ -1,5 +1,47 @@
 # @kelp-security/cli — changelog
 
+## 0.12.0 — 2026-09-22
+
+The static RLS and Storage ACL analyzers now run on the headline
+`kelp scan <path>` command, not just the MCP surface. They shipped in
+0.9.0 and 0.10.0 but for two releases only the MCP tools called them, so
+`kelp scan` silently dropped six checks it was fully capable of running.
+This closes that gap. Same parse of `supabase/migrations/*.sql`, no extra
+cost, no new dependency.
+
+### Added
+
+- `kelp scan` now surfaces the six static schema checks in its normal
+  output, JSON (`--json`), and written reports (`--report`):
+  - RLS: `fk_leak_to_unprotected`, `command_scope_gap`, `view_bypasses_rls`.
+  - Storage: `storage_public_bucket`, `storage_policy_missing_user_scope`,
+    `storage_policy_permissive`.
+- New `RLS-DEEP` row in the CHECKS section of the report, with the same
+  applicable / n/a treatment as the other checks (n/a when the target has
+  no SQL migrations).
+- JSON output gained `checks.rlsSchema` and `checks.storageAcl` blocks,
+  each with `applicable` and a finding count.
+- Targeted remediation copy for all six rule ids in the HTML / Markdown
+  report writer, instead of the generic fallback hint.
+- Two integration tests that spawn the CLI over a fixture migration and
+  assert the schema findings reach the JSON output, so the wiring can't
+  rot back to MCP-only again. Total CLI test count: 36.
+
+### Changed
+
+- `kelp list-rules` moves RLS out of the "hosted app only" section. It
+  now lists `RLS-DEEP` and `STORAGE` as static checks that run today, and
+  keeps the live probe under a clearer "confirms at runtime what the
+  static checks flag" label.
+- `kelp explain` describes the SQL analyzer as part of the static engine.
+
+### Notes
+
+- Schema findings have no file:line, so the location is the schema object
+  they live in: `schema.table` for RLS, `storage.buckets/<id>` or
+  `storage.objects` for storage. RLS deep findings are marked
+  `confidence: medium`.
+
 ## 0.11.0 — 2026-09-22
 
 Multi-specialist agent squad. When you pass `--squad`, `kelp scan --agent`
