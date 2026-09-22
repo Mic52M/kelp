@@ -56,6 +56,54 @@ test("runFreeScan detects Firebase and phrases accordingly", () => {
   assert.ok(s.notes.some((n) => n.toLowerCase().includes("firebase")));
 });
 
+test("runFreeScan flags a public Firebase rule (not just detects the backend)", () => {
+  const files: SourceFile[] = [
+    file("firebase.json", '{"firestore":{"rules":"firestore.rules"}}'),
+    file(
+      "firestore.rules",
+      `service cloud.firestore {
+         match /databases/{db}/documents {
+           match /posts/{id} { allow read, write: if true; }
+         }
+       }`,
+    ),
+  ];
+  const s = runFreeScan({ repoUrl: "https://github.com/x/y", files });
+  const fb = s.findings.filter((f) => f.raw && (f.raw as any).issue === "firebase_rule_public");
+  assert.ok(fb.length >= 1, "the free scan must now flag the public rule, not just note the backend");
+  assert.equal(fb[0]!.severity, "critical");
+  assert.ok(s.ranScanners.includes("firebase_rules"));
+});
+
+test("runFreeScan surfaces a public Storage bucket from migrations", () => {
+  const files: SourceFile[] = [
+    file(
+      "supabase/migrations/0001.sql",
+      `insert into storage.buckets (id, name, public) values ('docs','docs', true);`,
+    ),
+  ];
+  const s = runFreeScan({ repoUrl: "https://github.com/x/y", files });
+  assert.ok(
+    s.findings.some((f) => f.raw && (f.raw as any).issue === "storage_public_bucket"),
+    "expected the public storage bucket to be flagged",
+  );
+  assert.ok(s.ranScanners.includes("storage_acl"));
+});
+
+test("runFreeScan flags an unauthenticated Next.js route handler", () => {
+  const files: SourceFile[] = [
+    file(
+      "app/api/orders/route.ts",
+      `import { db } from "@/db";
+       export async function POST(req: Request) { await db.insert("orders", await req.json()); return Response.json({}); }`,
+    ),
+  ];
+  const s = runFreeScan({ repoUrl: "https://github.com/x/y", files });
+  const routes = s.findings.filter((f) => f.vulnClass === "auth");
+  assert.ok(routes.length >= 1, "expected a route-auth finding");
+  assert.ok(s.ranScanners.includes("route_auth"));
+});
+
 test("runFreeScan surfaces the cap-reached signal", () => {
   const files: SourceFile[] = [file("README.md", "# hi")];
   const s = runFreeScan({ repoUrl: "https://github.com/x/y", files, capReached: true });

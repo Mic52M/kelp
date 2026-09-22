@@ -2,9 +2,11 @@
 //
 // Positioning invariant (see docs/HANDOFF.md §2 + issue #32): the free scan is
 // the top-of-funnel — zero friction, real value, cheap. It is NOT the full
-// engine. V1 runs only the deterministic passive scanners (secrets + RLS-from-
-// repo). No LLM cost, no test accounts required, no consent gate needed (no
-// active probing). V2 will slot in an autonomous agent (repo-only mode) once
+// engine. It runs only the deterministic passive scanners, no LLM cost, no test
+// accounts, no consent gate (no active probing). The passive set has grown with
+// the CLI: secrets, RLS-from-repo (base + the three deep graph checks), Storage
+// ACL, the Next.js route/server-action auth heuristic, and Firebase Firestore/
+// Storage rules. V2 will slot in an autonomous agent (repo-only mode) once
 // `buildAutonomousCampaign` is refactored to allow no-live-probe operation.
 //
 // The `runFreeScan` contract is intentionally narrow: it takes source files
@@ -14,9 +16,22 @@
 
 import { detectSecrets, type SourceFile } from "./scanners/secrets.js";
 import { analyzeRls, type SchemaSnapshot, type TableInfo } from "./scanners/rls.js";
+import { parseSqlMigrations, analyzeDeep } from "./scanners/rls-sql.js";
+import { analyzeStorageAcl } from "./scanners/storage-acl.js";
+import { analyzeNextjsRoutes } from "./scanners/nextjs-routes.js";
+import { analyzeFirebaseRules } from "./scanners/firebase-rules.js";
 import { detectSupabaseConfig, parseRepoSchema } from "./agent/repo-recon.js";
 import type { DetectedFinding } from "./orchestrator.js";
 import type { Severity } from "./types.js";
+
+// The three graph-level RLS checks that analyzeDeep adds on top of the base
+// analyzeRls findings. We keep only these from analyzeDeep so the base RLS
+// findings (already produced by analyzeRls above) are not double-reported.
+const DEEP_RLS_ISSUES = new Set([
+  "fk_leak_to_unprotected",
+  "command_scope_gap",
+  "view_bypasses_rls",
+]);
 
 /**
  * Detect a Firebase-shaped repo (Firebase Studio, or hand-rolled). Deliberately
@@ -58,7 +73,14 @@ export interface FreeScanSummary {
   /** Breakdown by severity for the /r/<slug> masthead. */
   counts: Record<Severity, number>;
   /** Which sub-scanners actually contributed (audit trail). */
-  ranScanners: ("secret" | "rls_from_repo")[];
+  ranScanners: (
+    | "secret"
+    | "rls_from_repo"
+    | "rls_deep"
+    | "storage_acl"
+    | "route_auth"
+    | "firebase_rules"
+  )[];
   /** Notes (info the UI wants to show — e.g. "RLS skipped: no schema in repo"). */
   notes: string[];
   /** Which backend Kelp thinks this repo runs on (see BackendDetected). */
@@ -140,7 +162,7 @@ export function runFreeScan(input: FreeScanInput): FreeScanSummary {
 
   if (backendDetected === "firebase") {
     notes.push(
-      "Firebase project detected. Kelp's Firebase adapter is on the roadmap — for now only the secret scan applies.",
+      "Firebase project detected. Kelp scans your Firestore and Storage security rules for public access and missing owner checks, plus the generic secret scan.",
     );
   } else if (backendDetected === "none") {
     notes.push(
@@ -203,6 +225,85 @@ export function runFreeScan(input: FreeScanInput): FreeScanSummary {
     }
   } catch (e) {
     notes.push(`RLS-from-repo failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Deep RLS graph checks + Storage ACL, over the same SQL migration parse.
+  // These are additive: analyzeRls above covers the base RLS findings, so we
+  // keep only the three graph-level deep issues here to avoid double-counting.
+  try {
+    const deepSnap = parseSqlMigrations(input.files);
+    const deep = analyzeDeep(deepSnap).filter((f) => DEEP_RLS_ISSUES.has(f.issue));
+    for (const r of deep) {
+      findings.push({
+        vulnClass: "rls",
+        severity: r.severity,
+        fingerprint: r.fingerprint,
+        title: r.title,
+        explanation: r.explanation,
+        location: `${r.schema}.${r.table}`,
+        fixable: false,
+        raw: r as unknown as Record<string, unknown>,
+      });
+    }
+    if (deep.length > 0) ranScanners.push("rls_deep");
+
+    const storage = analyzeStorageAcl(deepSnap);
+    for (const s of storage) {
+      findings.push({
+        vulnClass: "rls",
+        severity: s.severity,
+        fingerprint: s.fingerprint,
+        title: s.title,
+        explanation: s.explanation,
+        location: s.bucketId ? `storage.buckets/${s.bucketId}` : "storage.objects",
+        fixable: false,
+        raw: s as unknown as Record<string, unknown>,
+      });
+    }
+    if (storage.length > 0) ranScanners.push("storage_acl");
+  } catch (e) {
+    notes.push(`deep RLS / storage scan failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Next.js route + server-action auth heuristic (backend-agnostic).
+  try {
+    const routes = analyzeNextjsRoutes(input.files);
+    for (const r of routes) {
+      findings.push({
+        vulnClass: "auth",
+        severity: r.severity,
+        fingerprint: r.fingerprint,
+        title: r.title,
+        explanation: r.explanation,
+        location: `${r.path}:${r.line}`,
+        fixable: false,
+        raw: r as unknown as Record<string, unknown>,
+      });
+    }
+    if (routes.length > 0) ranScanners.push("route_auth");
+  } catch (e) {
+    notes.push(`route-auth scan failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Firebase Security Rules (Firestore + Storage). Self-filters to *.rules,
+  // so it is a no-op on Supabase-only repos.
+  try {
+    const fb = analyzeFirebaseRules(input.files);
+    for (const r of fb) {
+      findings.push({
+        vulnClass: "rls",
+        severity: r.severity,
+        fingerprint: r.fingerprint,
+        title: r.title,
+        explanation: r.explanation,
+        location: `${r.path}:${r.line}`,
+        fixable: false,
+        raw: r as unknown as Record<string, unknown>,
+      });
+    }
+    if (fb.length > 0) ranScanners.push("firebase_rules");
+  } catch (e) {
+    notes.push(`Firebase rules scan failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   findings.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);

@@ -7,6 +7,15 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Free scan (kelp.build) now runs the full static scanner set.** The
+  landing-page scan was still limited to secrets + base RLS, so it missed
+  everything shipped since: the three deep RLS graph checks, Storage ACL,
+  the Next.js route/server-action auth heuristic, and Firebase Firestore/
+  Storage rules. All four now run in `runFreeScan`, additively (base RLS
+  behavior unchanged, no double-counting). A Firebase repo hitting the free
+  scanner now gets its rule misconfigurations flagged instead of a "Firebase
+  is on the roadmap" note, which closes the loop opened by the v0.14.0
+  Firebase adapter and makes the funnel report what the CLI already sees.
 - **Firebase backend support** (v0.14.0 of the CLI, issue #38). Kelp reads
   Firebase Security Rules (`firestore.rules` / `storage.rules`) from the
   repo and flags three misconfigurations: `firebase_rule_public`
