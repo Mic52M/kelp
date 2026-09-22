@@ -13,6 +13,7 @@ export {
   type AdapterRegistrationError,
 } from "./backend-adapter.js";
 export { supabaseAdapter, SUPABASE_TYPE } from "./supabase.js";
+export { firebaseAdapter, FIREBASE_TYPE } from "./firebase.js";
 export { defaultBackendRegistry } from "./registry.js";
 export {
   reconRepoViaRegistry,

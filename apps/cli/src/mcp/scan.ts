@@ -19,6 +19,7 @@ import {
   analyzeDeep,
   analyzeStorageAcl,
   analyzeNextjsRoutes,
+  analyzeFirebaseRules,
   type SecretFinding,
   type DiscoveredEdgeFunction,
   type SourceFile,
@@ -54,6 +55,7 @@ export interface ScanSummary {
     rlsSchema: boolean;
     storageAcl: boolean;
     nextjsRoutes: boolean;
+    firebaseRules: boolean;
   };
   discoveredEdgeFunctions: DiscoveredEdgeFunction[];
   findings: McpFinding[];
@@ -139,6 +141,11 @@ function detectAll(
       (/\.[tj]sx?$/i.test(f.path) && /["']use server["']/.test(f.content)),
   );
 
+  // Static Firebase Security Rules (Firestore + Storage). Self-filters to
+  // *.rules files.
+  const firebaseFindings = analyzeFirebaseRules(files);
+  const hasRulesFiles = files.some((f) => /\.rules$/i.test(f.path));
+
   const findings: McpFinding[] = [
     ...secrets.map<McpFinding>((f) => ({
       ruleId: f.ruleId,
@@ -196,6 +203,15 @@ function detectAll(
       confidence: f.confidence,
       class: "auth",
     })),
+    ...firebaseFindings.map<McpFinding>((f) => ({
+      ruleId: f.issue,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line,
+      confidence: f.confidence,
+      class: "rls",
+    })),
   ];
 
   // Findings are already deterministic. Sort by severity so the LLM sees
@@ -218,6 +234,7 @@ function detectAll(
       rlsSchema: hasSchemaSql,
       storageAcl: hasSchemaSql,
       nextjsRoutes: hasRoutes,
+      firebaseRules: hasRulesFiles,
     },
     discoveredEdgeFunctions: edgeFns,
     findings,

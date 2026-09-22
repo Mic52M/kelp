@@ -72,6 +72,15 @@ const STATIC: RuleGroup[] = [
       "Reads (GET) flagged only when the file touches a backend; webhooks with a verified signature are skipped",
     ],
   },
+  {
+    id: "FIREBASE",
+    title: "Firebase Firestore + Storage security rules (.rules files)",
+    rules: [
+      "firebase_rule_public — allow ...: if true (open to the internet)",
+      "firebase_rule_unauthenticated_write — a write with no request.auth check",
+      "firebase_rule_write_no_owner — a signed-in write with no owner binding (request.auth.uid)",
+    ],
+  },
 ];
 
 const AGENT: RuleGroup[] = [

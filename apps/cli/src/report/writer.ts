@@ -63,6 +63,12 @@ const REMEDIATION_EXACT: Record<string, string> = {
     "This route handler has no recognized auth check, so anyone on the internet can call it. Resolve the caller at the top of the handler (getUser, getSession, or your own requireUser helper) and return 401 when there is no session, before you read or write anything. If the route is meant to be public, keep it free of user data, or verify a webhook signature instead. This is a heuristic finding, so confirm it in context before treating it as a leak.",
   server_action_no_auth:
     "A \"use server\" action is a public POST endpoint: the framework exposes it to any caller, not just the form you wrote it for. Check the session inside the action and authorize the operation before trusting formData or any argument. Never derive the acting user from client-supplied input. This is a heuristic finding, so confirm the action really lacks a guard before acting on it.",
+  firebase_rule_public:
+    "This rule is `allow ...: if true`, so the path is open to the entire internet with no authentication. If it grants a write, anyone can overwrite or delete every document in it; if it is a read, anyone can dump the collection. Gate it on `request.auth != null` and, for user data, bind it to the owner (`request.auth.uid == userId`). If the data really is meant to be public, keep it read-only and scoped to exactly that path.",
+  firebase_rule_unauthenticated_write:
+    "This rule allows a write without ever checking `request.auth`, so an unauthenticated caller can write as long as the other conditions pass. Require `request.auth != null` and tie the write to the document owner before trusting any field. Validation rules on the payload are not a substitute for authentication.",
+  firebase_rule_write_no_owner:
+    "This rule requires the caller to be signed in but never binds the write to the document owner, so any authenticated user can overwrite anyone else's data. Add an ownership check: `request.auth.uid == userId` against the path variable, or a `resource.data` owner field. In Firestore the convention is a document per user keyed by uid, or an `ownerId` field compared to `request.auth.uid`.",
 };
 
 function remediationFor(ruleId: string): string {

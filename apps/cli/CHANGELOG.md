@@ -1,5 +1,53 @@
 # @kelp-security/cli — changelog
 
+## 0.14.0 — 2026-09-22
+
+Firebase support. Kelp now understands a second backend: alongside the
+Supabase static engine, it reads Firebase Security Rules (Firestore +
+Cloud Storage) straight from the repo and flags the misconfigurations
+vibe-coded Firebase apps reliably ship. This is the first adapter built on
+the `BackendAdapter` seam from #45, and it validates that the interface
+holds for a backend that gates data with a `.rules` DSL instead of Postgres
+RLS.
+
+### Added
+
+- **Firebase Security Rules analyzer** over `firestore.rules` /
+  `storage.rules`, three rules:
+  - **`firebase_rule_public`** (critical for writes, high for reads).
+    `allow ...: if true` — the path is open to the internet.
+  - **`firebase_rule_unauthenticated_write`** (high). A write whose
+    condition never references `request.auth`.
+  - **`firebase_rule_write_no_owner`** (high). A signed-in write with no
+    binding to the document owner, so any authenticated user overwrites
+    anyone's data. The Firebase version of an RLS policy that checks the
+    JWT exists but not `auth.uid()`.
+- **`firebaseAdapter`**, the second `BackendAdapter`. `detectFromRepo`
+  (firebase.json / .firebaserc / *.rules / firebase SDK import),
+  `parseSchema` (collections + allow rules out of firestore.rules),
+  `discoverFunctions` (v1 and v2 Cloud Functions under `functions/`),
+  and `analyzeAuth` (delegated to the shared auth-model helper). Registered
+  in the default registry after Supabase, so a Supabase repo still resolves
+  to Supabase.
+- `kelp scan` surfaces the rule findings in the normal report (new
+  `FIREBASE` check row), `--json` (`checks.firebaseRules`), and written
+  reports with per-rule remediation. MCP `scan_path` / `scan_snippet`
+  return them under the `rls` class, and `list_rules` / `explain_rule`
+  carry the specs.
+- 11 core rule tests (VULN/CONTROL per rule plus opaque-helper and
+  service-detection cases), 9 adapter tests, and 1 CLI integration test.
+  Core scanner + adapter tests: 117. CLI tests: 38.
+
+### Notes
+
+- The rules analyzer is a lexical evaluator, not a full rules interpreter.
+  The rules language has user-defined `function` helpers it can't follow,
+  so a condition that calls one is treated as guarded and only the
+  unambiguous `if true` is flagged through it. `firebase_rule_public` is
+  `confidence: high`; the other two are `confidence: medium`.
+- Firestore is schemaless, so the adapter's `parseSchema` reports the
+  collection paths the rules mention rather than a column graph.
+
 ## 0.13.0 — 2026-09-22
 
 Static detection for unauthenticated Next.js route handlers and server

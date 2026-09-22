@@ -28,6 +28,7 @@ interface RenderInput {
     edgeFnReconApplicable: boolean;
     schemaSqlApplicable: boolean;
     routesApplicable: boolean;
+    firebaseRulesApplicable: boolean;
   };
   findings: Finding[];
   edgeFns: DiscoveredEdgeFunction[];
@@ -109,6 +110,16 @@ export function renderReport(input: RenderInput): void {
     checks.routesApplicable,
     routeCount,
     checks.routesApplicable ? null : "no app/ routes or pages/api in target",
+  );
+  const firebaseCount = checks.firebaseRulesApplicable
+    ? findings.filter((f) => f.source === "firebase-rules").length
+    : null;
+  writeCheckRow(
+    "FIREBASE",
+    "Firebase Firestore + Storage security rules",
+    checks.firebaseRulesApplicable,
+    firebaseCount,
+    checks.firebaseRulesApplicable ? null : "no .rules files in target",
   );
   out.write(`\n`);
 

@@ -135,6 +135,42 @@ test("kelp scan surfaces unauthenticated Next.js route + action findings", async
   }
 });
 
+test("kelp scan surfaces Firebase security-rule findings", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kelp-scan-fb-"));
+  try {
+    await fs.writeFile(
+      path.join(dir, "firebase.json"),
+      `{ "firestore": { "rules": "firestore.rules" } }`,
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(dir, "firestore.rules"),
+      `service cloud.firestore {
+         match /databases/{database}/documents {
+           match /posts/{id} { allow read, write: if true; }
+           match /users/{userId} { allow write: if request.auth.uid == userId; }
+         }
+       }`,
+      "utf8",
+    );
+
+    const { code, json } = await runScanJson(dir);
+    assert.equal(code, 1);
+    assert.equal(json.checks.firebaseRules.applicable, true);
+    assert.ok(json.checks.firebaseRules.findings >= 1);
+
+    const fb = json.findings.filter((f: any) => f.source === "firebase-rules");
+    assert.ok(fb.length >= 1, "firebase findings must reach the CLI output");
+    const publicRule = fb.find((f: any) => f.ruleId === "firebase_rule_public");
+    assert.ok(publicRule, "the if-true rule must be flagged");
+    assert.equal(publicRule.severity, "critical");
+    // The owner-scoped write on /users must NOT be flagged.
+    assert.ok(!fb.some((f: any) => f.title.includes("/users/")));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("kelp scan reports schema checks as n/a when there are no migrations", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kelp-scan-nomig-"));
   try {

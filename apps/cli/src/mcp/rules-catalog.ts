@@ -293,6 +293,35 @@ export const RULES_CATALOG: RuleSpec[] = [
     why: "A \"use server\" action reads formData (or touches a backend) with no recognized authentication call. Server actions are public POST endpoints the framework exposes to any caller, not just the form they were written for, so an unauthenticated action lets anyone invoke the write with a crafted request. Heuristic, same caveat as route handlers.",
     remediation: "Check the session inside the action and authorize the operation before trusting formData or any argument. Never derive the acting user from client-supplied input.",
   },
+
+  // Firebase Security Rules (firebase-rules.ts). Firestore + Storage.
+  {
+    id: "firebase_rule_public",
+    title: "Firebase rule is public (allow ...: if true)",
+    class: "rls",
+    severity: "critical",
+    availability: "static",
+    why: "A Firestore or Storage security rule uses `allow ...: if true`, so the collection or bucket path is open to the entire internet with no authentication. Critical when it grants a write (anyone can overwrite or delete every document in the path), high when it is a public read (anyone can dump the collection). This is the Firebase equivalent of a `USING (true)` RLS policy.",
+    remediation: "Gate the rule on `request.auth != null` and, for user data, bind it to the owner: `request.auth.uid == userId`. If the data is intentionally public, keep it read-only and scoped to exactly that path.",
+  },
+  {
+    id: "firebase_rule_unauthenticated_write",
+    title: "Firebase write rule requires no authentication",
+    class: "rls",
+    severity: "high",
+    availability: "static",
+    why: "A Firestore/Storage rule allows a write (write/create/update/delete) with a condition that never references `request.auth`, so an unauthenticated caller can write as long as the non-auth constraints pass. Payload validation is not authentication.",
+    remediation: "Require `request.auth != null` and tie the write to the document owner (`request.auth.uid`) before trusting any field.",
+  },
+  {
+    id: "firebase_rule_write_no_owner",
+    title: "Firebase write rule has no owner binding",
+    class: "rls",
+    severity: "high",
+    availability: "static",
+    why: "A rule requires the caller to be signed in but never binds the write to the document owner, so any authenticated user can overwrite anyone else's data. The Firebase version of an RLS policy that checks the JWT exists but not `auth.uid()`. Heuristic: rules that delegate to a user-defined `function()` helper are treated as guarded and not flagged.",
+    remediation: "Add an ownership check: `request.auth.uid == userId` against the path variable, or compare a `resource.data` owner field to `request.auth.uid`.",
+  },
 ];
 
 /** Lookup by id, returns undefined for unknown rules. */

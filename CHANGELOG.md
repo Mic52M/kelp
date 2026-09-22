@@ -7,6 +7,16 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Firebase backend support** (v0.14.0 of the CLI, issue #38). Kelp reads
+  Firebase Security Rules (`firestore.rules` / `storage.rules`) from the
+  repo and flags three misconfigurations: `firebase_rule_public`
+  (`allow ...: if true`), `firebase_rule_unauthenticated_write` (a write
+  with no `request.auth` check), and `firebase_rule_write_no_owner` (a
+  signed-in write with no owner binding). Ships `firebaseAdapter`, the
+  second `BackendAdapter` on the #45 seam, registered after Supabase.
+  Surfaced on `kelp scan` (new `FIREBASE` check), `--json`, `--report`,
+  and the MCP surface. Lexical evaluator that treats rules delegating to a
+  user-defined `function()` as guarded, to keep false positives down.
 - **Unauthenticated Next.js route + server-action detection** (v0.13.0 of
   the CLI, issue #65). A static lexical analyzer over `app/**/route.ts`,
   legacy `pages/api/**`, and `"use server"` files flags exported handlers

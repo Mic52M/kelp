@@ -8,8 +8,13 @@
 
 import { BackendAdapterRegistry } from "./backend-adapter.js";
 import { supabaseAdapter } from "./supabase.js";
+import { firebaseAdapter } from "./firebase.js";
 
-/** The process-wide default registry. Supabase is registered at load time. */
+/** The process-wide default registry. Supabase + Firebase at load time.
+ *  Registration order is detection order (see `detect`): Supabase first
+ *  because its sniff is the more specific (config URL + ref); Firebase's
+ *  markers are broader (an SDK import alone counts), so it runs second. */
 export const defaultBackendRegistry = new BackendAdapterRegistry();
 
 defaultBackendRegistry.register(supabaseAdapter);
+defaultBackendRegistry.register(firebaseAdapter);
