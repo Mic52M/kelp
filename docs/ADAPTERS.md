@@ -1,62 +1,69 @@
 # Backend adapters
 
-Kelp scans one backend today (Supabase). This document is the north star for
-extending Kelp to other backends without letting the codebase drift.
+Kelp scans two backends today (Supabase and Firebase) behind an explicit
+`BackendAdapter` seam. This document is the model for adding more without
+letting the codebase drift.
 
 ## Why the seam matters
 
-Vibe-code tools ship on more than Supabase. Lovable, Bolt, Cursor, v0, and
-Replit each let you pick from a small menu of managed backends —
-Supabase most commonly, then Firebase, then Convex, then a long tail
-(PocketBase, Neon, Xano, Bubble, Airtable). If Kelp is "the security tool for
-vibe-coded apps", it has to at some point cover more than one.
+Vibe-code tools ship on more than one backend. They each let you pick from a
+small menu of managed backends: Supabase most commonly, then Firebase, then
+Convex, then a long tail (PocketBase, Neon, Xano, Bubble, Airtable). A security
+tool for vibe-coded apps has to cover more than one.
 
-But we should NOT rush that. Every adapter is a fresh attack surface to
-learn and a new SDK to keep working. So this repo has a plan and a priority
-order, and adapters land only when we're ready to commit to maintaining them.
+But we do not rush it. Every adapter is a fresh attack surface to learn and a
+new SDK to keep working, so the repo has a priority order and adapters land only
+when we are ready to commit to maintaining them.
 
-## Today's shape (v0.1)
+## Today's shape
 
-Kelp is **Supabase-only**. Detection code in `packages/core/src/agent/` and
-`packages/worker/src/scan-processor.ts` presupposes Supabase structure:
+The `BackendAdapter` interface ([issue #45](https://github.com/Mic52M/kelp/issues/45))
+has landed, and two adapters implement it:
 
-- `packages/core/src/agent/repo-recon.ts` — `detectSupabaseConfig`,
-  `parseRepoSchema` (from `types.ts` + migrations)
-- `packages/worker/src/agent/pentest-toolbox.ts` — hits Supabase PostgREST
-  and edge-fn URLs
-- Findings vocabulary — `verify_jwt`, RLS, `service_role`, edge functions
+- `packages/core/src/adapters/supabase.ts` — config + schema from
+  `supabase/migrations` and `types.ts`, edge functions, RLS.
+- `packages/core/src/adapters/firebase.ts` — detection from `firebase.json` /
+  `.firebaserc` / `*.rules` / a firebase SDK import, collections and allow
+  rules from `firestore.rules`, Cloud Functions under `functions/`.
 
-That's the reality. The docs shouldn't pretend otherwise.
+The registry (`packages/core/src/adapters/registry.ts`) registers Supabase
+first, then Firebase, and picks the first adapter that recognizes a repo, so a
+Supabase repo still resolves to Supabase. The live-probe pentest path in
+`apps/worker/` is still Supabase-shaped; Firebase is static-rules-only for now,
+with live probing over the Firebase Admin SDK as the follow-up.
 
-## Where we're going — the `BackendAdapter` interface
+## The `BackendAdapter` interface
 
-Tracked as [issue #45](https://github.com/Mic52M/kelp/issues/45). Rough shape:
+The four operations every backend detection needs:
 
 ```ts
 export interface BackendAdapter {
-  readonly kind: BackendKind; // "supabase" | "firebase" | ...
+  readonly type: string; // "supabase" | "firebase" | ...
 
-  /** Given the connected repo, does this adapter recognize the backend? */
-  detect(files: readonly SourceFile[]): DetectionResult | null;
+  /** Does this repo look like it uses this backend? Null when it doesn't. */
+  detectFromRepo(files: readonly SourceFile[]): BackendMeta | null;
 
-  /** Read schema/config/policies from the repo alone. */
-  parseRepoState(files: readonly SourceFile[]): BackendRepoState;
+  /** Recover the table/collection graph from the repo's source. */
+  parseSchema(files: readonly SourceFile[]): TableIntel[];
 
-  /** Optional live-read: adapter-specific credentials → live state. */
-  readLiveState?(creds: unknown): Promise<BackendLiveState>;
+  /** Discover the deployable surface (edge / cloud functions). */
+  discoverFunctions(files: readonly SourceFile[]): DiscoveredEdgeFunction[];
 
-  /** The scanner set applicable to this adapter. */
-  scanners: readonly Scanner[];
-
-  /** Adapter-specific active probes (unauth requests, etc.). */
-  activeProbes?: readonly ActiveProbe[];
+  /** Static analysis of the app's auth model (cookie vs bearer, ...). */
+  analyzeAuth(files: readonly SourceFile[]): AuthModel;
 }
 ```
 
-Once #45 lands, `packages/core/src/adapters/supabase.ts` will contain all the
-Supabase-specific logic, and `packages/core/src/agent/` will only talk to
-`BackendAdapter`. Anything that today reaches into `detectSupabaseConfig`
-directly is refactoring debt against #45.
+All four are mandatory; the registry rejects a partial adapter at registration
+time, not at first scan. Each adapter's backend-specific logic stays inside its
+own module (`adapters/supabase.ts`, `adapters/firebase.ts`); anything that
+reaches into `detectSupabaseConfig` directly from outside an adapter is
+refactoring debt against the seam.
+
+The static rule findings themselves live in `packages/core/src/scanners/`
+(for example `rls-sql.ts`, `storage-acl.ts`, `firebase-rules.ts`,
+`nextjs-routes.ts`) and are wired into the CLI, the MCP server, and the
+landing-page free scan.
 
 ## Priority order
 
@@ -65,10 +72,12 @@ Not every backend is worth an adapter. In descending order:
 ### Tier 1 — build now
 
 - **Supabase** ✅ shipped.
-- **Firebase** ([issue #38](https://github.com/Mic52M/kelp/issues/38)) — the
-  second-most-common vibe-code backend. Different threat surface (Firestore
-  security rules instead of RLS, callable functions instead of PostgREST,
-  Auth instead of Supabase Auth) — real adapter work, not a config swap.
+- **Firebase** ✅ shipped ([issue #38](https://github.com/Mic52M/kelp/issues/38),
+  CLI v0.14.0). Static Firestore + Storage security-rules analysis
+  (`firebase-rules.ts`) plus the `firebaseAdapter`. A different threat surface
+  from Supabase: security rules instead of RLS, callable functions instead of
+  PostgREST, Firebase Auth instead of Supabase Auth. Live probing over the
+  Firebase Admin SDK is the remaining follow-up.
 
 ### Tier 2 — build when a paying customer asks
 
@@ -87,10 +96,12 @@ Not every backend is worth an adapter. In descending order:
 
 ## The trigger to open the next adapter issue
 
-Not a hunch — a measurable signal. When five or more submissions in a week
-to the free-scan surface show `backend_report.primary.type` = "firebase"
-(via the PostHog `free_scan.completed` funnel), that's the trigger. Same for
-Convex or any other Tier 2.
+Not a hunch, a measurable signal. When five or more submissions in a week to
+the free-scan surface show `backend_report.primary.type` = "convex" (via the
+PostHog `free_scan.completed` funnel), that is the trigger to open the Convex
+adapter. Same for any other Tier 2. Firebase repos are already scanned
+statically, so that signal now feeds prioritizing live Firebase probing rather
+than opening the adapter.
 
 The point is that adapters are user-demand-driven, not roadmap-driven.
 
@@ -100,23 +111,29 @@ If you want to add an adapter (and you've read the above), open an issue with
 the [`vulnerability_class`](../.github/ISSUE_TEMPLATE/vulnerability_class.yml)
 template before code. Once we align on the shape:
 
-1. `packages/core/src/adapters/<kind>.ts` — implements `BackendAdapter`.
-2. `packages/core/src/adapters/<kind>.test.ts` — at minimum, one
-   `detect` fixture, one `parseRepoState` fixture, one full-scan fixture.
-3. Documentation — a section in this file listing what the adapter covers
+1. `packages/core/src/adapters/<kind>.ts` — implements `BackendAdapter`
+   (`detectFromRepo`, `parseSchema`, `discoverFunctions`, `analyzeAuth`), and
+   registers in `adapters/registry.ts`.
+2. `packages/core/src/adapters/<kind>.test.ts` — at minimum a `detectFromRepo`
+   fixture, a `parseSchema` fixture, and a registry-integration fixture.
+3. The detection payload as a scanner in `packages/core/src/scanners/`, with
+   VULN/CONTROL test pairs, wired into the CLI, the MCP server, and the free
+   scan (Firebase did this with `firebase-rules.ts`).
+4. Documentation — a section in this file listing what the adapter covers
    and what it doesn't.
-4. A demo repo you or Kelp can point at, so the end-to-end works.
+5. A demo repo you or Kelp can point at, so the end-to-end works.
 
 No new dependency inside `packages/core` unless it's essential.
 
 ## Don't do this
 
 - **Don't import from Supabase-specific modules outside
-  `packages/core/src/adapters/supabase.ts` once #45 lands.** Grep should show
-  that boundary is respected.
-- **Don't ship an adapter that doesn't reach live state**. Repo-only recon is
-  fine for a first cut, but an adapter without at least one active probe
-  isn't earning its keep.
+  `packages/core/src/adapters/supabase.ts`.** Grep should show that boundary
+  is respected now that the seam has landed.
+- **Static repo-only analysis is a valid first cut**, but live probing is the
+  goal. Firebase shipped static-rules-only on purpose; the follow-up is live
+  probing over the Firebase Admin SDK. An adapter that will never reach live
+  state (no path to an active probe) isn't earning its keep long term.
 - **Don't add an adapter for a vibe-code tool with no fix-back-to-source
   loop.** Kelp's value proposition depends on the finding leading to a fix
   the user can paste back into the tool that built the app. Airtable and

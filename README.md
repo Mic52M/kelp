@@ -20,10 +20,12 @@ RLS, unauthenticated edge functions — and gates them out of your pull requests
 
 ## What it does
 
-Kelp scans an app's **backend surface** — Supabase (managed backends included),
-edge functions, RLS policies, source tree — the way an attacker would. Every
-finding is **evidence-gated**: a reviewer re-runs the reproduction before it
-lands in your report, so what you see is what an attacker would actually get.
+Kelp scans an app's **backend surface** the way an attacker would: Supabase
+(RLS policies, storage ACLs, edge functions) and Firebase (Firestore and
+Storage security rules), plus the Next.js route layer in front of them and the
+whole source tree. Every finding is **evidence-gated**: a reviewer re-runs the
+reproduction before it lands in your report, so what you see is what an attacker
+would actually get.
 
 Four surfaces, one detection engine:
 
@@ -45,13 +47,15 @@ npx @kelp-security/cli scan ./my-app
 ```
 
 ```
-kelp v0.1.0  ·  scanning ./my-app  ·  214 files walked
+kelp v0.14.0  ·  scanning ./my-app  ·  214 files walked
 
-CRITICAL  src/lib/db.ts:14   VITE_SERVICE_ROLE — Supabase service_role JWT
-HIGH      src/api/orders.ts  hardcoded Stripe secret (sk_live_…)
-MEDIUM    supabase/config.toml  verify_jwt=false on get-order
+CRITICAL  src/lib/db.ts:14        VITE_SERVICE_ROLE — Supabase service_role JWT
+CRITICAL  firestore.rules:9       /posts is public (allow read, write: if true)
+HIGH      src/api/orders.ts       hardcoded Stripe secret (sk_live_…)
+HIGH      app/api/orders/route.ts POST handler has no auth check
+MEDIUM    supabase/config.toml    verify_jwt=false on get-order
 
-3 findings · 8s · report at ./kelp-report.json
+5 findings · 8s · report at ./kelp-report.json
 ```
 
 Add `--json` for machine-readable output, `--severity high` to filter, or see
@@ -114,17 +118,27 @@ and required-status-check setup.
 
 ## What Kelp checks today
 
+Everything above the BOLA row is static, offline, and free: no API key, no
+live target, no setup. Run it in CI on every PR.
+
 | Class | How | Output |
 |---|---|---|
-| **Secrets** in source | Provider patterns (AWS/GCP/Stripe/Supabase/…) + entropy fallback | Masked preview + line + severity |
-| **Supabase RLS** | Reads schema + policies, flags tables open to `anon` | Proposed migration snippet |
-| **Edge functions** | Replays without a JWT to detect `verify_jwt=false` | Function name + reproduction curl |
+| **Secrets** in source | Provider patterns (AWS/GCP/Stripe/Supabase/GitHub/OpenAI/Anthropic/…) + entropy fallback | Masked preview + line + severity |
+| **Supabase RLS** | Parses `supabase/migrations/*.sql` into a schema graph: tables open to `anon`, FK leaks to unprotected tables, command-scope gaps, views that bypass RLS | Rule id + affected table |
+| **Supabase Storage** | Public buckets, and `storage.objects` policies with no owner check or a blanket `true` | Rule id + bucket or policy |
+| **Firebase rules** | Reads `firestore.rules` / `storage.rules`: `allow ...: if true`, unauthenticated writes, writes with no owner binding | Rule id + rule path + line |
+| **Next.js routes + actions** | Heuristic over `app/**/route.ts`, `pages/api/**`, and `"use server"` files that read or write with no auth call | File + line + severity |
+| **Edge functions** | `verify_jwt=false` in `supabase/config.toml`, plus recon of the deployable surface | Function name + reproduction |
 | **CORS + auth flows** | Reads config + auth callbacks for permissive defaults | Config diff |
 | **BOLA** (opt-in, hosted only) | Active test with two user-provided test accounts | Human-review only, never auto-fix |
 
+An optional agent pass (`--agent`, needs `ANTHROPIC_API_KEY`) layers an
+autonomous auditor on top of the static set. See [docs/CLI.md](docs/CLI.md).
+
 New detections land in [packages/core/src/scanners/](packages/core/src/scanners/).
-See [docs/ADAPTERS.md](docs/ADAPTERS.md) for extending Kelp to other backends
-(Firebase, Convex, PocketBase — see the [north-star issue](https://github.com/Mic52M/kelp/issues/45)).
+Kelp reads two backends today, Supabase and Firebase, behind a `BackendAdapter`
+seam. See [docs/ADAPTERS.md](docs/ADAPTERS.md) for the adapter model and what
+comes next (Convex, PocketBase, and the [north-star issue](https://github.com/Mic52M/kelp/issues/45)).
 
 ## Architecture
 
@@ -132,11 +146,12 @@ Monorepo (npm workspaces). Three surfaces share one engine:
 
 ```
 apps/
-├─ web/           Next.js — hosted app at kelp.build
-└─ cli/           kelp binary — standalone Node CLI
+├─ web/           Next.js, hosted app at kelp.build
+├─ cli/           kelp binary, standalone Node CLI + MCP server
+├─ worker/        scan pipeline + integrations (GitHub, Supabase, queue)
+└─ test-target/   deliberately-vulnerable fixtures for verification
 packages/
 ├─ core/          detection engine (pure, no I/O)
-├─ worker/        scan pipeline + integrations (GitHub, Supabase, queue)
 └─ db/            SQL migrations
 ```
 

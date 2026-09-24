@@ -51,7 +51,7 @@ The layering is strict. Nothing above ever imports from a layer below it.
   Postgres, or hitting the Anthropic API directly. Anything I/O-shaped
   belongs a layer up.
 
-### `packages/worker` — scan pipeline + integrations
+### `apps/worker` — scan pipeline + integrations
 
 - **Contract**: side-effectful runners that use `@kelp/core`. Own the
   connectors and the queue.
@@ -146,7 +146,10 @@ how it's implemented in `packages/core/src/agent/`.
 | I want to… | Look at |
 |---|---|
 | Add a new secret pattern | [`packages/core/src/scanners/secrets.ts`](../packages/core/src/scanners/secrets.ts) |
-| Change how RLS is analyzed | [`packages/core/src/scanners/rls.ts`](../packages/core/src/scanners/rls.ts) |
+| Change how RLS is analyzed | [`packages/core/src/scanners/rls.ts`](../packages/core/src/scanners/rls.ts) (live) + [`rls-sql.ts`](../packages/core/src/scanners/rls-sql.ts) (static, from migrations) |
+| Change Storage / Next.js route / Firebase rule checks | [`storage-acl.ts`](../packages/core/src/scanners/storage-acl.ts), [`nextjs-routes.ts`](../packages/core/src/scanners/nextjs-routes.ts), [`firebase-rules.ts`](../packages/core/src/scanners/firebase-rules.ts) |
+| Add a backend adapter | [`packages/core/src/adapters/`](../packages/core/src/adapters/) (see [ADAPTERS.md](ADAPTERS.md)) |
+| Wire a new static scanner into every surface | CLI `apps/cli/src/commands/scan.ts` + `mcp/scan.ts`, and `packages/core/src/free-scan.ts` |
 | Add a new active-pentest specialist | [`packages/core/src/agent/`](../packages/core/src/agent/) |
 | Change the GitHub App install flow | [`apps/web/app/api/auth/callback/`](../apps/web/app/api/auth/callback/) + [`apps/web/app/api/github/setup/`](../apps/web/app/api/github/setup/) |
 | Change how PR comments are rendered | [`apps/worker/src/pr-check-comment.ts`](../apps/worker/src/pr-check-comment.ts) |

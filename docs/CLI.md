@@ -130,6 +130,29 @@ filter (`shouldScanPath` in `@kelp/core`): lockfiles, sourcemaps, and
 - **RECON — Edge function discovery** (informational). Enumerates
   `supabase/functions/*/index.ts`, classifies mutating vs non-mutating.
   No finding filed; hosted app probes the live URLs.
+- **RLS-DEEP — Static RLS over `supabase/migrations/*.sql`.** Parses the
+  migrations into a schema graph (tables, columns, policies, foreign keys,
+  grants, views) and runs the base RLS checks plus three graph-level ones:
+  `fk_leak_to_unprotected` (a protected table with a foreign key to an
+  unprotected one), `command_scope_gap` (a policy covers SELECT but not the
+  writes a grant still allows), and `view_bypasses_rls` (a view over a
+  protected table created without `security_invoker = true`).
+- **STORAGE — Supabase Storage ACL.** Over the same migration parse:
+  `storage_public_bucket` (a bucket created with `public = true`),
+  `storage_policy_missing_user_scope` (an `storage.objects` policy with no
+  `auth.uid()` / owner check), and `storage_policy_permissive`
+  (`USING (true)` / `WITH CHECK (true)` for a client-facing role).
+- **ROUTE-AUTH — Next.js route + server-action auth** (heuristic, medium
+  confidence). Flags exported handlers in `app/**/route.ts` and legacy
+  `pages/api/**`, and `"use server"` actions, that read or write with no
+  recognized auth call. Mutations are flagged unconditionally; reads only
+  when the file touches a backend; signature-verified webhooks are skipped.
+- **FIREBASE — Firestore + Storage security rules.** Reads `firestore.rules`
+  and `storage.rules`: `firebase_rule_public` (`allow ...: if true`),
+  `firebase_rule_unauthenticated_write` (a write with no `request.auth`
+  check), and `firebase_rule_write_no_owner` (a signed-in write with no
+  owner binding). Rules that delegate to a user-defined `function()` helper
+  are treated as guarded, so only the unambiguous `if true` fires through them.
 
 ### Agent-driven scan (opt-in, needs `ANTHROPIC_API_KEY`)
 
@@ -156,11 +179,22 @@ Full list at any time: `kelp list-rules`.
 
 ```json
 {
-  "version": 1,
-  "tool": { "name": "kelp", "version": "0.1.0" },
+  "version": 2,
+  "tool": { "name": "kelp", "version": "0.14.0" },
   "target": "/absolute/path/to/scanned/dir",
-  "scannedAt": "2026-08-31T16:06:12.175Z",
+  "scannedAt": "2026-09-24T16:06:12.175Z",
   "filesScanned": 214,
+  "filesSkipped": { "oversize": 0, "unreadable": 0 },
+  "checks": {
+    "secrets": { "applicable": true, "findings": 1 },
+    "supabaseConfigVerifyJwt": { "applicable": true, "findings": 0 },
+    "edgeFnRecon": { "applicable": false, "discovered": 0, "mutating": 0 },
+    "rlsSchema": { "applicable": true, "findings": 2 },
+    "storageAcl": { "applicable": true, "findings": 1 },
+    "nextjsRoutes": { "applicable": true, "findings": 1 },
+    "firebaseRules": { "applicable": false, "findings": 0 },
+    "agent": { "ran": false }
+  },
   "durationMs": 42,
   "findings": [
     {
@@ -173,11 +207,18 @@ Full list at any time: `kelp list-rules`.
       "line": 2,
       "preview": "sk_l…KLLL",
       "clientSide": false,
-      "confidence": "high"
+      "confidence": "high",
+      "source": "secrets"
     }
   ]
 }
 ```
+
+Each finding carries a `source` (`secrets`, `supabase-config`, `rls-sql`,
+`storage-acl`, `nextjs-routes`, `firebase-rules`, or `agent`) so downstream
+tools can tell which check produced it. Schema-level findings (RLS, storage)
+use the schema object as `path` (e.g. `public.orders`, `storage.buckets/docs`)
+with `line: 1`.
 
 `fingerprint` is stable across scans for the same finding at the same
 location — the hosted app uses it for dedup, and downstream tools can too.
