@@ -90,6 +90,20 @@ test("runFreeScan surfaces a public Storage bucket from migrations", () => {
   assert.ok(s.ranScanners.includes("storage_acl"));
 });
 
+test("runFreeScan flags a service_role key exposed via NEXT_PUBLIC_", () => {
+  const files: SourceFile[] = [
+    file(
+      "src/lib/supabase.ts",
+      `export const admin = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!);`,
+    ),
+  ];
+  const s = runFreeScan({ repoUrl: "https://github.com/x/y", files });
+  const exposure = s.findings.filter((f) => f.vulnClass === "exposure");
+  assert.ok(exposure.length >= 1, "expected a client-exposure finding");
+  assert.equal(exposure[0]!.severity, "critical");
+  assert.ok(s.ranScanners.includes("client_env"));
+});
+
 test("runFreeScan flags an unauthenticated Next.js route handler", () => {
   const files: SourceFile[] = [
     file(

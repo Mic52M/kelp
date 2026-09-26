@@ -1,5 +1,43 @@
 # @kelp-security/cli — changelog
 
+## 0.15.0 — 2026-09-26
+
+Detection for backend secrets exposed to the browser through a public
+env-var prefix. This is the single most catastrophic Supabase footgun in
+vibe-coded apps: a `service_role` key named `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY`
+(or the `VITE_...SERVICE_ROLE...` shape) gets inlined into the client bundle,
+ships to every visitor, and bypasses Row Level Security entirely, giving
+anyone full read/write on the whole database.
+
+### Added
+
+- **`client_exposed_secret`** (critical / high). Flags a var named with a
+  public build-tool prefix (`NEXT_PUBLIC_`, `VITE_`, `REACT_APP_`,
+  `EXPO_PUBLIC_`, `NUXT_PUBLIC_`, `GATSBY_`, `NG_APP_`, `PUBLIC_`) that also
+  carries a backend-secret name: `SERVICE_ROLE`, `SERVICE_KEY`, `PRIVATE_KEY`,
+  `SECRET_KEY`, `PASSWORD` (critical), or a trailing `_SECRET` / `PRIVATE` /
+  `ADMIN_*` credential (high). Catches the reference by naming convention even
+  when the value lives only in the deploy environment, which the literal
+  secret scanner cannot see.
+- Anon and publishable keys are public by design, so `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, a Firebase `apiKey`, and OAuth client
+  ids are explicitly excluded.
+- Surfaced on `kelp scan` (new `CLIENT-ENV` check row), `--json`
+  (`checks.clientEnv`), and written reports with remediation. MCP returns it
+  under the `secret` class, and `list_rules` / `explain_rule` carry the spec.
+- Wired into the landing-page free scan (funnel) under the `exposure` class.
+- 11 core rule tests (VULN/CONTROL per tier plus precision cases: anon,
+  publishable, bare API keys, and feature-flag-shaped names stay quiet) and
+  1 CLI integration test. Core tests: 363. CLI tests: 39.
+
+### Notes
+
+- High precision by construction: the prefix has a defined framework meaning
+  and the dangerous suffixes are matched as whole segments, so
+  `NEXT_PUBLIC_SECRET_SANTA_ENABLED` does not fire. The generic trailing
+  `_SECRET` tier is `confidence: medium`; `SERVICE_ROLE` and friends are
+  `confidence: high`.
+
 ## 0.14.0 — 2026-09-22
 
 Firebase support. Kelp now understands a second backend: alongside the

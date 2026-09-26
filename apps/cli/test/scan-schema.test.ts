@@ -171,6 +171,32 @@ test("kelp scan surfaces Firebase security-rule findings", async () => {
   }
 });
 
+test("kelp scan flags a service_role key exposed via a public env prefix", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kelp-scan-clientenv-"));
+  try {
+    const libDir = path.join(dir, "src", "lib");
+    await fs.mkdir(libDir, { recursive: true });
+    await fs.writeFile(
+      path.join(libDir, "supabase.ts"),
+      `import { createClient } from "@supabase/supabase-js";
+       export const admin = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!);`,
+      "utf8",
+    );
+
+    const { code, json } = await runScanJson(dir);
+    assert.equal(code, 1);
+    assert.equal(json.checks.clientEnv.applicable, true);
+    assert.ok(json.checks.clientEnv.findings >= 1);
+
+    const ce = json.findings.filter((f: any) => f.source === "client-env");
+    assert.ok(ce.length >= 1, "client-env finding must reach the CLI output");
+    assert.equal(ce[0]!.ruleId, "client_exposed_secret");
+    assert.equal(ce[0]!.severity, "critical");
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("kelp scan reports schema checks as n/a when there are no migrations", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kelp-scan-nomig-"));
   try {

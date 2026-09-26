@@ -322,6 +322,17 @@ export const RULES_CATALOG: RuleSpec[] = [
     why: "A rule requires the caller to be signed in but never binds the write to the document owner, so any authenticated user can overwrite anyone else's data. The Firebase version of an RLS policy that checks the JWT exists but not `auth.uid()`. Heuristic: rules that delegate to a user-defined `function()` helper are treated as guarded and not flagged.",
     remediation: "Add an ownership check: `request.auth.uid == userId` against the path variable, or compare a `resource.data` owner field to `request.auth.uid`.",
   },
+
+  // Client-exposed backend secrets (client-env.ts).
+  {
+    id: "client_exposed_secret",
+    title: "Backend secret exposed to the browser via a public env prefix",
+    class: "secret",
+    severity: "critical",
+    availability: "static",
+    why: "A var named with a public prefix (NEXT_PUBLIC_, VITE_, REACT_APP_, EXPO_PUBLIC_, and friends) is inlined into the client bundle by the build tool, so its value ships to every visitor. When the name is a backend secret (SERVICE_ROLE, SECRET_KEY, PRIVATE_KEY, PASSWORD), that secret is readable by anyone. A Supabase service_role key exposed this way bypasses Row Level Security entirely: full read/write on the whole database from the browser. Anon and publishable keys are public by design and are not flagged.",
+    remediation: "Move the value to a server-only variable (drop the public prefix) and use it only in server code, then rotate the key. If it is genuinely public, rename it so it does not read as a secret.",
+  },
 ];
 
 /** Lookup by id, returns undefined for unknown rules. */

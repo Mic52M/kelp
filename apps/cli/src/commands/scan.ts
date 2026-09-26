@@ -17,11 +17,13 @@ import {
   analyzeStorageAcl,
   analyzeNextjsRoutes,
   analyzeFirebaseRules,
+  analyzeClientEnv,
   type SecretFinding,
   type DiscoveredEdgeFunction,
   type StorageAclFinding,
   type NextjsRouteFinding,
   type FirebaseRuleFinding,
+  type ClientEnvFinding,
   type Severity,
   type SourceFile,
 } from "@kelp/core";
@@ -81,6 +83,7 @@ export interface Finding {
     | "storage-acl"
     | "nextjs-routes"
     | "firebase-rules"
+    | "client-env"
     | "agent";
 }
 
@@ -233,6 +236,14 @@ export async function runScan(opts: ScanOptions): Promise<void> {
   );
   const firebaseFindings: FirebaseRuleFinding[] = runStatic ? analyzeFirebaseRules(files) : [];
 
+  // Backend secrets exposed to the browser via a public env-var prefix
+  // (NEXT_PUBLIC_/VITE_/... + SERVICE_ROLE/SECRET/...). Runs over all source.
+  progress(
+    `running CLIENT-ENV (static, public-prefixed backend secrets) — ${runStatic ? "applicable" : "n/a"}`,
+    opts.verbose,
+  );
+  const clientEnvFindings: ClientEnvFinding[] = runStatic ? analyzeClientEnv(files) : [];
+
   // ── merge + filter + sort ───────────────────────────────────────────
   let findings: Finding[] = [
     ...secretFindings.map<Finding>((f) => ({
@@ -300,6 +311,16 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       confidence: f.confidence,
       source: "firebase-rules",
     })),
+    ...clientEnvFindings.map<Finding>((f) => ({
+      fingerprint: f.fingerprint,
+      ruleId: f.ruleId,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line,
+      confidence: f.confidence,
+      source: "client-env",
+    })),
   ];
 
   if (opts.minSeverity) {
@@ -332,6 +353,8 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       routeCount: routeFindings.length,
       hasRulesFiles,
       firebaseCount: firebaseFindings.length,
+      runStatic,
+      clientEnvCount: clientEnvFindings.length,
       durationMs,
       findings,
     });
@@ -351,6 +374,7 @@ export async function runScan(opts: ScanOptions): Promise<void> {
         schemaSqlApplicable: hasSchemaSql,
         routesApplicable: hasRoutes,
         firebaseRulesApplicable: hasRulesFiles,
+        clientEnvApplicable: runStatic,
       },
       findings,
       edgeFns,
@@ -433,6 +457,8 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       routeCount: routeFindings.length,
       hasRulesFiles,
       firebaseCount: firebaseFindings.length,
+      runStatic,
+      clientEnvCount: clientEnvFindings.length,
       durationMs: durationMs + (agentInfo?.durationMs ?? 0),
       findings: merged,
       agent: agentInfo,
@@ -501,6 +527,8 @@ function emitJson(input: {
   routeCount: number;
   hasRulesFiles: boolean;
   firebaseCount: number;
+  runStatic: boolean;
+  clientEnvCount: number;
   durationMs: number;
   findings: Finding[];
   agent?: { costUsdCents: number; iterations: number; durationMs: number; aborted: string | null } | null;
@@ -527,6 +555,7 @@ function emitJson(input: {
       storageAcl: { applicable: input.hasSchemaSql, findings: input.storageCount },
       nextjsRoutes: { applicable: input.hasRoutes, findings: input.routeCount },
       firebaseRules: { applicable: input.hasRulesFiles, findings: input.firebaseCount },
+      clientEnv: { applicable: input.runStatic, findings: input.clientEnvCount },
       agent: input.agent
         ? {
             ran: true,

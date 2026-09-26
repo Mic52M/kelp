@@ -7,6 +7,15 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Client-exposed backend secret detection** (v0.15.0 of the CLI). A new
+  `client_exposed_secret` rule flags backend keys named with a public
+  build-tool prefix (`NEXT_PUBLIC_`, `VITE_`, `REACT_APP_`, and friends) that
+  ship to the browser: a `service_role` key exposed this way bypasses RLS
+  entirely. Catches the reference by naming convention even when the value
+  is only in the deploy environment. Anon and publishable keys are excluded.
+  Surfaced on `kelp scan`, `--json`, `--report`, the MCP surface, and the
+  free scan. Critical for service_role/private-key/password names, high for
+  a generic trailing `_SECRET`.
 - **Free scan (kelp.build) now runs the full static scanner set.** The
   landing-page scan was still limited to secrets + base RLS, so it missed
   everything shipped since: the three deep RLS graph checks, Storage ACL,

@@ -124,6 +124,7 @@ live target, no setup. Run it in CI on every PR.
 | Class | How | Output |
 |---|---|---|
 | **Secrets** in source | Provider patterns (AWS/GCP/Stripe/Supabase/GitHub/OpenAI/Anthropic/…) + entropy fallback | Masked preview + line + severity |
+| **Client-exposed secrets** | Backend keys named with a public prefix (`NEXT_PUBLIC_`, `VITE_`, …) that ship to the browser, e.g. a `service_role` key that bypasses RLS | Var name + line + severity |
 | **Supabase RLS** | Parses `supabase/migrations/*.sql` into a schema graph: tables open to `anon`, FK leaks to unprotected tables, command-scope gaps, views that bypass RLS | Rule id + affected table |
 | **Supabase Storage** | Public buckets, and `storage.objects` policies with no owner check or a blanket `true` | Rule id + bucket or policy |
 | **Firebase rules** | Reads `firestore.rules` / `storage.rules`: `allow ...: if true`, unauthenticated writes, writes with no owner binding | Rule id + rule path + line |

@@ -20,6 +20,7 @@ import {
   analyzeStorageAcl,
   analyzeNextjsRoutes,
   analyzeFirebaseRules,
+  analyzeClientEnv,
   type SecretFinding,
   type DiscoveredEdgeFunction,
   type SourceFile,
@@ -56,6 +57,7 @@ export interface ScanSummary {
     storageAcl: boolean;
     nextjsRoutes: boolean;
     firebaseRules: boolean;
+    clientEnv: boolean;
   };
   discoveredEdgeFunctions: DiscoveredEdgeFunction[];
   findings: McpFinding[];
@@ -146,6 +148,9 @@ function detectAll(
   const firebaseFindings = analyzeFirebaseRules(files);
   const hasRulesFiles = files.some((f) => /\.rules$/i.test(f.path));
 
+  // Backend secrets exposed to the browser via a public env-var prefix.
+  const clientEnvFindings = analyzeClientEnv(files);
+
   const findings: McpFinding[] = [
     ...secrets.map<McpFinding>((f) => ({
       ruleId: f.ruleId,
@@ -212,6 +217,15 @@ function detectAll(
       confidence: f.confidence,
       class: "rls",
     })),
+    ...clientEnvFindings.map<McpFinding>((f) => ({
+      ruleId: f.ruleId,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line,
+      confidence: f.confidence,
+      class: "secret",
+    })),
   ];
 
   // Findings are already deterministic. Sort by severity so the LLM sees
@@ -235,6 +249,7 @@ function detectAll(
       storageAcl: hasSchemaSql,
       nextjsRoutes: hasRoutes,
       firebaseRules: hasRulesFiles,
+      clientEnv: true,
     },
     discoveredEdgeFunctions: edgeFns,
     findings,

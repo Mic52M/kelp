@@ -5,8 +5,9 @@
 // engine. It runs only the deterministic passive scanners, no LLM cost, no test
 // accounts, no consent gate (no active probing). The passive set has grown with
 // the CLI: secrets, RLS-from-repo (base + the three deep graph checks), Storage
-// ACL, the Next.js route/server-action auth heuristic, and Firebase Firestore/
-// Storage rules. V2 will slot in an autonomous agent (repo-only mode) once
+// ACL, the Next.js route/server-action auth heuristic, Firebase Firestore/
+// Storage rules, and backend secrets exposed to the browser via a public env
+// prefix. V2 will slot in an autonomous agent (repo-only mode) once
 // `buildAutonomousCampaign` is refactored to allow no-live-probe operation.
 //
 // The `runFreeScan` contract is intentionally narrow: it takes source files
@@ -20,6 +21,7 @@ import { parseSqlMigrations, analyzeDeep } from "./scanners/rls-sql.js";
 import { analyzeStorageAcl } from "./scanners/storage-acl.js";
 import { analyzeNextjsRoutes } from "./scanners/nextjs-routes.js";
 import { analyzeFirebaseRules } from "./scanners/firebase-rules.js";
+import { analyzeClientEnv } from "./scanners/client-env.js";
 import { detectSupabaseConfig, parseRepoSchema } from "./agent/repo-recon.js";
 import type { DetectedFinding } from "./orchestrator.js";
 import type { Severity } from "./types.js";
@@ -80,6 +82,7 @@ export interface FreeScanSummary {
     | "storage_acl"
     | "route_auth"
     | "firebase_rules"
+    | "client_env"
   )[];
   /** Notes (info the UI wants to show — e.g. "RLS skipped: no schema in repo"). */
   notes: string[];
@@ -304,6 +307,28 @@ export function runFreeScan(input: FreeScanInput): FreeScanSummary {
     if (fb.length > 0) ranScanners.push("firebase_rules");
   } catch (e) {
     notes.push(`Firebase rules scan failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Backend secrets exposed to the browser via a public env-var prefix. This
+  // is the classic Supabase catastrophe (service_role in NEXT_PUBLIC_/VITE_),
+  // backend-agnostic, so it runs on every repo.
+  try {
+    const clientEnv = analyzeClientEnv(input.files);
+    for (const r of clientEnv) {
+      findings.push({
+        vulnClass: "exposure",
+        severity: r.severity,
+        fingerprint: r.fingerprint,
+        title: r.title,
+        explanation: r.explanation,
+        location: `${r.path}:${r.line}`,
+        fixable: false,
+        raw: r as unknown as Record<string, unknown>,
+      });
+    }
+    if (clientEnv.length > 0) ranScanners.push("client_env");
+  } catch (e) {
+    notes.push(`client-env scan failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   findings.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);

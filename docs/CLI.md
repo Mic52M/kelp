@@ -153,6 +153,14 @@ filter (`shouldScanPath` in `@kelp/core`): lockfiles, sourcemaps, and
   check), and `firebase_rule_write_no_owner` (a signed-in write with no
   owner binding). Rules that delegate to a user-defined `function()` helper
   are treated as guarded, so only the unambiguous `if true` fires through them.
+- **CLIENT-ENV — Backend secrets exposed to the browser.**
+  `client_exposed_secret` fires when a var named with a public build-tool
+  prefix (`NEXT_PUBLIC_`, `VITE_`, `REACT_APP_`, `EXPO_PUBLIC_`, `NUXT_PUBLIC_`,
+  `GATSBY_`, `PUBLIC_`) also carries a backend-secret name (`SERVICE_ROLE`,
+  `SECRET_KEY`, `PRIVATE_KEY`, `PASSWORD`, a trailing `_SECRET`). Those prefixes
+  are inlined into the client bundle, so a `service_role` key named this way
+  ships to every visitor and bypasses RLS (critical). Anon and publishable
+  keys are public by design and are never flagged.
 
 ### Agent-driven scan (opt-in, needs `ANTHROPIC_API_KEY`)
 
@@ -193,6 +201,7 @@ Full list at any time: `kelp list-rules`.
     "storageAcl": { "applicable": true, "findings": 1 },
     "nextjsRoutes": { "applicable": true, "findings": 1 },
     "firebaseRules": { "applicable": false, "findings": 0 },
+    "clientEnv": { "applicable": true, "findings": 1 },
     "agent": { "ran": false }
   },
   "durationMs": 42,
@@ -215,7 +224,7 @@ Full list at any time: `kelp list-rules`.
 ```
 
 Each finding carries a `source` (`secrets`, `supabase-config`, `rls-sql`,
-`storage-acl`, `nextjs-routes`, `firebase-rules`, or `agent`) so downstream
+`storage-acl`, `nextjs-routes`, `firebase-rules`, `client-env`, or `agent`) so downstream
 tools can tell which check produced it. Schema-level findings (RLS, storage)
 use the schema object as `path` (e.g. `public.orders`, `storage.buckets/docs`)
 with `line: 1`.

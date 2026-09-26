@@ -73,6 +73,15 @@ const STATIC: RuleGroup[] = [
     ],
   },
   {
+    id: "CLIENT-ENV",
+    title: "Backend secrets exposed to the browser via a public env prefix",
+    rules: [
+      "client_exposed_secret — NEXT_PUBLIC_/VITE_/REACT_APP_/... var named SERVICE_ROLE, SECRET, PRIVATE_KEY, PASSWORD",
+      "service_role in the client bundle bypasses RLS entirely (critical)",
+      "anon and publishable keys are public by design and never flagged",
+    ],
+  },
+  {
     id: "FIREBASE",
     title: "Firebase Firestore + Storage security rules (.rules files)",
     rules: [

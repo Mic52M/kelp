@@ -69,6 +69,8 @@ const REMEDIATION_EXACT: Record<string, string> = {
     "This rule allows a write without ever checking `request.auth`, so an unauthenticated caller can write as long as the other conditions pass. Require `request.auth != null` and tie the write to the document owner before trusting any field. Validation rules on the payload are not a substitute for authentication.",
   firebase_rule_write_no_owner:
     "This rule requires the caller to be signed in but never binds the write to the document owner, so any authenticated user can overwrite anyone else's data. Add an ownership check: `request.auth.uid == userId` against the path variable, or a `resource.data` owner field. In Firestore the convention is a document per user keyed by uid, or an `ownerId` field compared to `request.auth.uid`.",
+  client_exposed_secret:
+    "This variable uses a public env-var prefix (NEXT_PUBLIC_, VITE_, and friends), so the build tool inlines its value into the client bundle and every visitor can read it. A Supabase service_role key exposed this way bypasses Row Level Security completely, giving any visitor full read/write on the database. Move the value to a server-only variable (drop the public prefix), use it only in server code, and rotate the key now. If the value is genuinely public (an anon or publishable key), rename it so it does not read as a secret.",
 };
 
 function remediationFor(ruleId: string): string {

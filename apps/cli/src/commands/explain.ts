@@ -30,8 +30,9 @@ export function explain(): void {
     `           TOML parse for edge-fn misconfig, walker for edge-fn recon,\n` +
     `           a SQL analyzer over supabase/migrations/*.sql for RLS gaps and\n` +
     `           storage ACL leaks, a Next.js route/server-action auth heuristic,\n` +
-    `           and a Firebase Firestore/Storage .rules analyzer. No network,\n` +
-    `           no LLM. Run this in CI.\n\n` +
+    `           a Firebase Firestore/Storage .rules analyzer, and a check for\n` +
+    `           backend secrets exposed to the browser via NEXT_PUBLIC_/VITE_\n` +
+    `           prefixes. No network, no LLM. Run this in CI.\n\n` +
     `  ${c.bold("agent")}    Opt-in via ${c.bold("--agent")}. Sends file bytes to Anthropic and\n` +
     `           runs a bounded loop: read/grep/list_files, then file findings.\n` +
     `           Every finding is evidence-gated (see SAFETY below).\n`

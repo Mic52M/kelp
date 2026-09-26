@@ -29,6 +29,7 @@ interface RenderInput {
     schemaSqlApplicable: boolean;
     routesApplicable: boolean;
     firebaseRulesApplicable: boolean;
+    clientEnvApplicable: boolean;
   };
   findings: Finding[];
   edgeFns: DiscoveredEdgeFunction[];
@@ -120,6 +121,15 @@ export function renderReport(input: RenderInput): void {
     checks.firebaseRulesApplicable,
     firebaseCount,
     checks.firebaseRulesApplicable ? null : "no .rules files in target",
+  );
+  writeCheckRow(
+    "CLIENT-ENV",
+    "backend secrets exposed via NEXT_PUBLIC_/VITE_ prefixes",
+    checks.clientEnvApplicable,
+    checks.clientEnvApplicable
+      ? findings.filter((f) => f.source === "client-env").length
+      : null,
+    null,
   );
   out.write(`\n`);
 
