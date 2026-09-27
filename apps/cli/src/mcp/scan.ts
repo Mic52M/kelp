@@ -21,6 +21,8 @@ import {
   analyzeNextjsRoutes,
   analyzeFirebaseRules,
   analyzeClientEnv,
+  analyzeOpenRedirect,
+  analyzeCors,
   type SecretFinding,
   type DiscoveredEdgeFunction,
   type SourceFile,
@@ -58,6 +60,8 @@ export interface ScanSummary {
     nextjsRoutes: boolean;
     firebaseRules: boolean;
     clientEnv: boolean;
+    openRedirect: boolean;
+    cors: boolean;
   };
   discoveredEdgeFunctions: DiscoveredEdgeFunction[];
   findings: McpFinding[];
@@ -151,6 +155,10 @@ function detectAll(
   // Backend secrets exposed to the browser via a public env-var prefix.
   const clientEnvFindings = analyzeClientEnv(files);
 
+  // Open redirects + CORS misconfiguration.
+  const openRedirectFindings = analyzeOpenRedirect(files);
+  const corsFindings = analyzeCors(files);
+
   const findings: McpFinding[] = [
     ...secrets.map<McpFinding>((f) => ({
       ruleId: f.ruleId,
@@ -226,6 +234,24 @@ function detectAll(
       confidence: f.confidence,
       class: "secret",
     })),
+    ...openRedirectFindings.map<McpFinding>((f) => ({
+      ruleId: f.ruleId,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line,
+      confidence: f.confidence,
+      class: "misc",
+    })),
+    ...corsFindings.map<McpFinding>((f) => ({
+      ruleId: f.issue,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line,
+      confidence: f.confidence,
+      class: "misc",
+    })),
   ];
 
   // Findings are already deterministic. Sort by severity so the LLM sees
@@ -250,6 +276,8 @@ function detectAll(
       nextjsRoutes: hasRoutes,
       firebaseRules: hasRulesFiles,
       clientEnv: true,
+      openRedirect: true,
+      cors: true,
     },
     discoveredEdgeFunctions: edgeFns,
     findings,

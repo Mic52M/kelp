@@ -30,6 +30,7 @@ interface RenderInput {
     routesApplicable: boolean;
     firebaseRulesApplicable: boolean;
     clientEnvApplicable: boolean;
+    webAppApplicable: boolean;
   };
   findings: Finding[];
   edgeFns: DiscoveredEdgeFunction[];
@@ -128,6 +129,15 @@ export function renderReport(input: RenderInput): void {
     checks.clientEnvApplicable,
     checks.clientEnvApplicable
       ? findings.filter((f) => f.source === "client-env").length
+      : null,
+    null,
+  );
+  writeCheckRow(
+    "WEB-APP",
+    "open redirects + CORS misconfiguration",
+    checks.webAppApplicable,
+    checks.webAppApplicable
+      ? findings.filter((f) => f.source === "open-redirect" || f.source === "cors").length
       : null,
     null,
   );

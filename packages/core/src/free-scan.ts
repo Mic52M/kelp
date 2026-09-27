@@ -6,8 +6,9 @@
 // accounts, no consent gate (no active probing). The passive set has grown with
 // the CLI: secrets, RLS-from-repo (base + the three deep graph checks), Storage
 // ACL, the Next.js route/server-action auth heuristic, Firebase Firestore/
-// Storage rules, and backend secrets exposed to the browser via a public env
-// prefix. V2 will slot in an autonomous agent (repo-only mode) once
+// Storage rules, backend secrets exposed to the browser via a public env
+// prefix, open redirects, and CORS misconfiguration. V2 will slot in an
+// autonomous agent (repo-only mode) once
 // `buildAutonomousCampaign` is refactored to allow no-live-probe operation.
 //
 // The `runFreeScan` contract is intentionally narrow: it takes source files
@@ -22,6 +23,8 @@ import { analyzeStorageAcl } from "./scanners/storage-acl.js";
 import { analyzeNextjsRoutes } from "./scanners/nextjs-routes.js";
 import { analyzeFirebaseRules } from "./scanners/firebase-rules.js";
 import { analyzeClientEnv } from "./scanners/client-env.js";
+import { analyzeOpenRedirect } from "./scanners/open-redirect.js";
+import { analyzeCors } from "./scanners/cors.js";
 import { detectSupabaseConfig, parseRepoSchema } from "./agent/repo-recon.js";
 import type { DetectedFinding } from "./orchestrator.js";
 import type { Severity } from "./types.js";
@@ -83,6 +86,8 @@ export interface FreeScanSummary {
     | "route_auth"
     | "firebase_rules"
     | "client_env"
+    | "open_redirect"
+    | "cors"
   )[];
   /** Notes (info the UI wants to show — e.g. "RLS skipped: no schema in repo"). */
   notes: string[];
@@ -329,6 +334,45 @@ export function runFreeScan(input: FreeScanInput): FreeScanSummary {
     if (clientEnv.length > 0) ranScanners.push("client_env");
   } catch (e) {
     notes.push(`client-env scan failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Open redirects (auth-flow class) + CORS misconfiguration (exposure class).
+  try {
+    const redirects = analyzeOpenRedirect(input.files);
+    for (const r of redirects) {
+      findings.push({
+        vulnClass: "auth",
+        severity: r.severity,
+        fingerprint: r.fingerprint,
+        title: r.title,
+        explanation: r.explanation,
+        location: `${r.path}:${r.line}`,
+        fixable: false,
+        raw: r as unknown as Record<string, unknown>,
+      });
+    }
+    if (redirects.length > 0) ranScanners.push("open_redirect");
+  } catch (e) {
+    notes.push(`open-redirect scan failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  try {
+    const cors = analyzeCors(input.files);
+    for (const r of cors) {
+      findings.push({
+        vulnClass: "exposure",
+        severity: r.severity,
+        fingerprint: r.fingerprint,
+        title: r.title,
+        explanation: r.explanation,
+        location: `${r.path}:${r.line}`,
+        fixable: false,
+        raw: r as unknown as Record<string, unknown>,
+      });
+    }
+    if (cors.length > 0) ranScanners.push("cors");
+  } catch (e) {
+    notes.push(`cors scan failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   findings.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);

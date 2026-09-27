@@ -7,6 +7,12 @@ All notable changes to Kelp are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Open redirect + CORS misconfiguration detection** (v0.16.0 of the CLI).
+  `open_redirect` flags a redirect sink fed by a user-controlled URL with no
+  allowlist or relative-path guard (high in auth callbacks). CORS adds
+  `cors_reflect_credentials` (critical, reflected Origin + credentials),
+  `cors_wildcard_credentials` (high), and `cors_wildcard` (medium). Surfaced
+  on `kelp scan`, `--json`, `--report`, the MCP surface, and the free scan.
 - **Client-exposed backend secret detection** (v0.15.0 of the CLI). A new
   `client_exposed_secret` rule flags backend keys named with a public
   build-tool prefix (`NEXT_PUBLIC_`, `VITE_`, `REACT_APP_`, and friends) that

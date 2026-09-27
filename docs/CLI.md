@@ -161,6 +161,14 @@ filter (`shouldScanPath` in `@kelp/core`): lockfiles, sourcemaps, and
   are inlined into the client bundle, so a `service_role` key named this way
   ships to every visitor and bypasses RLS (critical). Anon and publishable
   keys are public by design and are never flagged.
+- **WEB-APP — Open redirects + CORS misconfiguration** (heuristic).
+  `open_redirect` fires when a redirect sink (`redirect`, `NextResponse.redirect`,
+  `res.redirect`, a `location` assignment) is fed a user-controlled URL with no
+  allowlist or relative-path guard (high severity in an auth/callback file).
+  CORS: `cors_reflect_credentials` (critical) when the response reflects the
+  request `Origin` with credentials, `cors_wildcard_credentials` (high) for
+  `Access-Control-Allow-Origin: *` with credentials, and `cors_wildcard`
+  (medium) for `*` without. A hardcoded allowlisted origin is never flagged.
 
 ### Agent-driven scan (opt-in, needs `ANTHROPIC_API_KEY`)
 
@@ -202,6 +210,8 @@ Full list at any time: `kelp list-rules`.
     "nextjsRoutes": { "applicable": true, "findings": 1 },
     "firebaseRules": { "applicable": false, "findings": 0 },
     "clientEnv": { "applicable": true, "findings": 1 },
+    "openRedirect": { "applicable": true, "findings": 0 },
+    "cors": { "applicable": true, "findings": 0 },
     "agent": { "ran": false }
   },
   "durationMs": 42,
@@ -224,7 +234,7 @@ Full list at any time: `kelp list-rules`.
 ```
 
 Each finding carries a `source` (`secrets`, `supabase-config`, `rls-sql`,
-`storage-acl`, `nextjs-routes`, `firebase-rules`, `client-env`, or `agent`) so downstream
+`storage-acl`, `nextjs-routes`, `firebase-rules`, `client-env`, `open-redirect`, `cors`, or `agent`) so downstream
 tools can tell which check produced it. Schema-level findings (RLS, storage)
 use the schema object as `path` (e.g. `public.orders`, `storage.buckets/docs`)
 with `line: 1`.

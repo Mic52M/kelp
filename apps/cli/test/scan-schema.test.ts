@@ -197,6 +197,46 @@ test("kelp scan flags a service_role key exposed via a public env prefix", async
   }
 });
 
+test("kelp scan flags open redirect + CORS misconfiguration", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kelp-scan-webapp-"));
+  try {
+    const cbDir = path.join(dir, "app", "auth", "callback");
+    await fs.mkdir(cbDir, { recursive: true });
+    await fs.writeFile(
+      path.join(cbDir, "route.ts"),
+      `export function GET(req) {
+         const next = req.nextUrl.searchParams.get("next");
+         return NextResponse.redirect(next);
+       }`,
+      "utf8",
+    );
+    const apiDir = path.join(dir, "app", "api", "data");
+    await fs.mkdir(apiDir, { recursive: true });
+    await fs.writeFile(
+      path.join(apiDir, "route.ts"),
+      `const headers = {
+         "Access-Control-Allow-Origin": req.headers.get("origin"),
+         "Access-Control-Allow-Credentials": "true",
+       };`,
+      "utf8",
+    );
+
+    const { code, json } = await runScanJson(dir);
+    assert.equal(code, 1);
+    assert.equal(json.checks.openRedirect.applicable, true);
+    assert.equal(json.checks.cors.applicable, true);
+
+    const sources = new Set(json.findings.map((f: any) => f.source));
+    assert.ok(sources.has("open-redirect"));
+    assert.ok(sources.has("cors"));
+    const ruleIds = new Set(json.findings.map((f: any) => f.ruleId));
+    assert.ok(ruleIds.has("open_redirect"));
+    assert.ok(ruleIds.has("cors_reflect_credentials"));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("kelp scan reports schema checks as n/a when there are no migrations", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "kelp-scan-nomig-"));
   try {

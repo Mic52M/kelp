@@ -18,12 +18,16 @@ import {
   analyzeNextjsRoutes,
   analyzeFirebaseRules,
   analyzeClientEnv,
+  analyzeOpenRedirect,
+  analyzeCors,
   type SecretFinding,
   type DiscoveredEdgeFunction,
   type StorageAclFinding,
   type NextjsRouteFinding,
   type FirebaseRuleFinding,
   type ClientEnvFinding,
+  type OpenRedirectFinding,
+  type CorsFinding,
   type Severity,
   type SourceFile,
 } from "@kelp/core";
@@ -84,6 +88,8 @@ export interface Finding {
     | "nextjs-routes"
     | "firebase-rules"
     | "client-env"
+    | "open-redirect"
+    | "cors"
     | "agent";
 }
 
@@ -244,6 +250,16 @@ export async function runScan(opts: ScanOptions): Promise<void> {
   );
   const clientEnvFindings: ClientEnvFinding[] = runStatic ? analyzeClientEnv(files) : [];
 
+  // Open redirects (redirect sink fed by a user-controlled URL) and CORS
+  // misconfiguration (reflected origin / wildcard with credentials). Both run
+  // over all source and self-filter.
+  progress(
+    `running OPEN-REDIRECT + CORS (static) — ${runStatic ? "applicable" : "n/a"}`,
+    opts.verbose,
+  );
+  const openRedirectFindings: OpenRedirectFinding[] = runStatic ? analyzeOpenRedirect(files) : [];
+  const corsFindings: CorsFinding[] = runStatic ? analyzeCors(files) : [];
+
   // ── merge + filter + sort ───────────────────────────────────────────
   let findings: Finding[] = [
     ...secretFindings.map<Finding>((f) => ({
@@ -321,6 +337,26 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       confidence: f.confidence,
       source: "client-env",
     })),
+    ...openRedirectFindings.map<Finding>((f) => ({
+      fingerprint: f.fingerprint,
+      ruleId: f.ruleId,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line,
+      confidence: f.confidence,
+      source: "open-redirect",
+    })),
+    ...corsFindings.map<Finding>((f) => ({
+      fingerprint: f.fingerprint,
+      ruleId: f.issue,
+      title: f.title,
+      severity: f.severity,
+      path: f.path,
+      line: f.line,
+      confidence: f.confidence,
+      source: "cors",
+    })),
   ];
 
   if (opts.minSeverity) {
@@ -355,6 +391,8 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       firebaseCount: firebaseFindings.length,
       runStatic,
       clientEnvCount: clientEnvFindings.length,
+      openRedirectCount: openRedirectFindings.length,
+      corsCount: corsFindings.length,
       durationMs,
       findings,
     });
@@ -375,6 +413,7 @@ export async function runScan(opts: ScanOptions): Promise<void> {
         routesApplicable: hasRoutes,
         firebaseRulesApplicable: hasRulesFiles,
         clientEnvApplicable: runStatic,
+        webAppApplicable: runStatic,
       },
       findings,
       edgeFns,
@@ -459,6 +498,8 @@ export async function runScan(opts: ScanOptions): Promise<void> {
       firebaseCount: firebaseFindings.length,
       runStatic,
       clientEnvCount: clientEnvFindings.length,
+      openRedirectCount: openRedirectFindings.length,
+      corsCount: corsFindings.length,
       durationMs: durationMs + (agentInfo?.durationMs ?? 0),
       findings: merged,
       agent: agentInfo,
@@ -529,6 +570,8 @@ function emitJson(input: {
   firebaseCount: number;
   runStatic: boolean;
   clientEnvCount: number;
+  openRedirectCount: number;
+  corsCount: number;
   durationMs: number;
   findings: Finding[];
   agent?: { costUsdCents: number; iterations: number; durationMs: number; aborted: string | null } | null;
@@ -556,6 +599,8 @@ function emitJson(input: {
       nextjsRoutes: { applicable: input.hasRoutes, findings: input.routeCount },
       firebaseRules: { applicable: input.hasRulesFiles, findings: input.firebaseCount },
       clientEnv: { applicable: input.runStatic, findings: input.clientEnvCount },
+      openRedirect: { applicable: input.runStatic, findings: input.openRedirectCount },
+      cors: { applicable: input.runStatic, findings: input.corsCount },
       agent: input.agent
         ? {
             ran: true,

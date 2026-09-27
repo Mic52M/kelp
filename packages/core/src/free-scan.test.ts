@@ -104,6 +104,32 @@ test("runFreeScan flags a service_role key exposed via NEXT_PUBLIC_", () => {
   assert.ok(s.ranScanners.includes("client_env"));
 });
 
+test("runFreeScan flags an open redirect (auth class)", () => {
+  const files: SourceFile[] = [
+    file(
+      "app/auth/callback/route.ts",
+      `export function GET(req) { return NextResponse.redirect(req.nextUrl.searchParams.get("next")); }`,
+    ),
+  ];
+  const s = runFreeScan({ repoUrl: "https://github.com/x/y", files });
+  assert.ok(s.findings.some((f) => f.raw && (f.raw as any).ruleId === "open_redirect"));
+  assert.ok(s.ranScanners.includes("open_redirect"));
+});
+
+test("runFreeScan flags a credentialed CORS reflection (exposure class)", () => {
+  const files: SourceFile[] = [
+    file(
+      "app/api/data/route.ts",
+      `const h = { "Access-Control-Allow-Origin": req.headers.get("origin"), "Access-Control-Allow-Credentials": "true" };`,
+    ),
+  ];
+  const s = runFreeScan({ repoUrl: "https://github.com/x/y", files });
+  const cors = s.findings.filter((f) => f.vulnClass === "exposure" && f.raw && (f.raw as any).issue === "cors_reflect_credentials");
+  assert.ok(cors.length >= 1);
+  assert.equal(cors[0]!.severity, "critical");
+  assert.ok(s.ranScanners.includes("cors"));
+});
+
 test("runFreeScan flags an unauthenticated Next.js route handler", () => {
   const files: SourceFile[] = [
     file(

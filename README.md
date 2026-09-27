@@ -129,6 +129,8 @@ live target, no setup. Run it in CI on every PR.
 | **Supabase Storage** | Public buckets, and `storage.objects` policies with no owner check or a blanket `true` | Rule id + bucket or policy |
 | **Firebase rules** | Reads `firestore.rules` / `storage.rules`: `allow ...: if true`, unauthenticated writes, writes with no owner binding | Rule id + rule path + line |
 | **Next.js routes + actions** | Heuristic over `app/**/route.ts`, `pages/api/**`, and `"use server"` files that read or write with no auth call | File + line + severity |
+| **Open redirects** | A redirect sink fed by a user-controlled URL (`?next=`) with no allowlist or relative-path guard, high in auth callbacks | File + line + severity |
+| **CORS misconfiguration** | Reflected `Origin` with credentials (critical), `Access-Control-Allow-Origin: *` with credentials (high) or without (medium) | File + line + severity |
 | **Edge functions** | `verify_jwt=false` in `supabase/config.toml`, plus recon of the deployable surface | Function name + reproduction |
 | **CORS + auth flows** | Reads config + auth callbacks for permissive defaults | Config diff |
 | **BOLA** (opt-in, hosted only) | Active test with two user-provided test accounts | Human-review only, never auto-fix |

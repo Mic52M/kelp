@@ -1,5 +1,40 @@
 # @kelp-security/cli — changelog
 
+## 0.16.0 — 2026-09-27
+
+Two web-layer detection classes that AI-generated apps get wrong all the
+time: open redirects and CORS misconfiguration.
+
+### Added
+
+- **`open_redirect`** (medium, high in an auth/callback file). Flags a
+  redirect sink (`redirect` / `permanentRedirect` from next/navigation,
+  `NextResponse.redirect`, `res.redirect`, a `window.location` assignment)
+  whose target comes from the request (a query param or other user input),
+  directly or through a local variable, with no allowlist or relative-path
+  guard. The canonical `?next=https://evil.example` bug in AI-generated
+  login/callback code, which in an OAuth flow can carry the code/token
+  off-site. Lexical taint check: files with a relative-path guard, an origin
+  comparison, or a named allowlist/validator are suppressed.
+- **`cors_reflect_credentials`** (critical). The response reflects the
+  request `Origin` into `Access-Control-Allow-Origin` and sets
+  `Access-Control-Allow-Credentials: true`, so any site can make credentialed
+  cross-origin reads of the victim's data.
+- **`cors_wildcard_credentials`** (high). `Access-Control-Allow-Origin: *`
+  with credentials true. Browsers reject the combo, but it is almost always
+  "fixed" by switching to origin reflection, so it is worth catching first.
+- **`cors_wildcard`** (medium). `*` with no credentials. Fine for a genuinely
+  public API, a smell on anything that returns user data. A hardcoded
+  allowlisted origin (a quoted https URL, or an env var) is never flagged.
+- Surfaced on `kelp scan` (new `WEB-APP` check row), `--json`
+  (`checks.openRedirect`, `checks.cors`), and written reports with per-rule
+  remediation. MCP returns them under the `misc` class, and `list_rules` /
+  `explain_rule` carry the specs.
+- Wired into the landing-page free scan: open redirects under the `auth`
+  class, CORS under `exposure`.
+- 16 core rule tests (VULN/CONTROL per tier + guard suppression), 2
+  free-scan tests, 1 CLI integration test. Core tests: 381. CLI tests: 40.
+
 ## 0.15.0 — 2026-09-26
 
 Detection for backend secrets exposed to the browser through a public

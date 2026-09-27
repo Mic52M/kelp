@@ -71,6 +71,14 @@ const REMEDIATION_EXACT: Record<string, string> = {
     "This rule requires the caller to be signed in but never binds the write to the document owner, so any authenticated user can overwrite anyone else's data. Add an ownership check: `request.auth.uid == userId` against the path variable, or a `resource.data` owner field. In Firestore the convention is a document per user keyed by uid, or an `ownerId` field compared to `request.auth.uid`.",
   client_exposed_secret:
     "This variable uses a public env-var prefix (NEXT_PUBLIC_, VITE_, and friends), so the build tool inlines its value into the client bundle and every visitor can read it. A Supabase service_role key exposed this way bypasses Row Level Security completely, giving any visitor full read/write on the database. Move the value to a server-only variable (drop the public prefix), use it only in server code, and rotate the key now. If the value is genuinely public (an anon or publishable key), rename it so it does not read as a secret.",
+  open_redirect:
+    "A redirect target is taken from the request (a query param or other user input) and followed without validation, so an attacker can send a link to your domain that bounces the victim to an attacker-controlled site. In an OAuth or auth callback this can also leak the code or token off-site. Before redirecting, require the target to be a relative path (starts with a single \"/\", not \"//\"), or check it against an allowlist of known hosts. Reject anything with a scheme or host you did not intend.",
+  cors_reflect_credentials:
+    "The response echoes the request's Origin header into Access-Control-Allow-Origin while also allowing credentials, so any site the victim visits can make credentialed cross-origin reads of their data. Do not reflect an arbitrary Origin with credentials enabled. Reflect only origins on an explicit allowlist, or drop credentials for cross-origin requests.",
+  cors_wildcard_credentials:
+    "Access-Control-Allow-Origin is \"*\" together with credentials: true. Browsers reject this exact combination, so it tends to get \"fixed\" by reflecting the Origin, which is the exploitable bug. Set a specific allowlisted origin instead of \"*\", and only enable credentials for those origins.",
+  cors_wildcard:
+    "Access-Control-Allow-Origin is \"*\", so any website can read this endpoint's responses cross-origin. That is fine for a genuinely public, unauthenticated API. On anything that returns user-specific data, restrict it to an allowlist of known origins.",
 };
 
 function remediationFor(ruleId: string): string {

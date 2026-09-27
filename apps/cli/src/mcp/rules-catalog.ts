@@ -333,6 +333,46 @@ export const RULES_CATALOG: RuleSpec[] = [
     why: "A var named with a public prefix (NEXT_PUBLIC_, VITE_, REACT_APP_, EXPO_PUBLIC_, and friends) is inlined into the client bundle by the build tool, so its value ships to every visitor. When the name is a backend secret (SERVICE_ROLE, SECRET_KEY, PRIVATE_KEY, PASSWORD), that secret is readable by anyone. A Supabase service_role key exposed this way bypasses Row Level Security entirely: full read/write on the whole database from the browser. Anon and publishable keys are public by design and are not flagged.",
     remediation: "Move the value to a server-only variable (drop the public prefix) and use it only in server code, then rotate the key. If it is genuinely public, rename it so it does not read as a secret.",
   },
+
+  // Open redirect (open-redirect.ts).
+  {
+    id: "open_redirect",
+    title: "Open redirect: redirect target comes from user input",
+    class: "misc",
+    severity: "medium",
+    availability: "static",
+    why: "A redirect sink (next/navigation redirect, NextResponse.redirect, res.redirect, location assignment) is fed a target that comes from the request (a query param or other user input) with no allowlist or relative-path check. An attacker sends a link to the trusted domain that bounces the victim to an attacker-controlled site; in an OAuth/auth callback it can carry the code or token off-site. High severity in an auth/callback file. Heuristic: files with a relative-path guard, an origin comparison, or a named allowlist/validator are not flagged.",
+    remediation: "Require the target to be a relative path (starts with a single '/', not '//'), or check it against an allowlist of known hosts, before redirecting.",
+  },
+
+  // CORS misconfiguration (cors.ts).
+  {
+    id: "cors_reflect_credentials",
+    title: "CORS reflects the request Origin with credentials",
+    class: "misc",
+    severity: "critical",
+    availability: "static",
+    why: "The response echoes the request's Origin header into Access-Control-Allow-Origin and sets Access-Control-Allow-Credentials: true. Any website the victim visits can make credentialed cross-origin requests and read the response, so it can steal authenticated data. The real, exploitable CORS bug.",
+    remediation: "Reflect only origins on an explicit allowlist, and never reflect an arbitrary Origin with credentials enabled.",
+  },
+  {
+    id: "cors_wildcard_credentials",
+    title: "CORS allows any origin (*) with credentials",
+    class: "misc",
+    severity: "high",
+    availability: "static",
+    why: "Access-Control-Allow-Origin is '*' while Access-Control-Allow-Credentials is true. Browsers reject this exact combination, so it usually gets 'fixed' by reflecting the Origin, which is the exploitable case. A loud misconfiguration worth fixing before it becomes origin reflection.",
+    remediation: "Set a specific allowlisted origin instead of '*', and only enable credentials for those origins.",
+  },
+  {
+    id: "cors_wildcard",
+    title: "CORS allows any origin (*)",
+    class: "misc",
+    severity: "medium",
+    availability: "static",
+    why: "Access-Control-Allow-Origin is '*', so any website can read this endpoint's responses cross-origin. Fine for a genuinely public, unauthenticated API; a smell on anything that returns user-specific data.",
+    remediation: "Restrict Access-Control-Allow-Origin to an allowlist of known origins on any endpoint that returns user data.",
+  },
 ];
 
 /** Lookup by id, returns undefined for unknown rules. */

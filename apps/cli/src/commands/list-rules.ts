@@ -90,6 +90,16 @@ const STATIC: RuleGroup[] = [
       "firebase_rule_write_no_owner — a signed-in write with no owner binding (request.auth.uid)",
     ],
   },
+  {
+    id: "WEB-APP",
+    title: "Open redirects + CORS misconfiguration (heuristic)",
+    rules: [
+      "open_redirect — a redirect sink fed by a user-controlled URL with no allowlist / relative-path guard",
+      "cors_reflect_credentials — response reflects the request Origin with credentials (critical)",
+      "cors_wildcard_credentials — Access-Control-Allow-Origin: * with credentials (high)",
+      "cors_wildcard — Access-Control-Allow-Origin: * without credentials (medium)",
+    ],
+  },
 ];
 
 const AGENT: RuleGroup[] = [
