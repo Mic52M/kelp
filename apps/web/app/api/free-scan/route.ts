@@ -54,12 +54,31 @@ function hashIp(ip: string): string {
 }
 
 function clientIpFromHeaders(headers: Headers): string {
-  // Trust the first entry in x-forwarded-for (Vercel/Cloudflare put the client
-  // IP there). Fall back to a stable-per-request-anyway string so an operator
-  // misconfiguration can't blow up the endpoint.
+  // This value keys the rate limit, so it must come from a header the client
+  // cannot forge. The LEFTMOST entry of `x-forwarded-for` is fully
+  // client-controlled: an attacker who sends `X-Forwarded-For: <random>` on
+  // every request rotates the key and bypasses the limit entirely. So we read
+  // the client IP only from headers the edge sets and overwrites:
+  //
+  //   1. CF-Connecting-IP  — set by Cloudflare's edge, which strips any inbound
+  //      copy, so the client cannot spoof it. This is our front door.
+  //   2. x-vercel-forwarded-for / x-real-ip — the platform-determined IP, used
+  //      when a request reaches Vercel without Cloudflare in front.
+  //   3. x-forwarded-for leftmost — last resort for local/dev only.
+  //
+  // Caveat that lives in infra, not code: CF-Connecting-IP is only trustworthy
+  // while the Vercel origin cannot be reached bypassing Cloudflare. Lock the
+  // origin to Cloudflare (Authenticated Origin Pulls, or a firewall on
+  // Cloudflare's IP ranges) or a direct hit to the origin can still spoof it.
+  const cf = headers.get("cf-connecting-ip");
+  if (cf) return cf.trim();
+  const vercel = headers.get("x-vercel-forwarded-for");
+  if (vercel) return vercel.split(",")[0]!.trim();
+  const real = headers.get("x-real-ip");
+  if (real) return real.trim();
   const xff = headers.get("x-forwarded-for");
   if (xff) return xff.split(",")[0]!.trim();
-  return headers.get("x-real-ip") ?? "unknown";
+  return "unknown";
 }
 
 export async function POST(req: Request): Promise<Response> {
